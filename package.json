@@ -1,0 +1,24 @@
+{
+  "name": "@lovelace_lol/polymer",
+  "version": "0.0.0",
+  "description": "Pure ClojureScript character agencies for Character Loom.",
+  "license": "UNLICENSED",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "shadow-cljs.edn",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "shadow-cljs release npm worker",
+    "test": "shadow-cljs compile test && node dist/test.js && shadow-cljs release worker && node test/worker_smoke.cjs",
+    "clean": "rm -rf .shadow-cljs dist"
+  },
+  "devDependencies": {
+    "shadow-cljs": "^2.28.23"
+  },
+  "packageManager": "pnpm@10.25.0"
+}
