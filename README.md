@@ -15,15 +15,25 @@ The package exposes one character-level agency system:
 
 ```js
 const agencies = createCharacterAgencies();
-agencies.subscribeStatus((event) => {});
-agencies.subscribeCommands((event) => {});
 agencies.dispatch({ agency: "blink", command: { type: "enable" } });
+
+agencies.state.subscribe((event) => {});
+agencies.events.subscribe((event) => {});
+agencies.effects.subscribe((effect) => {});
 ```
 
-`status` events describe internal state and cross-agency signals. `command`
-events request host-owned effects, such as scheduling or removing animation
-snippets. LoomLarge interprets those command events during the migration; later
-Polymer agencies can consume the same stream directly.
+The stream contract is:
+
+- `input`: commands entering the character agency system.
+- `state`: renderable agency snapshots.
+- `events`: factual agency decisions/signals, such as `blinkPlanned` or
+  `blink-fast`.
+- `effects`: requested host-owned side effects, such as scheduling or removing
+  animation snippets.
+
+LoomLarge interprets `effects` during the migration. Later Polymer agencies can
+consume the same `events` stream directly, and a Polymer animation agency can
+own more of the animation effect handling.
 
 ## Blink Agency
 

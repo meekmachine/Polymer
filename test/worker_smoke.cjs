@@ -36,7 +36,7 @@ async function main() {
   });
 
   await waitFor(messages, () => messages.some(
-    (message) => message.stream === 'status' && message.event?.type === 'ready',
+    (message) => message.stream === 'events' && message.event?.type === 'ready',
   ));
 
   worker.postMessage({
@@ -46,11 +46,11 @@ async function main() {
   });
 
   await waitFor(messages, () => messages.some(
-    (message) => message.stream === 'commands' && message.event?.type === 'scheduleSnippet',
+    (message) => message.stream === 'effects' && message.event?.type === 'animation.scheduleSnippet',
   ));
 
   assert(messages.some(
-    (message) => message.stream === 'status' && message.event?.signal === 'blink-fast',
+    (message) => message.stream === 'events' && message.event?.signal === 'blink-fast',
   ));
 
   worker.postMessage({ type: 'dispose', id: 'character-a' });

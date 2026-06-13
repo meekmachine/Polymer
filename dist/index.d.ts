@@ -54,21 +54,35 @@ export interface PolymerAnimationSnippet {
   metadata?: Record<string, unknown>;
 }
 
-export type PolymerCommandEvent =
+export interface PolymerStream<TEvent> {
+  subscribe(listener: (event: TEvent) => void): () => void;
+}
+
+export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'command'; agency: string; command?: TCommand; message?: unknown }> {
+  write(command: TCommand): void;
+}
+
+export type PolymerEffectEvent =
   | {
-      type: 'scheduleSnippet';
+      type: 'animation.scheduleSnippet';
       agency: 'blink';
+      effectId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay: true };
     }
   | {
-      type: 'removeSnippet';
+      type: 'animation.removeSnippet';
       agency: 'blink';
+      effectId: string;
       name: string;
     };
 
-export type PolymerStatusEvent =
-  | { type: 'state'; agency: 'blink'; state: BlinkState }
+export type PolymerCommandEvent = PolymerEffectEvent;
+
+export type PolymerStateEvent =
+  | { type: 'state'; agency: 'blink'; state: BlinkState };
+
+export type PolymerDomainEvent =
   | {
       type: 'blinkPlanned';
       agency: 'blink';
@@ -80,12 +94,25 @@ export type PolymerStatusEvent =
   | { type: 'ready'; agency: 'character' | 'blink' }
   | { type: 'error'; agency: string; message: string };
 
+export type PolymerStatusEvent = PolymerStateEvent | PolymerDomainEvent;
+
 export interface BlinkAgency {
+  input: PolymerInputStream<BlinkDispatch>;
+  state: PolymerStream<PolymerStateEvent>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
   dispatch(command: BlinkDispatch): void;
   snapshot(): BlinkState;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'blink'; command: BlinkDispatch }) => void): () => void;
+  subscribeState(listener: (event: PolymerStateEvent) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
   subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
   subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
-  subscribeCommands(listener: (event: PolymerCommandEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   enable(): void;
   disable(): void;
   triggerBlink(options?: BlinkTriggerOptions): void;
@@ -111,13 +138,24 @@ export type CharacterAgencyDispatch =
   | { agency: 'blink'; command: BlinkDispatch };
 
 export interface CharacterAgencies {
+  input: PolymerInputStream<CharacterAgencyDispatch>;
+  state: PolymerStream<PolymerStateEvent>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
   dispatch(message: CharacterAgencyDispatch): void;
   snapshot(): CharacterAgencySnapshot;
   agency(name: 'blink'): BlinkAgency;
   agency(name: string): unknown | null;
+  subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
+  subscribeState(listener: (event: PolymerStateEvent) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
   subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
   subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
-  subscribeCommands(listener: (event: PolymerCommandEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   dispose(): void;
 }
 

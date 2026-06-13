@@ -2,26 +2,40 @@
   (:require [polymer.blink.planner :as planner]
             [polymer.blink.snippet :as snippet]))
 
+;; The scheduler is the only Blink namespace that owns timers.
+;;
+;; It still does not call animation engines directly. When a timer fires it
+;; creates plain effect data and pushes that data to the effect stream. The host
+;; decides whether that effect becomes a Latticework animation call, a worker
+;; message, a test assertion, or something else.
+
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
     (js/clearTimeout timer)
     (reset! timer-atom nil)))
 
-(defn create-scheduler [{:keys [state-atom emit-status emit-command record-plan!]}]
+(defn create-scheduler [{:keys [state-atom emit-event emit-effect record-plan!]}]
   (let [auto-timer (atom nil)
         cleanup-timers (atom #{})
         disposed? (atom false)]
     (letfn [(emit-plan! [plan snippet-data next-delay-ms]
-              (emit-status {:type "blinkPlanned"
-                            :agency "blink"
-                            :plan plan
-                            :snippetName (:name snippet-data)
-                            :nextDelayMs next-delay-ms})
+              ;; Domain events describe what Blink decided. They are not
+              ;; imperative requests. Other agencies can listen to them without
+              ;; causing side effects.
+              (emit-event {:type "blinkPlanned"
+                           :agency "blink"
+                           :plan plan
+                           :snippetName (:name snippet-data)
+                           :nextDelayMs next-delay-ms})
               (when (:fast? plan)
-                (emit-status {:type "signal"
-                              :agency "blink"
-                              :signal "blink-fast"
-                              :plan plan})))
+                ;; Cross-agency signals also live on the event stream. In the
+                ;; current LoomLarge migration, the host interpreter turns this
+                ;; specific signal into a small prosodic animation cue. Later a
+                ;; Polymer prosodic agency can consume it directly.
+                (emit-event {:type "signal"
+                             :agency "blink"
+                             :signal "blink-fast"
+                             :plan plan})))
 
             (schedule-cleanup! [snippet-data]
               (let [delay-ms (+ (snippet/snippet-duration-ms snippet-data) 50)
@@ -30,9 +44,13 @@
                            (fn []
                              (swap! cleanup-timers disj @timer-ref)
                              (when-not @disposed?
-                               (emit-command {:type "removeSnippet"
-                                              :agency "blink"
-                                              :name (:name snippet-data)})))
+                               ;; Effects are requested side effects. This one
+                               ;; asks the host to remove the animation snippet
+                               ;; that was scheduled for the blink.
+                               (emit-effect {:type "animation.removeSnippet"
+                                             :agency "blink"
+                                             :effectId (:name snippet-data)
+                                             :name (:name snippet-data)})))
                            delay-ms)]
                 (reset! timer-ref timer)
                 (swap! cleanup-timers conj timer)))
@@ -42,10 +60,13 @@
                 (let [plan (planner/make-plan @state-atom reason options)
                       snippet-data (snippet/build-blink-snippet plan)]
                   (record-plan! plan)
-                  (emit-command {:type "scheduleSnippet"
-                                 :agency "blink"
-                                 :snippet snippet-data
-                                 :options {:autoPlay true}})
+                  ;; The scheduler schedules nothing by itself. It emits a
+                  ;; host effect that says exactly what should be scheduled.
+                  (emit-effect {:type "animation.scheduleSnippet"
+                                :agency "blink"
+                                :effectId (:name snippet-data)
+                                :snippet snippet-data
+                                :options {:autoPlay true}})
                   (emit-plan! plan snippet-data nil)
                   (schedule-cleanup! snippet-data)
                   snippet-data)))
