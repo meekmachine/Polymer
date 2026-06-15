@@ -4,19 +4,17 @@
 
 ;; The scheduler is the only Blink namespace that owns timers.
 ;;
-;; It still does not call animation engines directly. When a timer fires it
-;; creates plain effect data and pushes that data to the effect stream. The host
-;; decides whether that effect becomes a Latticework animation call, a worker
-;; message, a test assertion, or something else.
+;; It still does not call animation engines directly. When a blink should play,
+;; it emits an animation request event. The character system routes that request
+;; to Polymer's Animation agency, and Animation emits the host effect.
 
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
     (js/clearTimeout timer)
     (reset! timer-atom nil)))
 
-(defn create-scheduler [{:keys [state-atom emit-event emit-effect record-plan!]}]
+(defn create-scheduler [{:keys [state-atom emit-event record-plan!]}]
   (let [auto-timer (atom nil)
-        cleanup-timers (atom #{})
         disposed? (atom false)]
     (letfn [(emit-plan! [plan snippet-data next-delay-ms]
               ;; Domain events describe what Blink decided. They are not
@@ -37,38 +35,21 @@
                              :signal "blink-fast"
                              :plan plan})))
 
-            (schedule-cleanup! [snippet-data]
-              (let [delay-ms (+ (snippet/snippet-duration-ms snippet-data) 50)
-                    timer-ref (atom nil)
-                    timer (js/setTimeout
-                           (fn []
-                             (swap! cleanup-timers disj @timer-ref)
-                             (when-not @disposed?
-                               ;; Effects are requested side effects. This one
-                               ;; asks the host to remove the animation snippet
-                               ;; that was scheduled for the blink.
-                               (emit-effect {:type "animation.removeSnippet"
-                                             :agency "blink"
-                                             :effectId (:name snippet-data)
-                                             :name (:name snippet-data)})))
-                           delay-ms)]
-                (reset! timer-ref timer)
-                (swap! cleanup-timers conj timer)))
-
             (trigger! [reason options]
               (when-not @disposed?
                 (let [plan (planner/make-plan @state-atom reason options)
                       snippet-data (snippet/build-blink-snippet plan)]
                   (record-plan! plan)
-                  ;; The scheduler schedules nothing by itself. It emits a
-                  ;; host effect that says exactly what should be scheduled.
-                  (emit-effect {:type "animation.scheduleSnippet"
-                                :agency "blink"
-                                :effectId (:name snippet-data)
-                                :snippet snippet-data
-                                :options {:autoPlay true}})
+                  ;; Blink requests animation as a domain event. Keeping this
+                  ;; as an event lets the character-level agency network route
+                  ;; it to Polymer Animation instead of letting Blink talk to the
+                  ;; host animation service directly.
+                  (emit-event {:type "animation.requestScheduleSnippet"
+                               :agency "blink"
+                               :requestId (:name snippet-data)
+                               :snippet snippet-data
+                               :options {:autoPlay true}})
                   (emit-plan! plan snippet-data nil)
-                  (schedule-cleanup! snippet-data)
                   snippet-data)))
 
             (schedule-next-auto! [extra-delay-ms]
@@ -92,7 +73,4 @@
        :stop (fn [] (clear-timeout! auto-timer))
        :dispose (fn []
                   (reset! disposed? true)
-                  (clear-timeout! auto-timer)
-                  (doseq [timer @cleanup-timers]
-                    (js/clearTimeout timer))
-                  (reset! cleanup-timers #{}))})))
+                  (clear-timeout! auto-timer))})))

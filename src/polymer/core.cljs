@@ -1,5 +1,6 @@
 (ns polymer.core
-  (:require [polymer.blink.agency :as blink]
+  (:require [polymer.animation.agency :as animation]
+            [polymer.blink.agency :as blink]
             [polymer.character :as character]))
 
 ;; Public JavaScript entry points.
@@ -14,6 +15,13 @@
   that need a stable multi-agency integration point."
   ([] (blink/create-blink-agency nil))
   ([config] (blink/create-blink-agency config)))
+
+(defn createAnimationAgency
+  "Create the Animation agency directly. Prefer createCharacterAgencies in
+  hosts so other agencies can route animation requests through the shared
+  character network."
+  ([] (animation/create-animation-agency nil))
+  ([config] (animation/create-animation-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency system."

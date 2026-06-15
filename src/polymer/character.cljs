@@ -1,5 +1,6 @@
 (ns polymer.character
-  (:require [polymer.blink.agency :as blink]
+  (:require [polymer.animation.agency :as animation]
+            [polymer.blink.agency :as blink]
             [polymer.stream :as stream]))
 
 ;; A character agency system is the stable host-facing boundary.
@@ -19,6 +20,7 @@
         emit-state (:emit state-stream)
         emit-event (:emit event-stream)
         emit-effect (:emit effect-stream)
+        animation-agency (animation/create-animation-agency (clj->js (:animation input)))
         blink-agency (blink/create-blink-agency (clj->js (:blink input)))
         unsubscribers (atom [])
         disposed? (atom false)]
@@ -36,18 +38,41 @@
                                :message payload})
                   (case (:agency payload)
                     "blink" (.dispatch ^js blink-agency (clj->js (:command payload)))
+                    "animation" (.dispatch ^js animation-agency (clj->js (:command payload)))
                     (emit-event {:type "error"
                                  :agency (or (:agency payload) "unknown")
                                  :message "Unknown Polymer agency"})))))
 
             (snapshot! []
-              (clj->js {:blink (js->clj (.snapshot ^js blink-agency) :keywordize-keys true)}))]
+              (clj->js {:blink (js->clj (.snapshot ^js blink-agency) :keywordize-keys true)
+                        :animation (js->clj (.snapshot ^js animation-agency) :keywordize-keys true)}))
+
+            (route-blink-event! [event]
+              ;; Blink can request animation, but Animation owns the host-facing
+              ;; scheduling effects. This is the first cross-agency route in the
+              ;; Polymer character network and the pattern future agencies
+              ;; should use instead of React component glue.
+              (when (= "animation.requestScheduleSnippet" (:type event))
+                (.dispatch ^js animation-agency
+                           (clj->js {:type "scheduleSnippet"
+                                     :sourceAgency (:agency event)
+                                     :snippet (:snippet event)
+                                     :options (:options event)}))))]
       ;; Fan-in agency outputs to character-level streams. As more agencies are
       ;; added, they should be wired here rather than in React components.
+      (track! (.subscribeState ^js animation-agency
+                               #(emit-state (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js animation-agency
+                                #(emit-event (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEffects ^js animation-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
       (track! (.subscribeState ^js blink-agency
                                #(emit-state (js->clj % :keywordize-keys true))))
       (track! (.subscribeEvents ^js blink-agency
-                                #(emit-event (js->clj % :keywordize-keys true))))
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-blink-event! payload)
+                                    (emit-event payload)))))
       (track! (.subscribeEffects ^js blink-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
       #js {:dispatch dispatch!
@@ -58,6 +83,7 @@
            :snapshot snapshot!
            :agency (fn [name]
                      (case name
+                       "animation" animation-agency
                        "blink" blink-agency
                        nil))
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
@@ -76,6 +102,7 @@
                         (doseq [unsubscribe @unsubscribers]
                           (unsubscribe))
                         (reset! unsubscribers [])
+                        (.dispose ^js animation-agency)
                         (.dispose ^js blink-agency)
                         ((:dispose input-stream))
                         ((:dispose state-stream))

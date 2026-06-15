@@ -42,6 +42,42 @@ export type BlinkDispatch =
   | { type: 'configure'; config: BlinkAgencyConfig }
   | { type: 'reset' };
 
+export interface AnimationScheduledSnippet {
+  name: string;
+  sourceAgency: string;
+  snippetCategory?: string;
+  snippetPriority?: number;
+  maxTime?: number;
+  loop: boolean;
+  autoPlay: boolean;
+  requestedAt: number;
+}
+
+export interface AnimationState {
+  agency: 'animation';
+  scheduled: Record<string, AnimationScheduledSnippet>;
+  scheduledCount: number;
+  removedCount: number;
+  lastEffect: null | {
+    type: 'animation.scheduleSnippet' | 'animation.removeSnippet';
+    name: string;
+    sourceAgency: string;
+    at: number;
+  };
+}
+
+export type AnimationAgencyConfig = Record<string, never>;
+
+export type AnimationDispatch =
+  | {
+      type: 'scheduleSnippet';
+      sourceAgency?: string;
+      snippet: PolymerAnimationSnippet;
+      options?: { autoPlay?: boolean; [key: string]: unknown };
+    }
+  | { type: 'removeSnippet'; sourceAgency?: string; name: string }
+  | { type: 'clear'; sourceAgency?: string };
+
 export interface PolymerAnimationSnippet {
   name: string;
   curves: Record<string, Array<{ time: number; intensity: number }>>;
@@ -65,14 +101,16 @@ export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'com
 export type PolymerEffectEvent =
   | {
       type: 'animation.scheduleSnippet';
-      agency: 'blink';
+      agency: 'animation';
+      sourceAgency: string;
       effectId: string;
       snippet: PolymerAnimationSnippet;
-      options: { autoPlay: true };
+      options: { autoPlay?: boolean; [key: string]: unknown };
     }
   | {
       type: 'animation.removeSnippet';
-      agency: 'blink';
+      agency: 'animation';
+      sourceAgency: string;
       effectId: string;
       name: string;
     };
@@ -80,9 +118,34 @@ export type PolymerEffectEvent =
 export type PolymerCommandEvent = PolymerEffectEvent;
 
 export type PolymerStateEvent =
-  | { type: 'state'; agency: 'blink'; state: BlinkState };
+  | { type: 'state'; agency: 'blink'; state: BlinkState }
+  | { type: 'state'; agency: 'animation'; state: AnimationState };
 
 export type PolymerDomainEvent =
+  | {
+      type: 'animation.requestScheduleSnippet';
+      agency: 'blink';
+      requestId: string;
+      snippet: PolymerAnimationSnippet;
+      options: { autoPlay?: boolean; [key: string]: unknown };
+    }
+  | {
+      type: 'animationSnippetScheduled';
+      agency: 'animation';
+      sourceAgency: string;
+      name: string;
+      snippet: PolymerAnimationSnippet;
+      options: { autoPlay?: boolean; [key: string]: unknown };
+      requestedAt: number;
+    }
+  | {
+      type: 'animationSnippetRemoved';
+      agency: 'animation';
+      sourceAgency: string;
+      reason: string;
+      name: string;
+      removedAt: number;
+    }
   | {
       type: 'blinkPlanned';
       agency: 'blink';
@@ -91,7 +154,7 @@ export type PolymerDomainEvent =
       nextDelayMs: number | null;
     }
   | { type: 'signal'; agency: 'blink'; signal: 'blink-fast'; plan: Record<string, unknown> }
-  | { type: 'ready'; agency: 'character' | 'blink' }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerStateEvent | PolymerDomainEvent;
@@ -130,12 +193,36 @@ export interface BlinkAgency {
   dispose(): void;
 }
 
+export interface AnimationAgency {
+  input: PolymerInputStream<AnimationDispatch>;
+  state: PolymerStream<PolymerStateEvent>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: AnimationDispatch): void;
+  snapshot(): AnimationState;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'animation'; command: AnimationDispatch }) => void): () => void;
+  subscribeState(listener: (event: PolymerStateEvent) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias: state + events. Prefer subscribeState/subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  scheduleSnippet(snippet: PolymerAnimationSnippet, options?: { autoPlay?: boolean; [key: string]: unknown }): void;
+  removeSnippet(name: string): void;
+  dispose(): void;
+}
+
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
+  animation: AnimationState;
 }
 
 export type CharacterAgencyDispatch =
-  | { agency: 'blink'; command: BlinkDispatch };
+  | { agency: 'blink'; command: BlinkDispatch }
+  | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
   input: PolymerInputStream<CharacterAgencyDispatch>;
@@ -144,6 +231,7 @@ export interface CharacterAgencies {
   effects: PolymerStream<PolymerEffectEvent>;
   dispatch(message: CharacterAgencyDispatch): void;
   snapshot(): CharacterAgencySnapshot;
+  agency(name: 'animation'): AnimationAgency;
   agency(name: 'blink'): BlinkAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
@@ -160,4 +248,5 @@ export interface CharacterAgencies {
 }
 
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
-export function createCharacterAgencies(config?: { blink?: BlinkAgencyConfig }): CharacterAgencies;
+export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
+export function createCharacterAgencies(config?: { blink?: BlinkAgencyConfig; animation?: AnimationAgencyConfig }): CharacterAgencies;

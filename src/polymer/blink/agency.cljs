@@ -12,8 +12,9 @@
 ;;           the state.
 ;; events  - facts Blink observed or decided, such as a planned blink or a
 ;;           cross-agency signal.
-;; effects - requested side effects. The host interpreter decides how to turn
-;;           these into engine calls.
+;; effects - Blink currently leaves host animation effects to the Animation
+;;           agency. The stream still exists for interface symmetry and future
+;;           Blink-specific side effects.
 ;;
 ;; The agency owns only local Blink state and timers. It does not know about
 ;; React components, Latticework, Loom3/Embody, DOM APIs, storage, audio, video,
@@ -32,7 +33,6 @@
         emit-input (:emit input-stream)
         emit-state (:emit state-stream)
         emit-event (:emit event-stream)
-        emit-effect (:emit effect-stream)
         scheduler-atom (atom nil)]
     (letfn [(publish-state! []
               ;; State events are the single renderable Blink snapshot source.
@@ -44,8 +44,8 @@
 
             (record-plan! [plan]
               ;; Planning mutates only Blink's local counters/timestamps, then
-              ;; publishes a new state snapshot. Animation scheduling remains an
-              ;; output effect, not local state mutation.
+              ;; publishes a new state snapshot. Animation scheduling is routed
+              ;; through the Animation agency by the character system.
               (let [now-ms (or (:created-at plan) (.now js/Date))]
                 (swap! state-atom state/record-plan plan now-ms)
                 (publish-state!)))
@@ -84,7 +84,6 @@
       (let [agency-scheduler (scheduler/create-scheduler
                               {:state-atom state-atom
                                :emit-event emit-event
-                               :emit-effect emit-effect
                                :record-plan! record-plan!})]
         (reset! scheduler-atom agency-scheduler)
         (publish-state!)
