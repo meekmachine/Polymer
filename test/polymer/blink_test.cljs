@@ -13,9 +13,6 @@
 (defn domain-events [agency]
   (collect agency (fn [target listener] (.subscribeEvents ^js target listener))))
 
-(defn state-events [agency]
-  (collect agency (fn [target listener] (.subscribeState ^js target listener))))
-
 (deftest blink-state-clamps-config
   (let [agency (polymer/createBlinkAgency #js {:frequency 90
                                                :duration 2
@@ -72,17 +69,14 @@
 
 (deftest character-system-forwards-agency-streams
   (let [system (polymer/createCharacterAgencies nil)
-        state (state-events system)
         events (domain-events system)
         effects (effect-events system)]
     (.dispatch ^js system #js {:agency "blink" :command #js {:type "triggerBlink"}})
-    (is (some #(= "state" (:type %)) @(:events state)))
     (is (some #(= "blinkPlanned" (:type %)) @(:events events)))
     (is (some #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
     (is (= "animation.scheduleSnippet" (:type (first @(:events effects)))))
     (is (= "animation" (:agency (first @(:events effects)))))
     (is (= "blink" (:sourceAgency (first @(:events effects)))))
-    ((:unsubscribe state))
     ((:unsubscribe events))
     ((:unsubscribe effects))
     (.dispose ^js system)))

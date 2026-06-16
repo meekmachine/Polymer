@@ -4,9 +4,9 @@
 ;; Worker support is a protocol smoke test for the architecture.
 ;;
 ;; LoomLarge does not use this worker in the first integration, but keeping it
-;; wired to the same input/state/events/effects streams proves the package can
-;; move agency-local timers off the main thread later without changing the
-;; agency message shape.
+;; wired to the same input/events/effects streams proves the package can move
+;; agency-local timers off the main thread later without changing the agency
+;; message shape.
 
 (defonce systems (atom {}))
 
@@ -24,7 +24,6 @@
     ;; Mirror every character-level output stream through worker messages.
     ;; The host can interpret effects in the main thread while the agency timing
     ;; and planning stay isolated in the worker.
-    (.subscribeState ^js system #(post! {:id id :stream "state" :event (js->clj % :keywordize-keys true)}))
     (.subscribeEvents ^js system #(post! {:id id :stream "events" :event (js->clj % :keywordize-keys true)}))
     (.subscribeEffects ^js system #(post! {:id id :stream "effects" :event (js->clj % :keywordize-keys true)}))
     (swap! systems assoc id system)

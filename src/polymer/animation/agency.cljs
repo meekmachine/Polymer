@@ -14,22 +14,15 @@
 
 (defn create-animation-agency [_config]
   (let [input-stream (stream/create-stream)
-        state-stream (stream/create-stream)
         event-stream (stream/create-stream)
         effect-stream (stream/create-stream)
         state-atom (atom state/default-state)
         cleanup-timers (atom {})
         disposed? (atom false)
         emit-input (:emit input-stream)
-        emit-state (:emit state-stream)
         emit-event (:emit event-stream)
         emit-effect (:emit effect-stream)]
-    (letfn [(publish-state! []
-              (emit-state {:type "state"
-                           :agency "animation"
-                           :state @state-atom}))
-
-            (clear-cleanup! [name]
+    (letfn [(clear-cleanup! [name]
               (when-let [timer (get @cleanup-timers name)]
                 (js/clearTimeout timer)
                 (swap! cleanup-timers dissoc name)))
@@ -44,7 +37,6 @@
                 (clear-cleanup! name)
                 (let [removed-at (state/now-ms)]
                   (swap! state-atom state/record-remove name source-agency removed-at)
-                  (publish-state!)
                   (emit-event {:type "animationSnippetRemoved"
                                :agency "animation"
                                :sourceAgency source-agency
@@ -78,7 +70,6 @@
                     options (or (:options payload) {})
                     name (:name snippet)]
                 (swap! state-atom state/record-schedule snippet options source-agency requested-at)
-                (publish-state!)
                 (emit-event {:type "animationSnippetScheduled"
                              :agency "animation"
                              :sourceAgency source-agency
@@ -126,19 +117,16 @@
                     (emit-event {:type "error"
                                  :agency "animation"
                                  :message (str "Unknown Animation command: " type)})))))]
-      (publish-state!)
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))
            :input (stream/writable-port input-stream dispatch!)
-           :state (stream/readable-port state-stream)
            :events (stream/readable-port event-stream)
            :effects (stream/readable-port effect-stream)
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
-           :subscribeState (fn [listener] ((:subscribe state-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
            :subscribeEffects (fn [listener] ((:subscribe effect-stream) listener))
-           :subscribe (fn [listener] (stream/subscribe-many [state-stream event-stream] listener))
-           :subscribeStatus (fn [listener] (stream/subscribe-many [state-stream event-stream] listener))
+           :subscribe (fn [listener] ((:subscribe event-stream) listener))
+           :subscribeStatus (fn [listener] ((:subscribe event-stream) listener))
            :subscribeCommands (fn [listener] ((:subscribe effect-stream) listener))
            :scheduleSnippet (fn [snippet options]
                               (dispatch! #js {:type "scheduleSnippet"
@@ -154,6 +142,5 @@
                         (reset! disposed? true)
                         (clear-all-cleanups!)
                         ((:dispose input-stream))
-                        ((:dispose state-stream))
                         ((:dispose event-stream))
                         ((:dispose effect-stream))))})))

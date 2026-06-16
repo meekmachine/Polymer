@@ -17,19 +17,20 @@ The package exposes one character-level agency system:
 const agencies = createCharacterAgencies();
 agencies.dispatch({ agency: "blink", command: { type: "enable" } });
 
-agencies.state.subscribe((event) => {});
 agencies.events.subscribe((event) => {});
 agencies.effects.subscribe((effect) => {});
+agencies.snapshot();
 ```
 
 The stream contract is:
 
 - `input`: commands entering the character agency system.
-- `state`: renderable agency snapshots.
 - `events`: factual agency decisions/signals, such as `blinkPlanned` or
-  `blink-fast`.
+  `blink-fast`, plus low-frequency config-change events.
 - `effects`: requested host-owned side effects, such as scheduling or removing
   animation snippets.
+- `snapshot()`: pull-based diagnostic/config reads. Hosts should not wire this
+  to a live React subscription for runtime playback ticks.
 
 LoomLarge interprets `effects` during the migration. Polymer agencies can
 consume the same `events` stream directly through the character network.
