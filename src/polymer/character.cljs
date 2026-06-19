@@ -3,34 +3,76 @@
             [polymer.blink.agency :as blink]
             [polymer.stream :as stream]))
 
-;; A character agency system is the stable host-facing boundary.
+;; A character is a network of Polymer agencies.
 ;;
-;; LoomLarge should create one of these per loaded character, then connect its
-;; event/effect streams to animation engines, storage, audio, network, and
-;; other host-owned side effects. Individual React sections should not create
-;; agencies or timers, and React should not subscribe to runtime state ticks.
+;; LoomLarge may still consume streams from legacy Latticework services during
+;; the migration, but it should not consume Polymer animation events and turn
+;; them into animation calls. Inside Polymer, Blink emits animation intent,
+;; this network routes that intent to Animation, and Animation talks directly to
+;; the Loom3/Embody animation runtime.
+
+(def fast-blink-prosodic-cooldown-ms 1200)
+
+(defn fast-blink-prosodic-snippet [now]
+  ;; Fast blinking gets a small downward head cue. This lives in Polymer now so
+  ;; LoomLarge does not need bespoke blink/prosody routing code.
+  {:name (str "polymer:prosodic:blink-fast:" now)
+   :curves {"1" [{:time 0 :intensity 0}
+                 {:time 0.12 :intensity 0.26}
+                 {:time 0.42 :intensity 0.34}
+                 {:time 0.72 :intensity 0}]
+            "2" [{:time 0 :intensity 0}
+                 {:time 0.12 :intensity 0.2}
+                 {:time 0.42 :intensity 0.28}
+                 {:time 0.72 :intensity 0}]
+            "54" [{:time 0 :intensity 0}
+                  {:time 0.16 :intensity 0.16}
+                  {:time 0.44 :intensity 0.2}
+                  {:time 0.72 :intensity 0}]}
+   :maxTime 0.72
+   :loop false
+   :snippetCategory "prosodic"
+   :snippetPriority 35
+   :snippetPlaybackRate 1
+   :snippetIntensityScale 0.75
+   :metadata {:agency "prosodic"
+              :trigger "blink-fast"}})
 
 (defn create-character-agencies [config]
-  (let [input (if config (js->clj config :keywordize-keys true) {})
-        input-stream (stream/create-stream)
+  (let [input-stream (stream/create-stream)
         event-stream (stream/create-stream)
         effect-stream (stream/create-stream)
         emit-input (:emit input-stream)
         emit-event (:emit event-stream)
         emit-effect (:emit effect-stream)
-        animation-agency (animation/create-animation-agency (clj->js (:animation input)))
-        blink-agency (blink/create-blink-agency (clj->js (:blink input)))
+        animation-agency (animation/create-animation-agency (when config (aget config "animation")))
+        blink-agency (blink/create-blink-agency (when config (aget config "blink")))
         unsubscribers (atom [])
-        disposed? (atom false)]
+        disposed? (atom false)
+        last-fast-blink-cue-at (atom 0)]
     (letfn [(track! [unsubscribe]
               (swap! unsubscribers conj unsubscribe))
+
+            (schedule-animation! [source-agency snippet options]
+              (.dispatch ^js animation-agency
+                         (clj->js {:type "scheduleSnippet"
+                                   :sourceAgency source-agency
+                                   :snippet snippet
+                                   :options options})))
+
+            (schedule-fast-blink-cue! []
+              (let [now (.now js/Date)]
+                (when (>= (- now @last-fast-blink-cue-at) fast-blink-prosodic-cooldown-ms)
+                  (reset! last-fast-blink-cue-at now)
+                  (schedule-animation! "prosodic"
+                                       (fast-blink-prosodic-snippet now)
+                                       {:autoPlay true}))))
 
             (dispatch! [message]
               (when-not @disposed?
                 (let [payload (js->clj message :keywordize-keys true)]
-                  ;; Input commands are observable at the character boundary.
-                  ;; That lets UI, backend, workers, and future agencies all use
-                  ;; the same message shape.
+                  ;; Input is still observable for tests/workers, but the write
+                  ;; path routes to agencies directly inside Polymer.
                   (emit-input {:type "command"
                                :agency (:agency payload)
                                :message payload})
@@ -46,18 +88,19 @@
                         :animation (js->clj (.snapshot ^js animation-agency) :keywordize-keys true)}))
 
             (route-blink-event! [event]
-              ;; Blink can request animation, but Animation owns the host-facing
-              ;; scheduling effects. This is the first cross-agency route in the
-              ;; Polymer character network and the pattern future agencies
-              ;; should use instead of React component glue.
-              (when (= "animation.requestScheduleSnippet" (:type event))
-                (.dispatch ^js animation-agency
-                           (clj->js {:type "scheduleSnippet"
-                                     :sourceAgency (:agency event)
-                                     :snippet (:snippet event)
-                                     :options (:options event)}))))]
-      ;; Fan-in agency outputs to character-level streams. As more agencies are
-      ;; added, they should be wired here rather than in React components.
+              (case (:type event)
+                "animation.requestScheduleSnippet"
+                (schedule-animation! (:agency event) (:snippet event) (:options event))
+
+                "signal"
+                (when (and (= "blink" (:agency event))
+                           (= "blink-fast" (:signal event)))
+                  (schedule-fast-blink-cue!))
+
+                nil))]
+      ;; Fan-in agency events to one character-level event stream for tests,
+      ;; workers, and future non-React observers. LoomLarge does not need to
+      ;; consume this stream for Polymer animation playback.
       (track! (.subscribeEvents ^js animation-agency
                                 #(emit-event (js->clj % :keywordize-keys true))))
       (track! (.subscribeEffects ^js animation-agency
@@ -82,9 +125,6 @@
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
            :subscribeEffects (fn [listener] ((:subscribe effect-stream) listener))
-           ;; Compatibility aliases for the current migration: old "status"
-           ;; subscribers now see events only, and old "commands" subscribers
-           ;; see effects.
            :subscribe (fn [listener] ((:subscribe event-stream) listener))
            :subscribeStatus (fn [listener] ((:subscribe event-stream) listener))
            :subscribeCommands (fn [listener] ((:subscribe effect-stream) listener))
@@ -94,8 +134,8 @@
                         (doseq [unsubscribe @unsubscribers]
                           (unsubscribe))
                         (reset! unsubscribers [])
-                        (.dispose ^js animation-agency)
                         (.dispose ^js blink-agency)
+                        (.dispose ^js animation-agency)
                         ((:dispose input-stream))
                         ((:dispose event-stream))
                         ((:dispose effect-stream))))})))

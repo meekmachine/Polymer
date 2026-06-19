@@ -5,8 +5,8 @@
 ;; The scheduler is the only Blink namespace that owns timers.
 ;;
 ;; It still does not call animation engines directly. When a blink should play,
-;; it emits an animation request event. The character system routes that request
-;; to Polymer's Animation agency, and Animation emits the host effect.
+;; it emits animation intent. The Polymer character network routes that intent
+;; to Polymer Animation, and only Polymer Animation talks to Loom3/Embody.
 
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
@@ -26,10 +26,10 @@
                            :snippetName (:name snippet-data)
                            :nextDelayMs next-delay-ms})
               (when (:fast? plan)
-                ;; Cross-agency signals also live on the event stream. In the
-                ;; current LoomLarge migration, the host interpreter turns this
-                ;; specific signal into a small prosodic animation cue. Later a
-                ;; Polymer prosodic agency can consume it directly.
+                ;; Cross-agency signals also live on the event stream. The
+                ;; Polymer character network turns this signal into a small
+                ;; prosodic animation cue until a dedicated prosodic agency
+                ;; owns that behavior.
                 (emit-event {:type "signal"
                              :agency "blink"
                              :signal "blink-fast"
@@ -40,10 +40,9 @@
                 (let [plan (planner/make-plan @state-atom reason options)
                       snippet-data (snippet/build-blink-snippet plan)]
                   (record-plan! plan)
-                  ;; Blink requests animation as a domain event. Keeping this
-                  ;; as an event lets the character-level agency network route
-                  ;; it to Polymer Animation instead of letting Blink talk to the
-                  ;; host animation service directly.
+                  ;; Blink requests animation as data. The character-level
+                  ;; Polymer network routes it to Animation instead of letting
+                  ;; Blink or LoomLarge touch the animation runtime.
                   (emit-event {:type "animation.requestScheduleSnippet"
                                :agency "blink"
                                :requestId (:name snippet-data)

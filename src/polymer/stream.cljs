@@ -3,10 +3,9 @@
 ;; Polymer keeps its stream primitive deliberately small.
 ;;
 ;; The important architectural point is not this particular implementation.
-;; The important point is the boundary shape: agencies publish plain immutable
-;; data and the host decides which outputs become real side effects. That keeps
-;; CLJS agency logic portable across LoomLarge, workers, tests, and later
-;; all-Polymer hosts.
+;; The important point is the boundary shape: agencies exchange plain immutable
+;; data. A specific agency, such as Animation, may own a runtime side effect,
+;; but React/LoomLarge should not become the cross-agency router.
 
 (defn create-stream
   "Create a synchronous in-process stream.

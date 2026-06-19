@@ -2,8 +2,8 @@
   (:require [polymer.blink.state :as state]))
 
 ;; Snippet construction translates a Blink plan into animation data, but it does
-;; not schedule that animation. The output is a plain JS-compatible map that the
-;; host interpreter can pass to Latticework during the migration.
+;; not schedule that animation. Polymer Animation consumes this plain map and
+;; decides how to schedule it against Loom3/Embody.
 
 (defn pulse-points [offset duration intensity]
   ;; A blink is modeled as a close, brief hold, and open curve on AU 43. Burst

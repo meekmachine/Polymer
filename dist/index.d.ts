@@ -1,3 +1,6 @@
+import type { LoomLargeThree } from '@lovelace_lol/loom3';
+import type { EmbodyAnimationRuntime } from '@lovelace_lol/loom3/cljs';
+
 export interface BlinkState {
   agency: 'blink';
   enabled: boolean;
@@ -57,23 +60,29 @@ export interface AnimationState {
   agency: 'animation';
   scheduled: Record<string, AnimationScheduledSnippet>;
   scheduledCount: number;
+  startedCount: number;
   removedCount: number;
-  lastEffect: null | {
-    type: 'animation.scheduleSnippet' | 'animation.removeSnippet';
+  lastEvent: null | {
+    type: 'animationSnippetScheduled' | 'animationSnippetStarted' | 'animationSnippetRemoved';
     name: string;
     sourceAgency: string;
+    reason?: string;
     at: number;
   };
 }
 
-export type AnimationAgencyConfig = Record<string, never>;
+export interface AnimationAgencyConfig {
+  runtime?: EmbodyAnimationRuntime;
+  engine?: LoomLargeThree;
+  runtimeConfig?: Record<string, unknown>;
+}
 
 export type AnimationDispatch =
   | {
       type: 'scheduleSnippet';
       sourceAgency?: string;
       snippet: PolymerAnimationSnippet;
-      options?: { autoPlay?: boolean; [key: string]: unknown };
+      options?: { autoPlay?: boolean; sourceAgency?: string; [key: string]: unknown };
     }
   | { type: 'removeSnippet'; sourceAgency?: string; name: string }
   | { type: 'clear'; sourceAgency?: string };
@@ -98,22 +107,7 @@ export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'com
   write(command: TCommand): void;
 }
 
-export type PolymerEffectEvent =
-  | {
-      type: 'animation.scheduleSnippet';
-      agency: 'animation';
-      sourceAgency: string;
-      effectId: string;
-      snippet: PolymerAnimationSnippet;
-      options: { autoPlay?: boolean; [key: string]: unknown };
-    }
-  | {
-      type: 'animation.removeSnippet';
-      agency: 'animation';
-      sourceAgency: string;
-      effectId: string;
-      name: string;
-    };
+export type PolymerEffectEvent = never;
 
 export type PolymerCommandEvent = PolymerEffectEvent;
 
@@ -136,8 +130,14 @@ export type PolymerDomainEvent =
       sourceAgency: string;
       name: string;
       snippet: PolymerAnimationSnippet;
-      options: { autoPlay?: boolean; [key: string]: unknown };
+      options: { autoPlay?: boolean; sourceAgency?: string; [key: string]: unknown };
       requestedAt: number;
+    }
+  | {
+      type: 'animationSnippetStarted';
+      agency: 'animation';
+      sourceAgency: string;
+      name: string;
     }
   | {
       type: 'animationSnippetRemoved';

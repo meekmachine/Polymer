@@ -46,11 +46,14 @@ async function main() {
   });
 
   await waitFor(messages, () => messages.some(
-    (message) => message.stream === 'effects' && message.event?.type === 'animation.scheduleSnippet',
+    (message) => message.stream === 'events' && message.event?.type === 'animationSnippetScheduled',
   ));
 
   assert(messages.some(
     (message) => message.stream === 'events' && message.event?.signal === 'blink-fast',
+  ));
+  assert(!messages.some(
+    (message) => message.stream === 'effects' && message.event?.type === 'animation.scheduleSnippet',
   ));
 
   worker.postMessage({ type: 'dispose', id: 'character-a' });

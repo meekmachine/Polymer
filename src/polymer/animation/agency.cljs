@@ -2,26 +2,91 @@
   (:require [polymer.animation.state :as state]
             [polymer.stream :as stream]))
 
-;; The Animation agency is Polymer's animation-side boundary.
-;;
-;; It does not play clips itself. Instead it receives animation commands from
-;; other agencies, records local scheduling state, and emits host effects. In
-;; LoomLarge today, those effects are interpreted into Latticework
-;; AnimationService calls. Later, more of the runtime scheduler can move into
-;; Polymer behind this same agency boundary.
+;; The Animation agency is the only Polymer agency that is allowed to touch the
+;; Loom3/Embody animation runtime. Blink, prosody, lipsync, and future agencies
+;; should send animation intent to this agency; they should not call the engine
+;; and LoomLarge should not translate Polymer animation commands.
 
 (def cleanup-buffer-ms 50)
 
-(defn create-animation-agency [_config]
-  (let [input-stream (stream/create-stream)
+(defn js-callable? [value]
+  (= "function" (goog/typeOf value)))
+
+(defn js-method [target name]
+  (when target
+    (let [method (aget target name)]
+      (when (js-callable? method)
+        method))))
+
+(defn call-js [target name & args]
+  (when-let [method (js-method target name)]
+    (.apply method target (to-array args))))
+
+(defn engine->runtime [engine]
+  ;; Loom3 already exposes the dynamic clip/snippet methods the scheduler needs.
+  ;; Polymer adapts the current engine once here and keeps all later playback,
+  ;; parameter, and cleanup calls inside the Animation agency.
+  #js {:buildClip (fn [clip-name curves options]
+                    (call-js engine "buildClip" clip-name curves options))
+       :playSnippet (fn [clip-name curves options]
+                      (or
+                       (call-js engine "playSnippet" #js {:name clip-name :curves curves} options)
+                       (let [handle (call-js engine "buildClip" clip-name curves options)]
+                         (when-let [play (js-method handle "play")]
+                           (.call play handle))
+                         handle)))
+       :updateClipParams (fn [clip-name params]
+                           (call-js engine "updateClipParams" clip-name params))
+       :cleanupSnippet (fn [clip-name]
+                         (or (call-js engine "cleanupSnippet" clip-name)
+                             (call-js engine "stopAnimation" clip-name)))
+       :getAnimationState (fn [clip-name]
+                            (call-js engine "getAnimationState" clip-name))})
+
+(defn config->runtime [config]
+  (let [runtime (aget config "runtime")
+        engine (aget config "engine")]
+    (cond
+      runtime runtime
+      ;; When LoomLarge passes the live Loom3/Embody engine, the Polymer
+      ;; Animation agency owns direct engine calls through this runtime-shaped
+      ;; adapter. LoomLarge is only providing the dependency, not interpreting
+      ;; animation stream data.
+      engine (engine->runtime engine)
+      :else nil)))
+
+(defn snippet->clip-options [snippet options]
+  (clj->js (merge
+            {:loop (boolean (:loop snippet))
+             :loopMode (if (:loop snippet) "repeat" "once")
+             :priority (:snippetPriority snippet)
+             :playbackRate (:snippetPlaybackRate snippet)
+             :rate (:snippetPlaybackRate snippet)
+             :weight (:snippetIntensityScale snippet)
+             :snippetCategory (:snippetCategory snippet)
+             :source "snippet"}
+            options)))
+
+(defn play-runtime-snippet! [runtime snippet options]
+  (let [name (:name snippet)
+        curves (clj->js (:curves snippet))
+        clip-options (snippet->clip-options snippet options)]
+    (if (false? (:autoPlay options))
+      (or (call-js runtime "buildClip" name curves clip-options)
+          (call-js runtime "playSnippet" name curves clip-options))
+      (call-js runtime "playSnippet" name curves clip-options))))
+
+(defn create-animation-agency [config]
+  (let [runtime (config->runtime (or config #js {}))
+        input-stream (stream/create-stream)
         event-stream (stream/create-stream)
         effect-stream (stream/create-stream)
         state-atom (atom state/default-state)
         cleanup-timers (atom {})
+        handles (atom {})
         disposed? (atom false)
         emit-input (:emit input-stream)
-        emit-event (:emit event-stream)
-        emit-effect (:emit effect-stream)]
+        emit-event (:emit event-stream)]
     (letfn [(clear-cleanup! [name]
               (when-let [timer (get @cleanup-timers name)]
                 (js/clearTimeout timer)
@@ -32,28 +97,38 @@
                 (js/clearTimeout timer))
               (reset! cleanup-timers {}))
 
+            (cleanup-runtime! [name]
+              (when-let [handle (get @handles name)]
+                (when-let [stop (js-method handle "stop")]
+                  (.call stop handle)))
+              (swap! handles dissoc name)
+              (when runtime
+                (call-js runtime "cleanupSnippet" name)))
+
             (emit-remove! [name source-agency reason]
-              (when-not @disposed?
+              (when (and (not @disposed?)
+                         (get-in @state-atom [:scheduled name]))
                 (clear-cleanup! name)
+                (cleanup-runtime! name)
                 (let [removed-at (state/now-ms)]
-                  (swap! state-atom state/record-remove name source-agency removed-at)
+                  (swap! state-atom state/record-remove name source-agency removed-at reason)
                   (emit-event {:type "animationSnippetRemoved"
                                :agency "animation"
                                :sourceAgency source-agency
                                :reason reason
                                :name name
-                               :removedAt removed-at})
-                  (emit-effect {:type "animation.removeSnippet"
-                                :agency "animation"
-                                :sourceAgency source-agency
-                                :effectId name
-                                :name name}))))
+                               :removedAt removed-at}))))
 
-            (schedule-cleanup! [name snippet source-agency]
-              ;; Non-looping snippets clean themselves up after their declared
-              ;; duration. Looping or open-ended snippets must be removed by an
-              ;; explicit command from the owning agency/host.
+            (schedule-cleanup! [name snippet source-agency handle]
+              ;; Prefer the Loom3 handle lifecycle when it is available. The
+              ;; timer remains as a fallback so non-looping CLJS-authored
+              ;; snippets still clean themselves up with simple mock runtimes.
               (clear-cleanup! name)
+              (when-let [finished (aget handle "finished")]
+                (when (js-callable? (aget finished "then"))
+                  (.then finished
+                         #(emit-remove! name source-agency "completed")
+                         (fn [_error] nil))))
               (when (not (:loop snippet))
                 (when-let [duration-ms (state/snippet-duration-ms snippet)]
                   (when (pos? duration-ms)
@@ -67,7 +142,7 @@
                     requested-at (state/now-ms)
                     fallback-name (str "polymer:animation:" requested-at)
                     snippet (assoc (:snippet payload) :name (state/snippet-name (:snippet payload) fallback-name))
-                    options (or (:options payload) {})
+                    options (assoc (or (:options payload) {}) :sourceAgency source-agency)
                     name (:name snippet)]
                 (swap! state-atom state/record-schedule snippet options source-agency requested-at)
                 (emit-event {:type "animationSnippetScheduled"
@@ -77,13 +152,22 @@
                              :snippet snippet
                              :options options
                              :requestedAt requested-at})
-                (emit-effect {:type "animation.scheduleSnippet"
-                              :agency "animation"
-                              :sourceAgency source-agency
-                              :effectId name
-                              :snippet snippet
-                              :options options})
-                (schedule-cleanup! name snippet source-agency)
+                (if runtime
+                  (if-let [handle (play-runtime-snippet! runtime snippet options)]
+                    (do
+                      (swap! handles assoc name handle)
+                      (swap! state-atom state/record-start name source-agency (state/now-ms))
+                      (emit-event {:type "animationSnippetStarted"
+                                   :agency "animation"
+                                   :sourceAgency source-agency
+                                   :name name})
+                      (schedule-cleanup! name snippet source-agency handle))
+                    (emit-event {:type "error"
+                                 :agency "animation"
+                                 :message (str "Loom3 runtime did not return a clip handle for " name)}))
+                  (emit-event {:type "error"
+                               :agency "animation"
+                               :message "Animation agency requires a Loom3 animation runtime or engine"}))
                 snippet))
 
             (dispatch! [command]
@@ -121,6 +205,9 @@
            :snapshot (fn [] (state/visible-state @state-atom))
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
+           ;; There is intentionally no host-effect contract here anymore.
+           ;; Kept as an empty stream-compatible port so older tests/consumers
+           ;; can unsubscribe safely while LoomLarge moves to direct runtime use.
            :effects (stream/readable-port effect-stream)
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
@@ -140,6 +227,8 @@
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
+                        (doseq [name (keys @handles)]
+                          (cleanup-runtime! name))
                         (clear-all-cleanups!)
                         ((:dispose input-stream))
                         ((:dispose event-stream))

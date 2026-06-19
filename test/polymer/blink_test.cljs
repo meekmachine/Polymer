@@ -13,6 +13,21 @@
 (defn domain-events [agency]
   (collect agency (fn [target listener] (.subscribeEvents ^js target listener))))
 
+(defn make-runtime [calls]
+  #js {:playSnippet
+       (fn [name curves options]
+         (swap! calls conj {:method "playSnippet"
+                            :name name
+                            :curves (js->clj curves :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName name
+              :stop (fn [] nil)
+              :finished (js/Promise.resolve nil)})
+       :cleanupSnippet
+       (fn [name]
+         (swap! calls conj {:method "cleanupSnippet" :name name})
+         true)})
+
 (deftest blink-state-clamps-config
   (let [agency (polymer/createBlinkAgency #js {:frequency 90
                                                :duration 2
@@ -67,18 +82,30 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
-(deftest character-system-forwards-agency-streams
-  (let [system (polymer/createCharacterAgencies nil)
+(deftest character-network-routes-blink-to-animation-runtime
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)
         effects (effect-events system)]
     (.dispatch ^js system #js {:agency "blink" :command #js {:type "triggerBlink"}})
     (is (some #(= "blinkPlanned" (:type %)) @(:events events)))
     (is (some #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
-    (is (= "animation.scheduleSnippet" (:type (first @(:events effects)))))
-    (is (= "animation" (:agency (first @(:events effects)))))
-    (is (= "blink" (:sourceAgency (first @(:events effects)))))
+    (is (some #(= "animationSnippetScheduled" (:type %)) @(:events events)))
+    (is (= "playSnippet" (:method (first @calls))))
+    (is (= "blink" (get-in (first @calls) [:options :sourceAgency] "blink")))
+    (is (empty? @(:events effects)))
     ((:unsubscribe events))
     ((:unsubscribe effects))
+    (.dispose ^js system)))
+
+(deftest character-network-keeps-fast-blink-prosody-in-polymer
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system #js {:agency "blink" :command #js {:type "setFrequency" :value 45}})
+    (.dispatch ^js system #js {:agency "blink" :command #js {:type "triggerBlink"}})
+    (is (some #(= "blink" (get-in % [:options :sourceAgency])) @calls))
+    (is (some #(= "prosodic" (get-in % [:options :sourceAgency])) @calls))
+    (is (some #(contains? (:curves %) :54) @calls))
     (.dispose ^js system)))
 
 (deftest disposed-agency-stops-events
