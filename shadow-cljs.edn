@@ -1,0 +1,19 @@
+{:source-paths ["src" "test"]
+ :dependencies []
+ :builds
+ {:npm
+  {:target :node-library
+   :output-to "dist/index.js"
+   :exports {:createBlinkAgency polymer.core/createBlinkAgency
+             :createAnimationAgency polymer.core/createAnimationAgency
+             :createCharacterAgencies polymer.core/createCharacterAgencies}}
+
+  :worker
+  {:target :browser
+   :output-dir "dist/worker"
+   :modules {:agency-worker {:init-fn polymer.worker/init}}}
+
+  :test
+  {:target :node-test
+   :output-to "dist/test.js"
+   :ns-regexp "polymer\\..*-test$"}}}
