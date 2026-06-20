@@ -181,6 +181,7 @@ export type VocalDispatch =
       options?: { wordTimings?: VocalWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
     }
   | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number }
+  | { type: 'updateWordTimings'; wordTimings: VocalWordTiming[] }
   | { type: 'stop' }
   | { type: 'reset' };
 
@@ -276,6 +277,7 @@ export type PolymerDomainEvent =
     }
   | { type: 'vocalTimelineStopped'; agency: 'vocal'; reason: string; stoppedAt: number }
   | { type: 'vocalWordBoundary'; agency: 'vocal'; word: string; wordIndex: number; observedAt: number }
+  | { type: 'vocalWordTimingsUpdated'; agency: 'vocal'; count: number; updatedAt: number }
   | {
       type: 'vocalSyncDrift';
       agency: 'vocal';
@@ -366,6 +368,7 @@ export interface VocalAgency {
   startTimeline(timeline: VocalTimeline): void;
   processAzureVisemes(visemes: AzureVisemeEvent[], totalDurationMs?: number): void;
   wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number): void;
+  updateWordTimings(wordTimings: VocalWordTiming[]): void;
   stop(): void;
   reset(): void;
   dispose(): void;

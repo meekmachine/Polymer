@@ -73,6 +73,8 @@ Supported inputs:
 - `startTimeline`: already-normalized canonical viseme timelines.
 - `processAzureVisemes`: Azure/SAPI 0-21 viseme events, including LiveKit-style
   `{ id, time }` payloads.
+- `updateWordTimings`: provider word-boundary metadata that arrives after the
+  viseme timeline has already started.
 - `wordBoundary`: drift correction. When provider word timing and observed
   playback time diverge, Vocal requests an Animation seek instead of reaching
   through LoomLarge.

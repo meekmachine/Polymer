@@ -154,6 +154,17 @@
                          :wordIndex word-index
                          :at observed-at})))
 
+(defn record-word-timings [state word-timings updated-at]
+  ;; Provider timing metadata can arrive after viseme data. Updating it in the
+  ;; agency keeps later word-boundary drift correction accurate without asking
+  ;; LoomLarge to manage any Vocal internals.
+  (-> state
+      (assoc :wordTimings (normalize-word-timings word-timings)
+             :wordIndex 0)
+      (assoc :lastEvent {:type "vocalWordTimingsUpdated"
+                         :count (count (normalize-word-timings word-timings))
+                         :at updated-at})))
+
 (defn record-sync-correction [state name offset-sec corrected-at]
   (-> state
       (update :syncCorrectionCount inc)

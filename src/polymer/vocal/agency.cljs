@@ -190,6 +190,15 @@
                                    :correctedAt corrected-at})
                       (emit-animation-seek! name target-sec "word-boundary-drift"))))))
 
+            (update-word-timings! [payload]
+              (let [updated-at (state/now-ms)
+                    timings (:wordTimings payload)]
+                (swap! state-atom state/record-word-timings timings updated-at)
+                (emit-event {:type "vocalWordTimingsUpdated"
+                             :agency "vocal"
+                             :count (count (state/normalize-word-timings timings))
+                             :updatedAt updated-at})))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
@@ -216,6 +225,9 @@
 
                     "wordBoundary"
                     (handle-word-boundary! payload)
+
+                    "updateWordTimings"
+                    (update-word-timings! payload)
 
                     "stop"
                     (stop-local! "requested" true)
@@ -259,6 +271,9 @@
                                             :word word
                                             :wordIndex word-index
                                             :observedElapsedSec observed-elapsed-sec})))
+           :updateWordTimings (fn [word-timings]
+                                (dispatch! #js {:type "updateWordTimings"
+                                                :wordTimings word-timings}))
            :stop (fn [] (dispatch! #js {:type "stop"}))
            :reset (fn [] (dispatch! #js {:type "reset"}))
            :dispose (fn []

@@ -123,6 +123,39 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
+(deftest vocal-can-receive-provider-word-timings-after-start
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "startTimeline"
+                                  :timeline #js {:name "voice:late-words"
+                                                 :source "azure"
+                                                 :durationSec 1.2
+                                                 :visemes #js [#js {:visemeId 1
+                                                                    :offsetMs 0
+                                                                    :durationMs 400}]}}})
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "updateWordTimings"
+                                  :wordTimings #js [#js {:word "hello"
+                                                         :startSec 0.1
+                                                         :endSec 0.5}]}})
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "wordBoundary"
+                                  :word "hello"
+                                  :wordIndex 0
+                                  :observedElapsedSec 0.3}})
+    (is (some #(= "vocalWordTimingsUpdated" (:type %)) @(:events events)))
+    (is (some #(and (= "setSnippetTime" (:method %))
+                    (= "voice:late-words" (:name %))
+                    (= 0.3 (:offsetSec %)))
+              @calls))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
 (deftest vocal-stop-requests-animation-removal-through-character-network
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
