@@ -248,3 +248,43 @@
   ([text] (text->visemes text 1))
   ([text speech-rate]
    (phonemes->visemes (text->phonemes text) 0 speech-rate)))
+
+(defn phonemes-duration-ms [phonemes speech-rate]
+  (reduce
+   +
+   0
+   (map (fn [phoneme]
+          (adjust-duration (:duration (phoneme->viseme-duration phoneme)) speech-rate))
+        phonemes)))
+
+(defn text->word-timings
+  "Estimate word timing from the same deterministic text planner used for
+  fallback Web Speech visemes. Provider timings are still preferred, but Web
+  Speech only gives boundary callbacks while speaking; this gives those
+  callbacks an expected timeline for drift correction."
+  ([text] (text->word-timings text 1))
+  ([text speech-rate]
+   (loop [tokens (tokenize text)
+          current-ms 0
+          timings []]
+     (if (empty? tokens)
+       timings
+       (let [token (first tokens)]
+         (cond
+           (re-matches #"[A-Za-z]+" token)
+           (let [phonemes (word->phonemes token)
+                 duration-ms (phonemes-duration-ms phonemes speech-rate)
+                 end-ms (+ current-ms duration-ms)]
+             (recur (rest tokens)
+                    end-ms
+                    (conj timings {:word token
+                                   :startSec (/ current-ms 1000)
+                                   :endSec (/ end-ms 1000)})))
+
+           (or (re-matches #"\s+" token)
+               (re-matches #"[,.;:!?]" token))
+           (let [duration-ms (phonemes-duration-ms [(pause-token token)] speech-rate)]
+             (recur (rest tokens) (+ current-ms duration-ms) timings))
+
+           :else
+           (recur (rest tokens) current-ms timings)))))))

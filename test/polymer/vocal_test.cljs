@@ -50,6 +50,7 @@
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (seq (get-in snippet [:curves :26])))
+      (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
       (is (:speaking snapshot))
       (is (= 1 (:scheduledCount snapshot)))
       (is (empty? @(:events effects))))

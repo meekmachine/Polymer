@@ -135,7 +135,8 @@
                                     :text text
                                     :source (or (:source payload) "text")
                                     :visemes (visemes/text->visemes text speech-rate)
-                                    :wordTimings (:wordTimings payload)})
+                                    :wordTimings (or (:wordTimings payload)
+                                                     (visemes/text->word-timings text speech-rate))})
                   (emit-event {:type "error"
                                :agency "vocal"
                                :message "Vocal startText command requires text"}))))
