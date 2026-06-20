@@ -59,17 +59,51 @@
       engine (engine->runtime engine)
       :else nil)))
 
+(defn viseme-snippet-category? [category]
+  (contains? #{"combined" "visemeSnippet"} category))
+
+(defn explicit-auto-viseme-jaw [snippet]
+  (when (contains? snippet :autoVisemeJaw)
+    (:autoVisemeJaw snippet)))
+
 (defn snippet->clip-options [snippet options]
-  (clj->js (merge
-            {:loop (boolean (:loop snippet))
-             :loopMode (if (:loop snippet) "repeat" "once")
-             :priority (:snippetPriority snippet)
-             :playbackRate (:snippetPlaybackRate snippet)
-             :rate (:snippetPlaybackRate snippet)
-             :weight (:snippetIntensityScale snippet)
-             :snippetCategory (:snippetCategory snippet)
-             :source "snippet"}
-            options)))
+  ;; Polymer snippets keep their richer agency category in state/events. The
+  ;; Embody runtime currently requires the narrower "visemeSnippet" category
+  ;; before numeric curve keys 0-14 are interpreted as viseme slots instead of
+  ;; AU ids, so Animation normalizes that one engine-facing option here.
+  (let [category (:snippetCategory snippet)
+        viseme-category? (viseme-snippet-category? category)
+        curves (or (:curves snippet) {})
+        has-jaw-curve? (contains? curves "26")
+        loop? (boolean (:loop snippet))
+        loop-mode (or (:mixerLoopMode snippet) (if loop? "repeat" "once"))
+        playback-rate (or (:snippetPlaybackRate snippet) 1)
+        reverse? (boolean (:mixerReverse snippet))
+        signed-rate (if reverse? (- playback-rate) playback-rate)
+        intensity-scale (or (:snippetIntensityScale snippet) 1)
+        auto-viseme-jaw (if (contains? snippet :autoVisemeJaw)
+                          (explicit-auto-viseme-jaw snippet)
+                          (when (and viseme-category? has-jaw-curve?) false))]
+    (clj->js
+     (cond->
+      (merge
+       {:loop loop?
+        :loopMode loop-mode
+        :repeatCount (:mixerRepeatCount snippet)
+        :reverse reverse?
+        :priority (:snippetPriority snippet)
+        :playbackRate signed-rate
+        :rate signed-rate
+        :weight intensity-scale
+        :mixerWeight (:mixerWeight snippet)
+        :intensityScale intensity-scale
+        :balance (or (:snippetBalance snippet) 0)
+        :balanceMap (or (:snippetBalanceMap snippet) {})
+        :jawScale (or (:snippetJawScale snippet) 1)
+        :snippetCategory (if viseme-category? "visemeSnippet" category)
+        :source "snippet"}
+       options)
+       (some? auto-viseme-jaw) (assoc :autoVisemeJaw auto-viseme-jaw)))))
 
 (defn play-runtime-snippet! [runtime snippet options]
   (let [name (:name snippet)

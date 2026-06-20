@@ -59,3 +59,46 @@
              (.dispose ^js agency)
              (throw error))))
        130))))
+
+(deftest animation-normalizes-vocal-snippets-for-embody-visemes
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "vocal"
+                               :snippet #js {:name "voice:webspeech"
+                                             :curves #js {"1" #js [#js {:time 0 :intensity 0}
+                                                                   #js {:time 0.08 :intensity 1}]
+                                                          "26" #js [#js {:time 0 :intensity 0}
+                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                             :maxTime 0.08
+                                             :loop false
+                                             :snippetCategory "combined"
+                                             :snippetIntensityScale 0.8
+                                             :snippetJawScale 1.25
+                                             :autoVisemeJaw false}
+                               :options #js {:autoPlay true}})
+    (let [options (:options (first @calls))]
+      (is (= "playSnippet" (:method (first @calls))))
+      (is (= "visemeSnippet" (:snippetCategory options)))
+      (is (= 0.8 (:intensityScale options)))
+      (is (= 0.8 (:weight options)))
+      (is (= 1.25 (:jawScale options)))
+      (is (false? (:autoVisemeJaw options))))
+    (.dispose ^js agency)))
+
+(deftest animation-preserves-non-viseme-snippet-category
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "blink"
+                               :snippet #js {:name "blink:single"
+                                             :curves #js {"43" #js [#js {:time 0 :intensity 0}
+                                                                    #js {:time 0.04 :intensity 1}]}
+                                             :maxTime 0.04
+                                             :loop false
+                                             :snippetCategory "blink"}
+                               :options #js {:autoPlay true}})
+    (let [options (:options (first @calls))]
+      (is (= "blink" (:snippetCategory options)))
+      (is (not (contains? options :autoVisemeJaw))))
+    (.dispose ^js agency)))
