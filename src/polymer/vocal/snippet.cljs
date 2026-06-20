@@ -8,7 +8,7 @@
 ;; React, audio playback, LiveKit, Azure credentials, or runtime handles.
 
 (def jaw-au "26")
-(def vocal-snippet-category "combined")
+(def vocal-snippet-category "visemeSnippet")
 (def intensity-eps 0.001)
 (def coarticulation-strength 0.52)
 (def envelope-shoulder-ratio 0.55)

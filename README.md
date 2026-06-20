@@ -64,7 +64,7 @@ replacing the remaining Latticework runtime services.
 ## Vocal/LipSync Agency
 
 Vocal is the second migrated domain agency. It accepts provider/text timing data
-as commands and schedules one utterance-level `combined` snippet through Polymer
+as commands and schedules one utterance-level `visemeSnippet` through Polymer
 Animation.
 
 Supported inputs:

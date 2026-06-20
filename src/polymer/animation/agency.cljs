@@ -60,17 +60,17 @@
       :else nil)))
 
 (defn viseme-snippet-category? [category]
-  (contains? #{"combined" "visemeSnippet"} category))
+  (= "visemeSnippet" category))
 
 (defn explicit-auto-viseme-jaw [snippet]
   (when (contains? snippet :autoVisemeJaw)
     (:autoVisemeJaw snippet)))
 
 (defn snippet->clip-options [snippet options]
-  ;; Polymer snippets keep their richer agency category in state/events. The
-  ;; Embody runtime currently requires the narrower "visemeSnippet" category
-  ;; before numeric curve keys 0-14 are interpreted as viseme slots instead of
-  ;; AU ids, so Animation normalizes that one engine-facing option here.
+  ;; Embody requires "visemeSnippet" before numeric curve keys 0-14 are
+  ;; interpreted as viseme slots instead of AU ids. That is a namespace choice
+  ;; for curve identifiers, not a claim that only some channels are blend
+  ;; shapes.
   (let [category (:snippetCategory snippet)
         viseme-category? (viseme-snippet-category? category)
         curves (or (:curves snippet) {})

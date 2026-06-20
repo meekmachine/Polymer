@@ -46,7 +46,7 @@
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is request)
       (is (= "vocal" (:agency request)))
-      (is (= "combined" (:snippetCategory snippet)))
+      (is (= "visemeSnippet" (:snippetCategory snippet)))
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (seq (get-in snippet [:curves :26])))

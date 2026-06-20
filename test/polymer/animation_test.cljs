@@ -72,7 +72,7 @@
                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :maxTime 0.08
                                              :loop false
-                                             :snippetCategory "combined"
+                                             :snippetCategory "visemeSnippet"
                                              :snippetIntensityScale 0.8
                                              :snippetJawScale 1.25
                                              :autoVisemeJaw false}
