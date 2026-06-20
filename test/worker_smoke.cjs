@@ -56,6 +56,30 @@ async function main() {
     (message) => message.stream === 'effects' && message.event?.type === 'animation.scheduleSnippet',
   ));
 
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'character-a',
+    message: {
+      agency: 'vocal',
+      command: {
+        type: 'startTimeline',
+        timeline: {
+          name: 'worker:vocal',
+          source: 'worker',
+          visemes: [{ visemeId: 1, offsetMs: 0, durationMs: 120 }],
+        },
+      },
+    },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.stream === 'events' && message.event?.type === 'vocalTimelineStarted',
+  ));
+
+  assert(messages.some(
+    (message) => message.stream === 'events' && message.event?.type === 'animationSnippetScheduled',
+  ));
+
   worker.postMessage({ type: 'dispose', id: 'character-a' });
   await worker.terminate();
 }

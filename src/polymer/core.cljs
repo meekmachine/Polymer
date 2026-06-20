@@ -1,7 +1,8 @@
 (ns polymer.core
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
-            [polymer.character :as character]))
+            [polymer.character :as character]
+            [polymer.vocal.agency :as vocal]))
 
 ;; Public JavaScript entry points.
 ;;
@@ -21,6 +22,12 @@
   in config when the agency should execute snippets."
   ([] (animation/create-animation-agency nil))
   ([config] (animation/create-animation-agency config)))
+
+(defn createVocalAgency
+  "Create the Vocal/LipSync agency directly. Use createCharacterAgencies when
+  Vocal should route viseme animation intent to Polymer Animation."
+  ([] (vocal/create-vocal-agency nil))
+  ([config] (vocal/create-vocal-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency network."

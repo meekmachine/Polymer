@@ -45,6 +45,7 @@
       "createCharacterAgencies" (create-system! id (:config payload))
       "createBlinkAgency" (create-system! id {:blink (:config payload)})
       "createAnimationAgency" (create-system! id {:animation (:config payload)})
+      "createVocalAgency" (create-system! id {:vocal (:config payload)})
       "dispatch" (dispatch! id (:message payload))
       "dispose" (dispose-system! id)
       (post! {:id id

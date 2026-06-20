@@ -37,6 +37,10 @@
                          handle)))
        :updateClipParams (fn [clip-name params]
                            (call-js engine "updateClipParams" clip-name params))
+       :setSnippetTime (fn [clip-name offset-sec]
+                         (or (call-js engine "setSnippetTime" clip-name offset-sec)
+                             (call-js engine "seekSnippet" clip-name offset-sec)
+                             (call-js engine "seek" clip-name offset-sec)))
        :cleanupSnippet (fn [clip-name]
                          (or (call-js engine "cleanupSnippet" clip-name)
                              (call-js engine "stopAnimation" clip-name)))
@@ -105,6 +109,26 @@
               (when runtime
                 (call-js runtime "cleanupSnippet" name)))
 
+            (seek-runtime! [name offset-sec]
+              ;; Embody/Loom3 and test doubles may expose seeking at different
+              ;; levels while that API settles. Try the active clip handle first,
+              ;; then runtime-level methods, then updateClipParams as the broad
+              ;; compatibility path. The command still remains owned by
+              ;; Animation either way.
+              (let [handle (get @handles name)
+                    normalized-offset (max 0 (or offset-sec 0))]
+                (or (when handle
+                      (or (call-js handle "setTime" normalized-offset)
+                          (call-js handle "seek" normalized-offset)))
+                    (when runtime
+                      (or (call-js runtime "setSnippetTime" name normalized-offset)
+                          (call-js runtime "seekSnippet" name normalized-offset)
+                          (call-js runtime "seek" name normalized-offset)
+                          (call-js runtime "updateClipParams"
+                                   name
+                                   (clj->js {:time normalized-offset
+                                             :offsetSec normalized-offset})))))))
+
             (emit-remove! [name source-agency reason]
               (when (and (not @disposed?)
                          (get-in @state-atom [:scheduled name]))
@@ -170,6 +194,36 @@
                                :message "Animation agency requires a Loom3 animation runtime or engine"}))
                 snippet))
 
+            (seek-snippet! [payload]
+              (let [source-agency (or (:sourceAgency payload) "unknown")
+                    name (:name payload)
+                    offset-sec (:offsetSec payload)]
+                (cond
+                  (not name)
+                  (emit-event {:type "error"
+                               :agency "animation"
+                               :message "Animation seekSnippet command requires a name"})
+
+                  (not (number? offset-sec))
+                  (emit-event {:type "error"
+                               :agency "animation"
+                               :message "Animation seekSnippet command requires offsetSec"})
+
+                  (seek-runtime! name offset-sec)
+                  (let [seeked-at (state/now-ms)]
+                    (swap! state-atom state/record-seek name source-agency seeked-at (max 0 offset-sec))
+                    (emit-event {:type "animationSnippetSeeked"
+                                 :agency "animation"
+                                 :sourceAgency source-agency
+                                 :name name
+                                 :offsetSec (max 0 offset-sec)
+                                 :seekedAt seeked-at}))
+
+                  :else
+                  (emit-event {:type "error"
+                               :agency "animation"
+                               :message (str "Animation runtime could not seek " name)}))))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
@@ -191,6 +245,9 @@
                       (emit-event {:type "error"
                                    :agency "animation"
                                    :message "Animation removeSnippet command requires a name"}))
+
+                    "seekSnippet"
+                    (seek-snippet! payload)
 
                     "clear"
                     (do
@@ -224,6 +281,11 @@
                             (dispatch! #js {:type "removeSnippet"
                                             :sourceAgency "direct"
                                             :name name}))
+           :seekSnippet (fn [name offset-sec]
+                          (dispatch! #js {:type "seekSnippet"
+                                          :sourceAgency "direct"
+                                          :name name
+                                          :offsetSec offset-sec}))
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)

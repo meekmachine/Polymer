@@ -6,6 +6,7 @@
    :output-to "dist/index.js"
    :exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
+             :createVocalAgency polymer.core/createVocalAgency
              :createCharacterAgencies polymer.core/createCharacterAgencies}}
 
   :worker
