@@ -15,6 +15,12 @@
 (defn effect-events [agency]
   (collect agency (fn [target listener] (.subscribeEffects ^js target listener))))
 
+(defn scheduled-snippets [events]
+  (->> @(:events events)
+       (keep (fn [event]
+               (when (= "animation.requestScheduleSnippet" (:type event))
+                 (:snippet event))))))
+
 (defn make-runtime [calls]
   #js {:playSnippet
        (fn [name curves options]
@@ -72,6 +78,47 @@
     (is (some #(= (:Oh visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
+
+(deftest vocal-source-label-does-not-change-viseme-jaw-mixing
+  (let [agency (polymer/createVocalAgency #js {:visualLeadMs 0})
+        events (domain-events agency)
+        canonical-visemes #js [#js {:visemeId 1 :offsetMs 100 :durationMs 180}
+                               #js {:visemeId 14 :offsetMs 320 :durationMs 160}]]
+    (.dispatch ^js agency
+               #js {:type "startTimeline"
+                    :timeline #js {:name "voice:web"
+                                   :source "webSpeech"
+                                   :visemes canonical-visemes}})
+    (.dispatch ^js agency #js {:type "stop"})
+    (.dispatch ^js agency
+               #js {:type "startTimeline"
+                    :timeline #js {:name "voice:azure"
+                                   :source "azure"
+                                   :visemes canonical-visemes}})
+    (let [[web-snippet azure-snippet] (scheduled-snippets events)]
+      (is (= "visemeSnippet" (:snippetCategory web-snippet)))
+      (is (= "visemeSnippet" (:snippetCategory azure-snippet)))
+      (is (= (:curves web-snippet) (:curves azure-snippet)))
+      (is (= (get-in web-snippet [:curves :26])
+             (get-in azure-snippet [:curves :26]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest vocal-visual-lead-is-applied-before-shared-snippet-build
+  (let [agency (polymer/createVocalAgency #js {:visualLeadMs 50})
+        events (domain-events agency)]
+    (.dispatch ^js agency
+               #js {:type "startTimeline"
+                    :timeline #js {:name "voice:lead"
+                                   :source "webSpeech"
+                                   :visemes #js [#js {:visemeId 1 :offsetMs 100 :durationMs 180}]}})
+    (let [snippet (first (scheduled-snippets events))
+          lip-curve (get-in snippet [:curves :1])
+          jaw-curve (get-in snippet [:curves :26])]
+      (is (= 0.05 (:time (first lip-curve))))
+      (is (= 0.05 (:time (first jaw-curve)))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
 
 (deftest character-network-routes-vocal-to-animation-runtime
   (let [calls (atom [])

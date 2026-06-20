@@ -15,15 +15,26 @@
 (defn js-command [type value]
   #js {:type type :value value})
 
+(defn visual-lead-ms [input config]
+  (state/clamp 0 250 (state/number-or (:visualLeadMs input) (:visualLeadMs config))))
+
+(defn apply-visual-lead [events lead-ms]
+  (let [lead (max 0 (state/number-or lead-ms 0))]
+    (mapv (fn [event]
+            (update event :offsetMs #(max 0 (- % lead))))
+          events)))
+
 (defn normalize-timeline [timeline config]
   (let [input (or timeline {})
         source (or (:source input) "external")
         text (:text input)
-        viseme-events (snippet/normalize-events (:visemes input))]
+        lead-ms (visual-lead-ms input config)
+        viseme-events (apply-visual-lead (snippet/normalize-events (:visemes input)) lead-ms)]
     {:name (:name input)
      :text text
      :source source
      :visemes viseme-events
+     :visualLeadMs lead-ms
      :wordTimings (state/normalize-word-timings (:wordTimings input))
      :durationSec (state/number-or (:durationSec input)
                                    (if (empty? viseme-events)
@@ -152,6 +163,7 @@
                                   :text (:text payload)
                                   :source (or (:source payload) "azure")
                                   :visemes timeline
+                                  :visualLeadMs (:visualLeadMs options)
                                   :wordTimings (:wordTimings options)
                                   :durationSec (when (state/finite-number? (:totalDurationMs payload))
                                                  (/ (:totalDurationMs payload) 1000))})))

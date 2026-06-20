@@ -188,11 +188,6 @@
             max-ms (min (max-duration-ms class-name) (+ raw-span-ms overlap-ms))]
         (clamp-duration desired-ms 1 max-ms remaining-ms)))))
 
-(defn visual-lead-offset [offset-ms visual-lead-ms]
-  (if (and (state/finite-number? visual-lead-ms) (pos? visual-lead-ms))
-    (max 0 (- offset-ms visual-lead-ms))
-    offset-ms))
-
 (defn push-event [timeline viseme-id offset-ms duration-ms]
   (if (<= duration-ms 0)
     timeline
@@ -208,10 +203,10 @@
     11 [(:Ah visemes/canonical-visemes) (:Ih visemes/canonical-visemes)]
     nil))
 
-(defn push-expanded-event [timeline provider-id canonical-id offset-ms duration-ms visual-lead-ms]
+(defn push-expanded-event [timeline provider-id canonical-id offset-ms duration-ms]
   (let [targets (diphthong-targets provider-id)]
     (if (or (nil? targets) (< duration-ms diphthong-min-duration-ms))
-      (push-event timeline canonical-id (visual-lead-offset offset-ms visual-lead-ms) duration-ms)
+      (push-event timeline canonical-id offset-ms duration-ms)
       (let [[first-viseme second-viseme] targets
             second-offset-ms (min (+ offset-ms duration-ms (- diphthong-secondary-min-ms))
                                   (+ offset-ms (* duration-ms 0.55)))
@@ -221,16 +216,15 @@
             second-duration-ms (max diphthong-secondary-min-ms
                                     (- (+ offset-ms duration-ms) second-offset-ms))]
         (-> timeline
-            (push-event first-viseme (visual-lead-offset offset-ms visual-lead-ms) first-duration-ms)
-            (push-event second-viseme (visual-lead-offset second-offset-ms visual-lead-ms) second-duration-ms))))))
+            (push-event first-viseme offset-ms first-duration-ms)
+            (push-event second-viseme second-offset-ms second-duration-ms))))))
 
 (defn azure-visemes->timeline
   ([visemes] (azure-visemes->timeline visemes nil nil))
   ([visemes total-duration-ms options]
    (let [options (or options {})
          normalized (normalize-provider-visemes visemes)
-         mapped (mapped-events normalized options)
-         visual-lead-ms (:visualLeadMs options)]
+         mapped (mapped-events normalized options)]
      (->> (map-indexed (fn [index event]
                          {:event event
                           :next-event (get mapped (inc index))})
@@ -242,8 +236,7 @@
                                            (:visemeId event)
                                            (:canonicalId event)
                                            offset-ms
-                                           event-duration-ms
-                                           visual-lead-ms)))
+                                           event-duration-ms)))
                   [])
           (sort-by :offsetMs)
           vec))))
