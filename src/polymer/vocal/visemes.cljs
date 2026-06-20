@@ -102,8 +102,10 @@
    "ER" 50 "AA" 55 "AE" 55
    "IX" 30})
 
+(def fallback-text-duration-scale 2)
+
 (def pause-durations
-  {"PAUSE_SPACE" 0
+  {"PAUSE_SPACE" 35
    "PAUSE_COMMA" 50
    "PAUSE_PERIOD" 100
    "PAUSE_QUESTION" 100
@@ -219,7 +221,8 @@
        :duration (get phoneme-durations normalized fallback-duration)})))
 
 (defn adjust-duration [duration speech-rate]
-  (js/Math.round (/ duration (state/clamp 0.2 3 (state/number-or speech-rate 1)))))
+  (js/Math.round (/ (* duration fallback-text-duration-scale)
+                    (state/clamp 0.2 3 (state/number-or speech-rate 1)))))
 
 (defn phonemes->visemes
   ([phonemes] (phonemes->visemes phonemes 0 1))

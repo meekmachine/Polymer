@@ -64,6 +64,20 @@
     ((:unsubscribe effects))
     (.dispose ^js agency)))
 
+(deftest web-speech-fallback-timeline-uses-speech-length-scale
+  (let [agency (polymer/createVocalAgency #js {:speechRate 1})
+        events (domain-events agency)
+        text "The saddest aspect of life right now is that science gathers knowledge faster than society gathers wisdom."]
+    (.dispatch ^js agency #js {:type "startText" :text text :source "webSpeech"})
+    (let [snippet (first (scheduled-snippets events))
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
+          last-word (last (:wordTimings snapshot))]
+      (is (> (:maxTime snippet) 6))
+      (is (> (:endSec last-word) 6))
+      (is (seq (get-in snippet [:curves :26]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest azure-visemes-map-to-canonical-timeline
   (let [timeline (azure/azure-visemes->timeline
                   [{:id 21 :time 0}
