@@ -8,7 +8,6 @@
 ;; React, audio playback, LiveKit, Azure credentials, or runtime handles.
 
 (def jaw-au "26")
-(def vocal-snippet-category "visemeSnippet")
 (def intensity-eps 0.001)
 (def coarticulation-strength 0.52)
 (def envelope-shoulder-ratio 0.55)
@@ -280,6 +279,21 @@
       reduced
       (assoc reduced jaw-au jaw-curve))))
 
+(defn vocal-channel-target [curve-key]
+  ;; Vocal owns its animation namespace explicitly. Numeric keys 0-14 are
+  ;; canonical viseme slots; the jaw curve is AU 26. Keeping this as data lets
+  ;; Embody route viseme 1 and AU 1 at the same time without snippetCategory.
+  (if (= jaw-au (str curve-key))
+    {:type "au" :id 26}
+    {:type "viseme" :id (js/parseInt (str curve-key) 10)}))
+
+(defn curves->channels [curves]
+  (->> curves
+       (map (fn [[curve-key curve]]
+              {:target (vocal-channel-target curve-key)
+               :keyframes curve}))
+       vec))
+
 (defn max-snippet-time [events curves]
   (let [event-max (if (empty? events)
                     0
@@ -298,7 +312,6 @@
          curves (build-curves normalized-events config)
          max-time (max-snippet-time normalized-events curves)]
      {:name snippet-name
-      :snippetCategory vocal-snippet-category
       :snippetPriority (:priority config)
       ;; Provider/text timing is already baked into the keyframe offsets. Keep
       ;; playback at 1.0 so speech rate is not applied twice.
@@ -309,6 +322,7 @@
       :loop false
       :maxTime max-time
       :curves curves
+      :channels (curves->channels curves)
       :metadata {:agency "vocal"
                  :visemeCount (count normalized-events)}})))
 

@@ -74,7 +74,7 @@ export interface AnimationState {
 }
 
 export interface AnimationAgencyConfig {
-  runtime?: EmbodyAnimationRuntime;
+  runtime?: PolymerAnimationRuntime;
   engine?: LoomLargeThree;
   runtimeConfig?: Record<string, unknown>;
 }
@@ -90,15 +90,55 @@ export type AnimationDispatch =
   | { type: 'removeSnippet'; sourceAgency?: string; name: string }
   | { type: 'clear'; sourceAgency?: string };
 
+export interface PolymerSnippetKeyframe {
+  time: number;
+  intensity: number;
+  inherit?: boolean;
+}
+
+export type PolymerSnippetChannelTarget =
+  | { type: 'au'; id: number; balance?: number }
+  | { type: 'viseme'; id: number; meshNames?: string[] }
+  | { type: 'morph'; id: string | number; meshNames?: string[] }
+  | {
+      type: 'bone';
+      id: string;
+      channel: 'rx' | 'ry' | 'rz' | 'tx' | 'ty' | 'tz';
+      scale?: number;
+      maxDegrees?: number;
+      maxUnits?: number;
+    };
+
+export interface PolymerSnippetChannel {
+  target: PolymerSnippetChannelTarget;
+  keyframes: PolymerSnippetKeyframe[];
+  intensityScale?: number;
+}
+
+export interface PolymerAnimationRuntime extends EmbodyAnimationRuntime {
+  playTypedSnippet?: (
+    snippet: { name: string; channels: PolymerSnippetChannel[] },
+    options?: Record<string, unknown>
+  ) => unknown;
+  buildTypedClip?: (
+    name: string,
+    channels: PolymerSnippetChannel[],
+    options?: Record<string, unknown>
+  ) => unknown;
+}
+
 export interface PolymerAnimationSnippet {
   name: string;
-  curves: Record<string, Array<{ time: number; intensity: number }>>;
+  curves?: Record<string, PolymerSnippetKeyframe[]>;
+  channels?: PolymerSnippetChannel[];
   maxTime: number;
   loop: boolean;
-  snippetCategory: string;
+  snippetCategory?: string;
   snippetPriority: number;
   snippetPlaybackRate: number;
   snippetIntensityScale: number;
+  snippetJawScale?: number;
+  autoVisemeJaw?: boolean;
   metadata?: Record<string, unknown>;
 }
 

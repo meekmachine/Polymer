@@ -34,9 +34,10 @@
                     vec)]
     {:name (:name plan)
      :curves {"43" points}
+     :channels [{:target {:type "au" :id 43}
+                 :keyframes points}]
      :maxTime max-time
      :loop false
-     :snippetCategory "blink"
      :snippetPriority 100
      :snippetPlaybackRate 1
      :snippetIntensityScale 1

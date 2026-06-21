@@ -20,6 +20,30 @@
          #js {:clipName name
               :stop (fn [] (swap! calls conj {:method "stop" :name name}))
               :finished (js/Promise.resolve nil)})
+       :playTypedSnippet
+       (fn [snippet options]
+         (swap! calls conj {:method "playTypedSnippet"
+                            :name (aget snippet "name")
+                            :channels (js->clj (aget snippet "channels") :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName (aget snippet "name")
+              :stop (fn [] (swap! calls conj {:method "stop" :name (aget snippet "name")}))
+              :finished (js/Promise.resolve nil)})
+       :cleanupSnippet
+       (fn [name]
+         (swap! calls conj {:method "cleanupSnippet" :name name})
+         true)})
+
+(defn make-legacy-runtime [calls]
+  #js {:playSnippet
+       (fn [name curves options]
+         (swap! calls conj {:method "playSnippet"
+                            :name name
+                            :curves (js->clj curves :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName name
+              :stop (fn [] (swap! calls conj {:method "stop" :name name}))
+              :finished (js/Promise.resolve nil)})
        :cleanupSnippet
        (fn [name]
          (swap! calls conj {:method "cleanupSnippet" :name name})
@@ -60,7 +84,7 @@
              (throw error))))
        130))))
 
-(deftest animation-normalizes-vocal-snippets-for-embody-visemes
+(deftest animation-routes-vocal-snippets-through-typed-channels
   (let [calls (atom [])
         agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
     (.dispatch ^js agency #js {:type "scheduleSnippet"
@@ -70,19 +94,55 @@
                                                                    #js {:time 0.08 :intensity 1}]
                                                           "26" #js [#js {:time 0 :intensity 0}
                                                                     #js {:time 0.08 :intensity 0.35}]}
+                                             :channels #js [#js {:target #js {:type "viseme" :id 1}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 1}]}
+                                                            #js {:target #js {:type "au" :id 26}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
                                              :loop false
-                                             :snippetCategory "visemeSnippet"
                                              :snippetIntensityScale 0.8
                                              :snippetJawScale 1.25
+                                             :autoVisemeJaw false}
+                               :options #js {:autoPlay true}})
+    (let [call (first @calls)
+          options (:options call)]
+      (is (= "playTypedSnippet" (:method call)))
+      (is (= "viseme" (get-in call [:channels 0 :target :type])))
+      (is (= 1 (get-in call [:channels 0 :target :id])))
+      (is (= "au" (get-in call [:channels 1 :target :type])))
+      (is (= 26 (get-in call [:channels 1 :target :id])))
+      (is (not (contains? options :snippetCategory)))
+      (is (= 0.8 (:intensityScale options)))
+      (is (= 0.8 (:weight options)))
+      (is (= 1.25 (:jawScale options)))
+      (is (false? (:autoVisemeJaw options))))
+    (.dispose ^js agency)))
+
+(deftest animation-synthesizes-viseme-category-only-for-legacy-runtime
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-legacy-runtime calls)})]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "vocal"
+                               :snippet #js {:name "voice:legacy"
+                                             :curves #js {"1" #js [#js {:time 0 :intensity 0}
+                                                                   #js {:time 0.08 :intensity 1}]
+                                                          "26" #js [#js {:time 0 :intensity 0}
+                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                             :channels #js [#js {:target #js {:type "viseme" :id 1}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 1}]}
+                                                            #js {:target #js {:type "au" :id 26}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 0.35}]}]
+                                             :maxTime 0.08
+                                             :loop false
                                              :autoVisemeJaw false}
                                :options #js {:autoPlay true}})
     (let [options (:options (first @calls))]
       (is (= "playSnippet" (:method (first @calls))))
       (is (= "visemeSnippet" (:snippetCategory options)))
-      (is (= 0.8 (:intensityScale options)))
-      (is (= 0.8 (:weight options)))
-      (is (= 1.25 (:jawScale options)))
       (is (false? (:autoVisemeJaw options))))
     (.dispose ^js agency)))
 

@@ -31,6 +31,15 @@
          #js {:clipName name
               :stop (fn [] (swap! calls conj {:method "stop" :name name}))
               :finished (js/Promise.resolve nil)})
+       :playTypedSnippet
+       (fn [snippet options]
+         (swap! calls conj {:method "playTypedSnippet"
+                            :name (aget snippet "name")
+                            :channels (js->clj (aget snippet "channels") :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName (aget snippet "name")
+              :stop (fn [] (swap! calls conj {:method "stop" :name (aget snippet "name")}))
+              :finished (js/Promise.resolve nil)})
        :setSnippetTime
        (fn [name offset-sec]
          (swap! calls conj {:method "setSnippetTime"
@@ -52,10 +61,14 @@
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is request)
       (is (= "vocal" (:agency request)))
-      (is (= "visemeSnippet" (:snippetCategory snippet)))
+      (is (not (contains? snippet :snippetCategory)))
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (seq (get-in snippet [:curves :26])))
+      (is (some #(= "viseme" (get-in % [:target :type])) (:channels snippet)))
+      (is (some #(and (= "au" (get-in % [:target :type]))
+                      (= 26 (get-in % [:target :id])))
+                (:channels snippet)))
       (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
       (is (:speaking snapshot))
       (is (= 1 (:scheduledCount snapshot)))
@@ -110,9 +123,10 @@
                                    :source "azure"
                                    :visemes canonical-visemes}})
     (let [[web-snippet azure-snippet] (scheduled-snippets events)]
-      (is (= "visemeSnippet" (:snippetCategory web-snippet)))
-      (is (= "visemeSnippet" (:snippetCategory azure-snippet)))
+      (is (not (contains? web-snippet :snippetCategory)))
+      (is (not (contains? azure-snippet :snippetCategory)))
       (is (= (:curves web-snippet) (:curves azure-snippet)))
+      (is (= (:channels web-snippet) (:channels azure-snippet)))
       (is (= (get-in web-snippet [:curves :26])
              (get-in azure-snippet [:curves :26]))))
     ((:unsubscribe events))
@@ -148,9 +162,11 @@
                                                                     :durationMs 160}]}}})
     (is (some #(= "vocalTimelineStarted" (:type %)) @(:events events)))
     (is (some #(= "animationSnippetScheduled" (:type %)) @(:events events)))
-    (is (= "playSnippet" (:method (first @calls))))
+    (is (= "playTypedSnippet" (:method (first @calls))))
     (is (= "vocal" (get-in (first @calls) [:options :sourceAgency])))
-    (is (seq (get-in (first @calls) [:curves :26])))
+    (is (some #(and (= "au" (get-in % [:target :type]))
+                    (= 26 (get-in % [:target :id])))
+              (:channels (first @calls))))
     ((:unsubscribe events))
     (.dispose ^js system)))
 

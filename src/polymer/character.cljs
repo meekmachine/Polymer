@@ -14,30 +14,37 @@
 
 (def fast-blink-prosodic-cooldown-ms 1200)
 
+(defn au-channel [au-id curve]
+  {:target {:type "au" :id au-id}
+   :keyframes curve})
+
 (defn fast-blink-prosodic-snippet [now]
   ;; Fast blinking gets a small downward head cue. This lives in Polymer now so
   ;; LoomLarge does not need bespoke blink/prosody routing code.
-  {:name (str "polymer:prosodic:blink-fast:" now)
-   :curves {"1" [{:time 0 :intensity 0}
-                 {:time 0.12 :intensity 0.26}
-                 {:time 0.42 :intensity 0.34}
-                 {:time 0.72 :intensity 0}]
-            "2" [{:time 0 :intensity 0}
-                 {:time 0.12 :intensity 0.2}
-                 {:time 0.42 :intensity 0.28}
-                 {:time 0.72 :intensity 0}]
-            "54" [{:time 0 :intensity 0}
-                  {:time 0.16 :intensity 0.16}
-                  {:time 0.44 :intensity 0.2}
-                  {:time 0.72 :intensity 0}]}
-   :maxTime 0.72
-   :loop false
-   :snippetCategory "prosodic"
-   :snippetPriority 35
-   :snippetPlaybackRate 1
-   :snippetIntensityScale 0.75
-   :metadata {:agency "prosodic"
-              :trigger "blink-fast"}})
+  (let [curves {"1" [{:time 0 :intensity 0}
+                     {:time 0.12 :intensity 0.26}
+                     {:time 0.42 :intensity 0.34}
+                     {:time 0.72 :intensity 0}]
+                "2" [{:time 0 :intensity 0}
+                     {:time 0.12 :intensity 0.2}
+                     {:time 0.42 :intensity 0.28}
+                     {:time 0.72 :intensity 0}]
+                "54" [{:time 0 :intensity 0}
+                      {:time 0.16 :intensity 0.16}
+                      {:time 0.44 :intensity 0.2}
+                      {:time 0.72 :intensity 0}]}]
+    {:name (str "polymer:prosodic:blink-fast:" now)
+     :curves curves
+     :channels [(au-channel 1 (get curves "1"))
+                (au-channel 2 (get curves "2"))
+                (au-channel 54 (get curves "54"))]
+     :maxTime 0.72
+     :loop false
+     :snippetPriority 35
+     :snippetPlaybackRate 1
+     :snippetIntensityScale 0.75
+     :metadata {:agency "prosodic"
+                :trigger "blink-fast"}}))
 
 (defn create-character-agencies [config]
   (let [input-stream (stream/create-stream)
