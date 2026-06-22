@@ -1,5 +1,4 @@
 import type { LoomLargeThree } from '@lovelace_lol/loom3';
-import type { EmbodyAnimationRuntime } from '@lovelace_lol/loom3/cljs';
 
 export interface BlinkState {
   agency: 'blink';
@@ -115,16 +114,41 @@ export interface PolymerSnippetChannel {
   intensityScale?: number;
 }
 
-export interface PolymerAnimationRuntime extends EmbodyAnimationRuntime {
+export interface PolymerAnimationHandle {
+  play?: () => unknown;
+  stop?: () => unknown;
+  setTime?: (offsetSec: number) => unknown;
+  seek?: (offsetSec: number) => unknown;
+  finished?: Promise<unknown> | { then: (onFulfilled?: () => unknown, onRejected?: (error: unknown) => unknown) => unknown };
+}
+
+export interface PolymerAnimationRuntime {
+  buildClip?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
+  playSnippet?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
   playTypedSnippet?: (
     snippet: { name: string; channels: PolymerSnippetChannel[] },
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
   buildTypedClip?: (
     name: string,
     channels: PolymerSnippetChannel[],
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
+  updateClipParams?: (name: string, params: Record<string, unknown>) => unknown;
+  setSnippetTime?: (name: string, offsetSec: number) => unknown;
+  seekSnippet?: (name: string, offsetSec: number) => unknown;
+  seek?: (name: string, offsetSec: number) => unknown;
+  cleanupSnippet?: (name: string) => unknown;
+  stopAnimation?: (name: string) => unknown;
+  getAnimationState?: (name: string) => unknown;
 }
 
 export interface PolymerAnimationSnippet {
