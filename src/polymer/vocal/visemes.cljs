@@ -39,6 +39,64 @@
 
 (declare normalize-phoneme)
 
+(def vowels
+  #{"A" "E" "I" "O" "U"
+    "AA" "AE" "AH" "AO" "AW" "AX" "AY"
+    "EH" "ER" "EY"
+    "IH" "IX" "IY"
+    "OW" "OY"
+    "UH" "UW"})
+
+(defn primary-class [classes]
+  (or (first classes) "default"))
+
+(defn viseme-classes [viseme-id]
+  ;; These are coarse visual-speech classes, not a replacement for phoneme
+  ;; labels. Azure and other provider-only paths may only know a canonical
+  ;; viseme slot, so this function gives the later JALI planners enough class
+  ;; data to make conservative jaw/lip decisions.
+  (cond
+    (= viseme-id (:B_M_P canonical-visemes)) ["bilabial"]
+    (= viseme-id (:F_V canonical-visemes)) ["labiodental" "fricative"]
+    (= viseme-id (:S_Z canonical-visemes)) ["sibilant" "fricative"]
+    (= viseme-id (:Th canonical-visemes)) ["dental" "fricative"]
+    (= viseme-id (:Ch_J canonical-visemes)) ["obstruent" "tongue"]
+    (= viseme-id (:K_G_H_NG canonical-visemes)) ["obstruent" "tongue"]
+    (= viseme-id (:T_L_D_N canonical-visemes)) ["tongue"]
+    (= viseme-id (:R canonical-visemes)) ["liquid"]
+    (= viseme-id (:W_OO canonical-visemes)) ["glide" "lip-heavy"]
+    (contains? #{(:AE canonical-visemes)
+                 (:Ah canonical-visemes)
+                 (:EE canonical-visemes)
+                 (:Er canonical-visemes)
+                 (:Ih canonical-visemes)
+                 (:Oh canonical-visemes)}
+               viseme-id) ["vowel"]
+    :else ["default"]))
+
+(defn phoneme-classes [phoneme viseme-id]
+  ;; JALI's later jaw/lip planners need class metadata in addition to the
+  ;; phoneme and canonical viseme slot. A phoneme can belong to multiple classes:
+  ;; for example M is both bilabial and nasal, while F is labiodental and
+  ;; fricative. Keep this data on every event so planner rules do not have to
+  ;; reverse-engineer intent from a lossy viseme ID.
+  (let [normalized (normalize-phoneme phoneme)]
+    (cond
+      (str/starts-with? (or phoneme "") "PAUSE_") ["pause"]
+      (contains? vowels normalized) ["vowel"]
+      (contains? #{"P" "B"} normalized) ["bilabial" "obstruent"]
+      (= "M" normalized) ["bilabial" "nasal"]
+      (contains? #{"F" "V"} normalized) ["labiodental" "fricative"]
+      (contains? #{"S" "Z" "SH" "ZH"} normalized) ["sibilant" "fricative"]
+      (contains? #{"TH" "DH"} normalized) ["dental" "fricative"]
+      (contains? #{"T" "D" "K" "G" "CH" "JH"} normalized) ["obstruent" "tongue"]
+      (contains? #{"N" "NG"} normalized) ["nasal" "tongue"]
+      (contains? #{"L"} normalized) ["liquid" "tongue"]
+      (contains? #{"R"} normalized) ["liquid"]
+      (contains? #{"W"} normalized) ["glide" "lip-heavy"]
+      (contains? #{"Y" "H" "HH"} normalized) ["glide"]
+      :else (viseme-classes viseme-id))))
+
 (defn jaw-activation-for-phoneme [phoneme viseme-id]
   ;; The lip target and the jaw target are allowed to disagree. For example,
   ;; HH borrows the Ah lip family but should not open the jaw like a strong Ah
@@ -133,14 +191,6 @@
    "PAUSE_SEMICOLON" 75
    "PAUSE_COLON" 75})
 
-(def vowels
-  #{"A" "E" "I" "O" "U"
-    "AA" "AE" "AH" "AO" "AW" "AX" "AY"
-    "EH" "ER" "EY"
-    "IH" "IX" "IY"
-    "OW" "OY"
-    "UH" "UW"})
-
 (def prefix-phones
   [["th" ["TH"]] ["sh" ["SH"]] ["ch" ["CH"]] ["wh" ["W"]] ["ph" ["F"]]
    ["gh" ["G"]] ["ng" ["NG"]] ["ck" ["K"]] ["qu" ["K" "W"]]
@@ -231,14 +281,20 @@
 
 (defn phoneme->viseme-duration [phoneme]
   (if (str/starts-with? (or phoneme "") "PAUSE_")
-    {:phoneme phoneme
-     :viseme (:B_M_P canonical-visemes)
-     :jawActivation 0
-     :duration (get pause-durations phoneme 300)}
+    (let [classes (phoneme-classes phoneme (:B_M_P canonical-visemes))]
+      {:phoneme phoneme
+       :phonemeClass (primary-class classes)
+       :phonemeClasses classes
+       :viseme (:B_M_P canonical-visemes)
+       :jawActivation 0
+       :duration (get pause-durations phoneme 300)})
     (let [normalized (normalize-phoneme phoneme)
           viseme-id (get phoneme->viseme normalized (:B_M_P canonical-visemes))
+          classes (phoneme-classes normalized viseme-id)
           fallback-duration (if (vowel? normalized) 50 35)]
       {:phoneme normalized
+       :phonemeClass (primary-class classes)
+       :phonemeClasses classes
        :viseme viseme-id
        :jawActivation (jaw-activation-for-phoneme normalized viseme-id)
        :duration (get phoneme-durations normalized fallback-duration)})))
@@ -255,7 +311,7 @@
           events []]
      (if (empty? remaining)
        events
-       (let [{:keys [phoneme viseme jawActivation duration]} (phoneme->viseme-duration (first remaining))
+       (let [{:keys [phoneme phonemeClass phonemeClasses viseme jawActivation duration]} (phoneme->viseme-duration (first remaining))
              scaled-duration (adjust-duration duration speech-rate)]
          (if (<= scaled-duration 0)
            (recur (rest remaining) current-ms events)
@@ -263,6 +319,8 @@
                   (+ current-ms scaled-duration)
                   (conj events {:visemeId viseme
                                 :phoneme phoneme
+                                :phonemeClass phonemeClass
+                                :phonemeClasses phonemeClasses
                                 :jawActivation jawActivation
                                 :offsetMs current-ms
                                 :durationMs scaled-duration}))))))))

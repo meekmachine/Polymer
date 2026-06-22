@@ -25,6 +25,41 @@
 (defn max-intensity [curve]
   (reduce max 0 (map :intensity curve)))
 
+(def jali-fixture-phrases
+  ["what" "five" "pop man" "chess" "duke" "hello world"])
+
+(defn build-text-fixture
+  ([text] (build-text-fixture text nil))
+  ([text config]
+   (let [speech-rate (or (:speechRate config) 1)]
+     (snippet/build-text-snippet text
+                                 (visemes/text->visemes text speech-rate)
+                                 (merge {:speechRate speech-rate
+                                         :intensity 1
+                                         :jawScale 1}
+                                        config)))))
+
+(defn channels-of-type [snippet target-type]
+  (filter #(= target-type (get-in % [:target :type])) (:channels snippet)))
+
+(defn channel-by-target [snippet target-type target-id]
+  (some #(when (and (= target-type (get-in % [:target :type]))
+                    (= target-id (get-in % [:target :id])))
+           %)
+        (:channels snippet)))
+
+(defn jaw-channel [snippet]
+  (channel-by-target snippet "au" 26))
+
+(defn viseme-channel [snippet viseme-id]
+  (channel-by-target snippet "viseme" viseme-id))
+
+(defn channel-max-intensity [channel]
+  (max-intensity (:keyframes channel)))
+
+(defn total-keyframes [snippet]
+  (reduce + 0 (map #(count (:keyframes %)) (:channels snippet))))
+
 (defn make-runtime [calls]
   #js {:playSnippet
        (fn [name curves options]
@@ -116,6 +151,89 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest jali-fixtures-produce-independent-channel-surface
+  (doseq [phrase jali-fixture-phrases]
+    (let [snippet (build-text-fixture phrase)
+          lip-channels (channels-of-type snippet "viseme")
+          jaw (jaw-channel snippet)]
+      (testing phrase
+        (is (seq lip-channels))
+        (is jaw)
+        (is (false? (:autoVisemeJaw snippet)))
+        (is (not (contains? snippet :snippetCategory)))
+        (is (every? #(= "viseme" (get-in % [:target :type])) lip-channels))
+        (is (every? #(seq (:keyframes %)) (:channels snippet)))
+        (is (<= (count (:channels snippet)) 8))
+        (is (<= (apply max (map #(count (:keyframes %)) (:channels snippet))) 48))
+        (is (<= (total-keyframes snippet) 160))))))
+
+(deftest jali-fixtures-jaw-scale-zero-preserves-lips
+  (doseq [phrase jali-fixture-phrases]
+    (let [snippet (build-text-fixture phrase {:jawScale 0})]
+      (testing phrase
+        (is (seq (channels-of-type snippet "viseme")))
+        (is (nil? (jaw-channel snippet)))))))
+
+(deftest jali-bilabial-fixture-closes-lips-without-bilabial-jaw-activation
+  (let [events (visemes/text->visemes "pop man")
+        bilabials (filter #(contains? #{"P" "B" "M"} (:phoneme %)) events)
+        snippet (build-text-fixture "pop man")
+        bilabial-channel (viseme-channel snippet (:B_M_P visemes/canonical-visemes))]
+    (is (seq bilabials))
+    (is (every? #(<= (:jawActivation %) 0.001) bilabials))
+    (is bilabial-channel)
+    (is (>= (channel-max-intensity bilabial-channel) 0.95))
+    (is (jaw-channel snippet))))
+
+(deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
+  (let [sibilant-snippet (build-text-fixture "chess")
+        open-vowel-snippet (build-text-fixture "duke")
+        sibilant-jaw (jaw-channel sibilant-snippet)
+        open-vowel-jaw (jaw-channel open-vowel-snippet)]
+    (is sibilant-jaw)
+    (is open-vowel-jaw)
+    (is (<= (channel-max-intensity sibilant-jaw) 0.2))
+    (is (>= (channel-max-intensity open-vowel-jaw) 0.5))))
+
+(deftest jali-labiodental-fixture-is-distinct-from-bilabial-closure
+  (let [five (build-text-fixture "five")
+        pop-man (build-text-fixture "pop man")
+        labiodental (viseme-channel five (:F_V visemes/canonical-visemes))
+        bilabial-in-five (viseme-channel five (:B_M_P visemes/canonical-visemes))
+        bilabial-in-pop (viseme-channel pop-man (:B_M_P visemes/canonical-visemes))]
+    (is labiodental)
+    (is (nil? bilabial-in-five))
+    (is bilabial-in-pop)
+    (is (>= (channel-max-intensity labiodental) 0.8))
+    (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
+    (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
+
+(deftest jali-text-fallback-events-carry-phoneme-class-metadata
+  (let [events (visemes/text->visemes "five pop")
+        f-event (some #(when (= "F" (:phoneme %)) %) events)
+        p-event (some #(when (= "P" (:phoneme %)) %) events)
+        vowel-event (some #(when (= "IH" (:phoneme %)) %) events)]
+    (is (= "labiodental" (:phonemeClass f-event)))
+    (is (contains? (set (:phonemeClasses f-event)) "fricative"))
+    (is (= "bilabial" (:phonemeClass p-event)))
+    (is (contains? (set (:phonemeClasses p-event)) "obstruent"))
+    (is (= "vowel" (:phonemeClass vowel-event)))
+    (is (= ["vowel"] (:phonemeClasses vowel-event)))))
+
+(deftest jali-provider-timeline-normalization-preserves-class-metadata
+  (let [normalized (snippet/normalize-events
+                    [{:visemeId (:F_V visemes/canonical-visemes)
+                      :phoneme "F"
+                      :phonemeClass "labiodental"
+                      :phonemeClasses ["labiodental" "fricative"]
+                      :jawActivation 0.06
+                      :offsetMs 0
+                      :durationMs 80}])
+        event (first normalized)]
+    (is (= "F" (:phoneme event)))
+    (is (= "labiodental" (:phonemeClass event)))
+    (is (= ["labiodental" "fricative"] (:phonemeClasses event)))))
+
 (deftest azure-visemes-map-to-canonical-timeline
   (let [timeline (azure/azure-visemes->timeline
                   [{:id 21 :time 0}
@@ -130,6 +248,22 @@
     (is (some #(= (:Oh visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
+
+(deftest azure-visemes-carry-coarse-jali-class-metadata
+  (let [timeline (azure/azure-visemes->timeline
+                  [{:id 18 :time 0}
+                   {:id 15 :time 0.16}
+                   {:id 21 :time 0.32}]
+                  600
+                  {})
+        f-event (some #(when (= (:F_V visemes/canonical-visemes) (:visemeId %)) %) timeline)
+        s-event (some #(when (= (:S_Z visemes/canonical-visemes) (:visemeId %)) %) timeline)
+        b-event (some #(when (= (:B_M_P visemes/canonical-visemes) (:visemeId %)) %) timeline)]
+    (is (= "labiodental" (:phonemeClass f-event)))
+    (is (contains? (set (:phonemeClasses f-event)) "fricative"))
+    (is (= "sibilant" (:phonemeClass s-event)))
+    (is (contains? (set (:phonemeClasses s-event)) "fricative"))
+    (is (= "bilabial" (:phonemeClass b-event)))))
 
 (deftest vocal-snippet-limits-overlapping-lip-activation
   (let [built (snippet/build-vocal-snippet

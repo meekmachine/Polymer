@@ -54,7 +54,11 @@
           :jawActivation (if (finite-number? jaw-activation)
                            (state/clamp 0 2 jaw-activation)
                            (visemes/jaw-activation-for-viseme canonical-id))}
-          (:phoneme event) (assoc :phoneme (:phoneme event)))))))
+          (:phoneme event) (assoc :phoneme (:phoneme event))
+          (or (:phonemeClass event) (:phoneme_class event))
+          (assoc :phonemeClass (or (:phonemeClass event) (:phoneme_class event)))
+          (or (:phonemeClasses event) (:phoneme_classes event))
+          (assoc :phonemeClasses (or (:phonemeClasses event) (:phoneme_classes event))))))))
 
 (defn normalize-events [events]
   (->> (or events [])

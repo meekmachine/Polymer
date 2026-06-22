@@ -191,10 +191,13 @@
 (defn push-event [timeline viseme-id offset-ms duration-ms]
   (if (<= duration-ms 0)
     timeline
-    (conj timeline {:visemeId viseme-id
-                    :jawActivation (visemes/jaw-activation-for-viseme viseme-id)
-                    :offsetMs (max 0 (js/Math.round offset-ms))
-                    :durationMs (max 1 (js/Math.round duration-ms))})))
+    (let [classes (visemes/viseme-classes viseme-id)]
+      (conj timeline {:visemeId viseme-id
+                      :phonemeClass (visemes/primary-class classes)
+                      :phonemeClasses classes
+                      :jawActivation (visemes/jaw-activation-for-viseme viseme-id)
+                      :offsetMs (max 0 (js/Math.round offset-ms))
+                      :durationMs (max 1 (js/Math.round duration-ms))}))))
 
 (defn diphthong-targets [provider-id]
   (case provider-id

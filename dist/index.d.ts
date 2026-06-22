@@ -186,6 +186,16 @@ export interface VocalVisemeEvent {
    */
   jawActivation?: number;
   phoneme?: string;
+  /**
+   * Primary visual-speech class for planner rules, e.g. vowel, bilabial,
+   * labiodental, sibilant, obstruent, nasal, tongue, liquid, glide, or pause.
+   */
+  phonemeClass?: string;
+  /**
+   * Full class set for phonemes that need multiple JALI-style rules, such as
+   * M being both bilabial and nasal or F being labiodental and fricative.
+   */
+  phonemeClasses?: string[];
   offsetMs: number;
   durationMs: number;
 }
