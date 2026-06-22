@@ -16,6 +16,12 @@
 (def jaw-release-sec 0.065)
 (def jaw-transition-lead-sec 0.024)
 (def jaw-long-gap-sec 0.09)
+(def lip-total-activation-cap 1.05)
+(def lip-dominant-cap 1)
+(def lip-secondary-ratio 0.30)
+(def lip-secondary-cap 0.22)
+(def closure-dominance-threshold 0.55)
+(def closure-secondary-cap 0.035)
 
 (def vowel-visemes
   #{(:AE visemes/canonical-visemes)
@@ -104,7 +110,7 @@
             (recur (rest remaining) (if keep? (conj result curr) result))))))))
 
 (defn scale-lip-intensity [value intensity]
-  (let [normalized (state/clamp 0 1 value)
+  (let [normalized (state/clamp 0 lip-dominant-cap value)
         scale (max 0 (state/number-or intensity 1))]
     (cond
       (<= (js/Math.abs (- scale 1)) intensity-eps) normalized
@@ -201,6 +207,155 @@
                  (update next-key update-first-frame-time
                          #(max 0 (- % (* 0.016 coarticulation-strength))))))))))
 
+(defn sample-curve-at [curve time]
+  ;; The limiter below works on sampled poses instead of raw keyframes. That is
+  ;; what keeps dense Azure timelines from briefly activating several full lip
+  ;; shapes at once between keyframes.
+  (let [frames (vec curve)]
+    (cond
+      (empty? frames) 0
+      (<= time (:time (first frames))) (:intensity (first frames))
+      (>= time (:time (last frames))) (:intensity (last frames))
+      :else
+      (loop [index 0]
+        (if (>= index (dec (count frames)))
+          0
+          (let [a (get frames index)
+                b (get frames (inc index))]
+            (if (and (>= time (:time a)) (<= time (:time b)))
+              (let [span (max 0.000001 (- (:time b) (:time a)))
+                    progress (/ (- time (:time a)) span)]
+                (+ (:intensity a) (* (- (:intensity b) (:intensity a)) progress)))
+              (recur (inc index)))))))))
+
+(defn rounded-sample-time [time]
+  (/ (js/Math.round (* time 1000)) 1000))
+
+(defn collect-lip-sample-times [curves]
+  (let [times (atom #{})]
+    (doseq [[key curve] curves
+            :when (not= key jaw-au)
+            frame curve]
+      (when (and (finite-number? (:time frame)) (>= (:time frame) 0))
+        (swap! times conj (rounded-sample-time (:time frame)))))
+    (let [sorted (sort @times)]
+      ;; Add midpoints across short spans so overlap is capped between envelope
+      ;; keyframes, where the visual flapping usually appears.
+      (doseq [[start end] (map vector sorted (rest sorted))
+              :when (and (> end start) (<= (- end start) 0.12))]
+        (swap! times conj (rounded-sample-time (/ (+ start end) 2)))))
+    (->> @times sort vec)))
+
+(defn fit-secondary-activation [active adjusted budget]
+  (let [secondary (vec (rest active))
+        secondary-sum (reduce + (map :value secondary))]
+    (if (or (empty? secondary) (<= secondary-sum budget))
+      adjusted
+      (let [scale (/ budget secondary-sum)]
+        (reduce (fn [result entry]
+                  (assoc result (:key entry) (* (:value entry) scale)))
+                adjusted
+                secondary)))))
+
+(defn trim-inactive-padding [curve]
+  (let [frames (vec curve)
+        first-active (first (keep-indexed (fn [idx frame]
+                                            (when (> (:intensity frame) intensity-eps) idx))
+                                          frames))]
+    (if (nil? first-active)
+      []
+      (let [last-active (loop [idx (dec (count frames))]
+                          (cond
+                            (neg? idx) idx
+                            (> (:intensity (get frames idx)) intensity-eps) idx
+                            :else (recur (dec idx))))
+            start (max 0 (dec first-active))
+            end (min (dec (count frames)) (inc last-active))]
+        (subvec frames start (inc end))))))
+
+(defn limit-concurrent-lip-activation [curves]
+  ;; Stable Latticework intentionally does not let every overlapping viseme keep
+  ;; its full value. The strongest active shape leads, secondary shapes get a
+  ;; small budget, and closed-mouth bilabials suppress everything else.
+  (let [lip-keys (->> (keys curves) (remove #(= % jaw-au)) vec)]
+    (if (<= (count lip-keys) 1)
+      curves
+      (let [sample-times (collect-lip-sample-times curves)]
+        (if (empty? sample-times)
+          curves
+          (let [normalized (reduce (fn [result time]
+                                     (let [values (mapv (fn [key]
+                                                          {:key key
+                                                           :visemeId (js/parseInt key 10)
+                                                           :value (state/clamp 0 lip-dominant-cap
+                                                                               (sample-curve-at (get curves key) time))})
+                                                        lip-keys)
+                                           active (->> values
+                                                       (filter #(> (:value %) intensity-eps))
+                                                       (sort-by :value >)
+                                                       vec)
+                                           adjusted-a (into {} (map (fn [entry] [(:key entry) (:value entry)]) values))
+                                           adjusted-b (if (> (count active) 1)
+                                                        (let [dominant (first active)]
+                                                          (if (and (= (:visemeId dominant) (:B_M_P visemes/canonical-visemes))
+                                                                   (>= (:value dominant) closure-dominance-threshold))
+                                                            (fit-secondary-activation active adjusted-a closure-secondary-cap)
+                                                            (let [total (reduce + (map :value active))]
+                                                              (if (> total lip-total-activation-cap)
+                                                                (let [budget (max 0
+                                                                                  (min (- lip-total-activation-cap (:value dominant))
+                                                                                       (* (:value dominant) lip-secondary-ratio)
+                                                                                       lip-secondary-cap))]
+                                                                  (fit-secondary-activation active adjusted-a budget))
+                                                                adjusted-a))))
+                                                        adjusted-a)]
+                                       (reduce (fn [acc key]
+                                                 (update acc key conj {:time time
+                                                                       :intensity (get adjusted-b key 0)}))
+                                               result
+                                               lip-keys)))
+                                   (into {} (map (fn [key] [key []]) lip-keys))
+                                   sample-times)]
+            (into {} (map (fn [key]
+                            [key (-> normalized
+                                     (get key)
+                                     deduplicate-curve
+                                     trim-inactive-padding
+                                     vec)])
+                          lip-keys))))))))
+
+(defn reduce-curve-keys [viseme-id curve]
+  (let [frames (vec curve)]
+    (if (<= (count frames) 3)
+      frames
+      (let [profile (envelope-profile viseme-id)
+            reduced (loop [index 1
+                           result [(first frames)]]
+                      (if (>= index (dec (count frames)))
+                        result
+                        (let [prev (last result)
+                              curr (get frames index)
+                              next-frame (get frames (inc index))
+                              preserves-peak? (>= (:intensity curr) (- (:peak profile) 0.02))
+                              preserves-closure? (and (= viseme-id (:B_M_P visemes/canonical-visemes))
+                                                      (>= (:intensity curr) 0.98))
+                              near-flat? (and (< (js/Math.abs (- (:intensity curr) (:intensity prev))) 0.015)
+                                              (< (js/Math.abs (- (:intensity next-frame) (:intensity curr))) 0.015))]
+                          (recur (inc index)
+                                 (if (or (not near-flat?) preserves-peak? preserves-closure?)
+                                   (conj result curr)
+                                   result)))))]
+        (conj reduced (last frames))))))
+
+(defn reduce-lip-keys [curves]
+  (into {}
+        (map (fn [[key curve]]
+               (let [ordered (->> curve (sort-by :time) deduplicate-curve vec)]
+                 [key (if (= key jaw-au)
+                        ordered
+                        (reduce-curve-keys (js/parseInt key 10) ordered))])))
+        curves))
+
 (defn push-jaw-frame [curve time intensity]
   (if (or (not (finite-number? time)) (not (finite-number? intensity)))
     curve
@@ -270,14 +425,14 @@
                                  (update curves key #(if % (merge-curves % curve) curve)))))
                            {}
                            events)
-        articulated (apply-coarticulation raw-curves events)
-        reduced (into {} (map (fn [[key curve]]
-                                [key (->> curve (sort-by :time) deduplicate-curve vec)])
-                              articulated))
+        articulated (-> raw-curves
+                        (apply-coarticulation events)
+                        limit-concurrent-lip-activation
+                        reduce-lip-keys)
         jaw-curve (build-jaw-curve events (:jawScale config))]
     (if (empty? jaw-curve)
-      reduced
-      (assoc reduced jaw-au jaw-curve))))
+      articulated
+      (assoc articulated jaw-au jaw-curve))))
 
 (defn vocal-channel-target [curve-key]
   ;; Vocal owns its animation namespace explicitly. Numeric keys 0-14 are

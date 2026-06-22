@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [polymer.core :as polymer]
             [polymer.vocal.azure :as azure]
+            [polymer.vocal.snippet :as snippet]
             [polymer.vocal.visemes :as visemes]))
 
 (defn collect [target subscribe-fn]
@@ -105,6 +106,20 @@
     (is (some #(= (:Oh visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
+
+(deftest vocal-snippet-limits-overlapping-lip-activation
+  (let [built (snippet/build-vocal-snippet
+               [{:visemeId (:B_M_P visemes/canonical-visemes) :offsetMs 0 :durationMs 120}
+                {:visemeId (:Ah visemes/canonical-visemes) :offsetMs 0 :durationMs 120}]
+               {:intensity 2 :jawScale 1}
+               "voice:overlap")
+        curves (:curves built)
+        closure-key (str (:B_M_P visemes/canonical-visemes))
+        secondary-key (str (:Ah visemes/canonical-visemes))
+        closure-value (snippet/sample-curve-at (get curves closure-key) 0.004)
+        secondary-value (snippet/sample-curve-at (get curves secondary-key) 0.004)]
+    (is (>= closure-value 0.55))
+    (is (<= secondary-value 0.04))))
 
 (deftest vocal-source-label-does-not-change-viseme-jaw-mixing
   (let [agency (polymer/createVocalAgency #js {:visualLeadMs 0})
