@@ -3,13 +3,15 @@
 Clean ClojureScript character agency package for Character Loom.
 
 Polymer is intentionally separate from Latticework and Polyester. It starts with
-small, data-driven CLJS agencies that emit host-owned side effects as plain
-events.
+small, data-driven CLJS agencies that exchange plain events and keep runtime
+side effects inside the agencies that own them.
 
 ## Agency Boundary
 
-Polymer agencies own agency-local state and timing. They do not call React,
-LoomLarge, Latticework, Loom3/Embody, the DOM, audio, video, storage, or HTTP.
+Polymer agencies own agency-local state and timing. Domain agencies do not call
+React, LoomLarge, Latticework, the DOM, audio, video, storage, or HTTP.
+Animation is the runtime boundary: it is the only agency that talks directly to
+the Embody/Loom3 animation runtime.
 
 The package exposes one character-level agency system:
 
@@ -27,13 +29,16 @@ The stream contract is:
 - `input`: commands entering the character agency system.
 - `events`: factual agency decisions/signals, such as `blinkPlanned` or
   `blink-fast`, plus low-frequency config-change events.
-- `effects`: requested host-owned side effects, such as scheduling or removing
-  animation snippets.
+- `effects`: reserved for host-owned side effects. Blink and Vocal currently do
+  not use it for animation playback because the character network routes their
+  animation events directly to Polymer Animation.
 - `snapshot()`: pull-based diagnostic/config reads. Hosts should not wire this
   to a live React subscription for runtime playback ticks.
 
-LoomLarge interprets `effects` during the migration. Polymer agencies can
-consume the same `events` stream directly through the character network.
+LoomLarge can still feed commands into Polymer while other legacy agencies live
+in Latticework. It should not subscribe to Polymer playback events and translate
+them into animation calls; the Polymer character network routes those to
+Animation internally.
 
 ## Blink Agency
 
@@ -47,12 +52,33 @@ and `burstGap`.
 
 ## Animation Agency
 
-Animation is the first coordination agency. Blink does not emit host animation
-effects directly anymore. Instead, Blink emits an `animation.requestScheduleSnippet`
-event; the character system routes that event to the Animation agency; Animation
-records the requested snippet in its own state and emits the host-facing
-`animation.scheduleSnippet` / `animation.removeSnippet` effects.
+Animation is the first coordination agency. Blink and Vocal do not emit host
+animation effects directly. They emit `animation.requestScheduleSnippet`,
+`animation.requestRemoveSnippet`, or `animation.requestSeekSnippet` events; the
+character system routes those events to the Animation agency; Animation records
+the requested snippet in its own state and calls the Embody/Loom3 runtime.
 
-That keeps animation side-effect requests in one agency and gives LoomLarge one
-place to interpret them into Latticework while Polymer grows toward owning more
-runtime scheduling logic.
+That keeps animation side effects in one agency while Polymer grows toward
+replacing the remaining Latticework runtime services.
+
+## Vocal/LipSync Agency
+
+Vocal is the second migrated domain agency. It accepts provider/text timing data
+as commands and schedules one utterance-level `visemeSnippet` through Polymer
+Animation.
+
+Supported inputs:
+
+- `startText`: fallback deterministic text-to-viseme planning.
+- `startTimeline`: already-normalized canonical viseme timelines.
+- `processAzureVisemes`: Azure/SAPI 0-21 viseme events, including LiveKit-style
+  `{ id, time }` payloads.
+- `updateWordTimings`: provider word-boundary metadata that arrives after the
+  viseme timeline has already started.
+- `wordBoundary`: drift correction. When provider word timing and observed
+  playback time diverge, Vocal requests an Animation seek instead of reaching
+  through LoomLarge.
+
+Vocal intentionally does not own Azure credentials, audio playback, LiveKit
+connections, browser speech APIs, or backend HTTP. Those systems should feed
+plain command data into the agency.

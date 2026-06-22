@@ -11,6 +11,7 @@
    :scheduled {}
    :scheduledCount 0
    :startedCount 0
+   :seekCount 0
    :removedCount 0
    :lastEvent nil})
 
@@ -78,6 +79,20 @@
                          :sourceAgency source-agency
                          :reason reason
                          :at removed-at})))
+
+(defn record-seek [state name source-agency seeked-at offset-sec]
+  ;; Seeking is still schedule state: the Animation agency owns the active
+  ;; snippet handles, so drift correction from Vocal/LipSync comes here instead
+  ;; of reaching through LoomLarge or bypassing Polymer's agency boundary.
+  (-> state
+      (assoc-in [:scheduled name :lastSeekAt] seeked-at)
+      (assoc-in [:scheduled name :lastSeekOffsetSec] offset-sec)
+      (update :seekCount inc)
+      (assoc :lastEvent {:type "animationSnippetSeeked"
+                         :name name
+                         :sourceAgency source-agency
+                         :offsetSec offset-sec
+                         :at seeked-at})))
 
 (defn visible-state [state]
   (clj->js state))
