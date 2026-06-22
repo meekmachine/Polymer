@@ -64,8 +64,10 @@ replacing the remaining Latticework runtime services.
 ## Vocal/LipSync Agency
 
 Vocal is the second migrated domain agency. It accepts provider/text timing data
-as commands and schedules one utterance-level `visemeSnippet` through Polymer
-Animation.
+as commands and schedules one utterance-level typed animation snippet through
+Polymer Animation. Viseme channels target `{ type: "viseme" }`; jaw motion uses
+an explicit AU 26 channel, so Polymer does not rely on `snippetCategory` for
+normal namespace routing.
 
 Supported inputs:
 
@@ -82,3 +84,14 @@ Supported inputs:
 Vocal intentionally does not own Azure credentials, audio playback, LiveKit
 connections, browser speech APIs, or backend HTTP. Those systems should feed
 plain command data into the agency.
+
+## Git Install Contract
+
+Polymer Git-SHA consumers should import checked-in JavaScript artifacts from
+`dist`. They should not need Java, Shadow CLJS, or a local Polymer build during
+application install.
+
+The package intentionally has no `prepare`, `install`, or `postinstall` build
+lifecycle. Polymer CI runs the CLJS build, verifies the checked-in `dist`
+artifacts are current, and `prepublishOnly` repeats the build/test check before
+an npm publish.
