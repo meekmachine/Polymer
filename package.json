@@ -15,7 +15,10 @@
   "scripts": {
     "build": "shadow-cljs release npm worker",
     "test": "shadow-cljs compile test && node dist/test.js && shadow-cljs release worker && node test/worker_smoke.cjs",
-    "clean": "rm -rf .shadow-cljs dist/test.js"
+    "check:install-surface": "node scripts/check-git-install-surface.mjs",
+    "check:dist": "pnpm build && git diff --exit-code -- dist",
+    "clean": "rm -rf .shadow-cljs dist/test.js",
+    "prepublishOnly": "pnpm test && pnpm build && git diff --exit-code -- dist"
   },
   "dependencies": {
     "@lovelace_lol/loom3": "git+https://github.com/meekmachine/embody.git#cae2c2039dd6fe7acd334322975621f86957767a"
