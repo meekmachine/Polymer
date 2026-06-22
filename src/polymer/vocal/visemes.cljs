@@ -25,11 +25,31 @@
    :Th 13
    :W_OO 14})
 
-(def jaw-amounts
-  [0.75 0.8 0 0.3 0.2 0.35 0.1 0.2 0.35 0.6 0.35 0.1 0.3 0.15 0.5])
+(def jaw-activations
+  ;; JALI treats visible speech as two mostly independent axes: lip action and
+  ;; jaw action. These values are not baked into the viseme morphs. They are
+  ;; only the default jaw-axis target used when an input provider does not send
+  ;; a more specific jawActivation value for a phoneme/viseme event. They are
+  ;; intentionally lower than Embody's manual viseme jaw amounts: speech jaw is
+  ;; an animation performance parameter, not a full pose slider.
+  [0.48 0.55 0 0.22 0.14 0.24 0.06 0.14 0.24 0.40 0.24 0.06 0.22 0.10 0.34])
 
-(defn jaw-amount-for-viseme [viseme-id]
-  (get jaw-amounts viseme-id 0.3))
+(defn jaw-activation-for-viseme [viseme-id]
+  (get jaw-activations viseme-id 0.3))
+
+(declare normalize-phoneme)
+
+(defn jaw-activation-for-phoneme [phoneme viseme-id]
+  ;; The lip target and the jaw target are allowed to disagree. For example,
+  ;; HH borrows the Ah lip family but should not open the jaw like a strong Ah
+  ;; vowel. This keeps Web Speech fallback from flapping the jaw on consonants.
+  (let [normalized (normalize-phoneme phoneme)]
+    (cond
+      (contains? #{"P" "B" "M"} normalized) 0
+      (contains? #{"F" "V" "S" "Z" "SH" "ZH" "TH" "DH"} normalized) 0.06
+      (contains? #{"T" "D" "N" "L" "K" "G" "NG" "CH" "JH"} normalized) 0.16
+      (contains? #{"H" "HH" "Y" "W" "R"} normalized) 0.18
+      :else (jaw-activation-for-viseme viseme-id))))
 
 (def phoneme->viseme
   {"sil" (:B_M_P canonical-visemes)
@@ -105,7 +125,7 @@
 (def fallback-text-duration-scale 2)
 
 (def pause-durations
-  {"PAUSE_SPACE" 35
+  {"PAUSE_SPACE" 0
    "PAUSE_COMMA" 50
    "PAUSE_PERIOD" 100
    "PAUSE_QUESTION" 100
@@ -213,11 +233,14 @@
   (if (str/starts-with? (or phoneme "") "PAUSE_")
     {:phoneme phoneme
      :viseme (:B_M_P canonical-visemes)
+     :jawActivation 0
      :duration (get pause-durations phoneme 300)}
     (let [normalized (normalize-phoneme phoneme)
+          viseme-id (get phoneme->viseme normalized (:B_M_P canonical-visemes))
           fallback-duration (if (vowel? normalized) 50 35)]
       {:phoneme normalized
-       :viseme (get phoneme->viseme normalized (:B_M_P canonical-visemes))
+       :viseme viseme-id
+       :jawActivation (jaw-activation-for-phoneme normalized viseme-id)
        :duration (get phoneme-durations normalized fallback-duration)})))
 
 (defn adjust-duration [duration speech-rate]
@@ -232,13 +255,15 @@
           events []]
      (if (empty? remaining)
        events
-       (let [{:keys [viseme duration]} (phoneme->viseme-duration (first remaining))
+       (let [{:keys [phoneme viseme jawActivation duration]} (phoneme->viseme-duration (first remaining))
              scaled-duration (adjust-duration duration speech-rate)]
          (if (<= scaled-duration 0)
            (recur (rest remaining) current-ms events)
            (recur (rest remaining)
                   (+ current-ms scaled-duration)
                   (conj events {:visemeId viseme
+                                :phoneme phoneme
+                                :jawActivation jawActivation
                                 :offsetMs current-ms
                                 :durationMs scaled-duration}))))))))
 

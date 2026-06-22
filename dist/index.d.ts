@@ -179,6 +179,13 @@ export interface VocalConfig {
 
 export interface VocalVisemeEvent {
   visemeId: number;
+  /**
+   * Optional independent jaw-axis activation for this event. When omitted,
+   * Polymer derives a default from the canonical viseme slot. Set to 0 for a
+   * lip-only viseme, or scale with VocalConfig.jawScale for JALI-style control.
+   */
+  jawActivation?: number;
+  phoneme?: string;
   offsetMs: number;
   durationMs: number;
 }

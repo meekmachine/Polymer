@@ -37,14 +37,24 @@
 (defn normalize-event [event]
   (let [viseme-id (or (:visemeId event) (:viseme_id event) (:id event))
         offset-ms (or (:offsetMs event) (:offset_ms event) (:offset event) 0)
-        duration-ms (or (:durationMs event) (:duration_ms event) (:duration event) 0)]
+        duration-ms (or (:durationMs event) (:duration_ms event) (:duration event) 0)
+        jaw-activation (or (:jawActivation event)
+                           (:jaw_activation event)
+                           (:jaw event)
+                           (:jawAmount event))]
     (when (and (finite-number? viseme-id)
                (finite-number? offset-ms)
                (finite-number? duration-ms)
                (pos? duration-ms))
-      {:visemeId (int (state/clamp 0 14 viseme-id))
-       :offsetMs (max 0 offset-ms)
-       :durationMs (max 1 duration-ms)})))
+      (let [canonical-id (int (state/clamp 0 14 viseme-id))]
+        (cond->
+         {:visemeId canonical-id
+          :offsetMs (max 0 offset-ms)
+          :durationMs (max 1 duration-ms)
+          :jawActivation (if (finite-number? jaw-activation)
+                           (state/clamp 0 2 jaw-activation)
+                           (visemes/jaw-activation-for-viseme canonical-id))}
+          (:phoneme event) (assoc :phoneme (:phoneme event)))))))
 
 (defn normalize-events [events]
   (->> (or events [])
@@ -367,38 +377,44 @@
         (conj curve frame)))))
 
 (defn build-jaw-curve [events jaw-scale]
-  (let [sorted-events (vec (sort-by :offsetMs events))]
-    (loop [index 0
-           curve []]
-      (if (>= index (count sorted-events))
-        (->> curve (sort-by :time) deduplicate-curve vec)
-        (let [event (get sorted-events index)
-              previous (get sorted-events (dec index))
-              next-event (get sorted-events (inc index))
-              start-sec (/ (:offsetMs event) 1000)
-              duration-sec (/ (:durationMs event) 1000)
-              end-sec (+ start-sec duration-sec)
-              jaw-amount (min 2 (* (visemes/jaw-amount-for-viseme (:visemeId event)) jaw-scale))
-              attack-sec (min jaw-attack-sec (max 0.006 (* duration-sec 0.35)))
-              release-sec (min jaw-release-sec (max 0.010 (* duration-sec 0.45)))
-              previous-end-sec (if previous (/ (+ (:offsetMs previous) (:durationMs previous)) 1000) 0)
-              starts-after-gap? (or (nil? previous) (> (- start-sec previous-end-sec) jaw-long-gap-sec))
-              curve-a (if starts-after-gap? (push-jaw-frame curve start-sec 0) curve)
-              curve-b (push-jaw-frame curve-a (+ start-sec attack-sec) jaw-amount)]
-          (recur (inc index)
-                 (if next-event
-                   (let [next-start-sec (/ (:offsetMs next-event) 1000)
-                         gap-sec (- next-start-sec end-sec)]
-                     (if (> gap-sec jaw-long-gap-sec)
-                       (-> curve-b
-                           (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-amount)
-                           (push-jaw-frame end-sec 0))
-                       (push-jaw-frame curve-b
-                                       (max (+ start-sec attack-sec) (- next-start-sec jaw-transition-lead-sec))
-                                       jaw-amount)))
-                   (-> curve-b
-                       (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-amount)
-                       (push-jaw-frame end-sec 0)))))))))
+  (let [scale (state/clamp 0 2 (state/number-or jaw-scale 1))
+        sorted-events (vec (sort-by :offsetMs events))
+        has-jaw? (some (fn [event]
+                         (> (* scale (state/number-or (:jawActivation event) 0)) intensity-eps))
+                       sorted-events)]
+    (if-not has-jaw?
+      []
+      (loop [index 0
+             curve []]
+        (if (>= index (count sorted-events))
+          (->> curve (sort-by :time) deduplicate-curve vec)
+          (let [event (get sorted-events index)
+                previous (get sorted-events (dec index))
+                next-event (get sorted-events (inc index))
+                start-sec (/ (:offsetMs event) 1000)
+                duration-sec (/ (:durationMs event) 1000)
+                end-sec (+ start-sec duration-sec)
+                jaw-activation (state/clamp 0 2 (* (state/number-or (:jawActivation event) 0) scale))
+                attack-sec (min jaw-attack-sec (max 0.006 (* duration-sec 0.35)))
+                release-sec (min jaw-release-sec (max 0.010 (* duration-sec 0.45)))
+                previous-end-sec (if previous (/ (+ (:offsetMs previous) (:durationMs previous)) 1000) 0)
+                starts-after-gap? (or (nil? previous) (> (- start-sec previous-end-sec) jaw-long-gap-sec))
+                curve-a (if starts-after-gap? (push-jaw-frame curve start-sec 0) curve)
+                curve-b (push-jaw-frame curve-a (+ start-sec attack-sec) jaw-activation)]
+            (recur (inc index)
+                   (if next-event
+                     (let [next-start-sec (/ (:offsetMs next-event) 1000)
+                           gap-sec (- next-start-sec end-sec)]
+                       (if (> gap-sec jaw-long-gap-sec)
+                         (-> curve-b
+                             (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-activation)
+                             (push-jaw-frame end-sec 0))
+                         (push-jaw-frame curve-b
+                                         (max (+ start-sec attack-sec) (- next-start-sec jaw-transition-lead-sec))
+                                         jaw-activation)))
+                     (-> curve-b
+                         (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-activation)
+                         (push-jaw-frame end-sec 0))))))))))
 
 (def snippet-counter (atom 0))
 

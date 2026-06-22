@@ -22,6 +22,9 @@
                (when (= "animation.requestScheduleSnippet" (:type event))
                  (:snippet event))))))
 
+(defn max-intensity [curve]
+  (reduce max 0 (map :intensity curve)))
+
 (defn make-runtime [calls]
   #js {:playSnippet
        (fn [name curves options]
@@ -78,6 +81,27 @@
     ((:unsubscribe effects))
     (.dispose ^js agency)))
 
+(deftest web-speech-text-emits-lip-and-independent-jaw-channels
+  (let [agency (polymer/createVocalAgency #js {:speechRate 1 :jawScale 1})
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "startText"
+                               :text "hello world"
+                               :source "webSpeech"})
+    (let [snippet (first (scheduled-snippets events))
+          channels (:channels snippet)
+          lip-channels (filter #(= "viseme" (get-in % [:target :type])) channels)
+          jaw-channel (some #(when (and (= "au" (get-in % [:target :type]))
+                                        (= 26 (get-in % [:target :id])))
+                               %)
+                            channels)]
+      (is (seq lip-channels))
+      (is jaw-channel)
+      (is (false? (:autoVisemeJaw snippet)))
+      (is (not (contains? snippet :snippetCategory)))
+      (is (some :jawActivation (visemes/text->visemes "hello world"))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest web-speech-fallback-timeline-uses-speech-length-scale
   (let [agency (polymer/createVocalAgency #js {:speechRate 1})
         events (domain-events agency)
@@ -120,6 +144,38 @@
         secondary-value (snippet/sample-curve-at (get curves secondary-key) 0.004)]
     (is (>= closure-value 0.55))
     (is (<= secondary-value 0.04))))
+
+(deftest vocal-jaw-activation-is-independent-from-viseme-morphs
+  (let [built (snippet/build-vocal-snippet
+               [{:visemeId (:Ah visemes/canonical-visemes)
+                 :jawActivation 0
+                 :offsetMs 0
+                 :durationMs 120}
+                {:visemeId (:Ah visemes/canonical-visemes)
+                 :jawActivation 0.45
+                 :offsetMs 220
+                 :durationMs 120}]
+               {:intensity 1 :jawScale 1}
+               "voice:jaw-independent")
+        lip-curve (get-in built [:curves "1"])
+        jaw-curve (get-in built [:curves "26"])]
+    (is (> (max-intensity lip-curve) 0.8))
+    (is (<= (snippet/sample-curve-at jaw-curve 0.06) 0.001))
+    (is (> (snippet/sample-curve-at jaw-curve 0.27) 0.4))))
+
+(deftest vocal-jaw-scale-zero-keeps-lip-visemes-without-jaw-channel
+  (let [built (snippet/build-vocal-snippet
+               [{:visemeId (:Ah visemes/canonical-visemes)
+                 :jawActivation 0.8
+                 :offsetMs 0
+                 :durationMs 120}]
+               {:intensity 1 :jawScale 0}
+               "voice:jaw-off")]
+    (is (seq (get-in built [:curves "1"])))
+    (is (nil? (get-in built [:curves "26"])))
+    (is (not (some #(and (= "au" (get-in % [:target :type]))
+                         (= 26 (get-in % [:target :id])))
+                   (:channels built))))))
 
 (deftest vocal-source-label-does-not-change-viseme-jaw-mixing
   (let [agency (polymer/createVocalAgency #js {:visualLeadMs 0})

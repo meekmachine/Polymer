@@ -192,6 +192,7 @@
   (if (<= duration-ms 0)
     timeline
     (conj timeline {:visemeId viseme-id
+                    :jawActivation (visemes/jaw-activation-for-viseme viseme-id)
                     :offsetMs (max 0 (js/Math.round offset-ms))
                     :durationMs (max 1 (js/Math.round duration-ms))})))
 
