@@ -191,6 +191,15 @@
    "PAUSE_SEMICOLON" 75
    "PAUSE_COLON" 75})
 
+(def diphthong-targets
+  {"OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
+   "AW" [(:Ah canonical-visemes) (:W_OO canonical-visemes)]
+   "OY" [(:Oh canonical-visemes) (:EE canonical-visemes)]
+   "AY" [(:Ah canonical-visemes) (:Ih canonical-visemes)]})
+
+(def diphthong-min-duration-ms 80)
+(def diphthong-secondary-min-ms 36)
+
 (def prefix-phones
   [["th" ["TH"]] ["sh" ["SH"]] ["ch" ["CH"]] ["wh" ["W"]] ["ph" ["F"]]
    ["gh" ["G"]] ["ng" ["NG"]] ["ck" ["K"]] ["qu" ["K" "W"]]
@@ -299,6 +308,53 @@
        :jawActivation (jaw-activation-for-phoneme normalized viseme-id)
        :duration (get phoneme-durations normalized fallback-duration)})))
 
+(defn event-classes-for-target [phoneme viseme-id diphthong?]
+  ;; A diphthong is one phoneme with internal lip travel. Keep the phoneme label
+  ;; stable, but classify each generated target by the target viseme so the jaw
+  ;; and lip planners know whether the segment is open, rounded, or spread.
+  (let [classes (if diphthong?
+                  (vec (distinct (conj (viseme-classes viseme-id) "diphthong")))
+                  (phoneme-classes phoneme viseme-id))]
+    {:phonemeClass (primary-class classes)
+     :phonemeClasses classes}))
+
+(defn diphthong-segments [phoneme viseme-id scaled-duration]
+  (let [targets (get diphthong-targets phoneme)]
+    (if (and targets (>= scaled-duration diphthong-min-duration-ms))
+      (let [[first-viseme second-viseme] targets
+            second-offset-ms (min (- scaled-duration diphthong-secondary-min-ms)
+                                  (* scaled-duration 0.55))
+            first-duration-ms (max diphthong-secondary-min-ms
+                                   (min scaled-duration
+                                        (+ second-offset-ms (* scaled-duration 0.22))))
+            second-duration-ms (max diphthong-secondary-min-ms
+                                    (- scaled-duration second-offset-ms))]
+        [{:viseme first-viseme
+          :relativeOffsetMs 0
+          :durationMs first-duration-ms
+          :diphthong true}
+         {:viseme second-viseme
+          :relativeOffsetMs second-offset-ms
+          :durationMs second-duration-ms
+          :diphthong true}])
+      [{:viseme viseme-id
+        :relativeOffsetMs 0
+        :durationMs scaled-duration
+        :diphthong false}])))
+
+(defn phoneme-event [phoneme current-ms segment]
+  (let [viseme-id (:viseme segment)
+        class-data (event-classes-for-target phoneme viseme-id (:diphthong segment))]
+    {:visemeId viseme-id
+     :phoneme phoneme
+     :phonemeClass (:phonemeClass class-data)
+     :phonemeClasses (:phonemeClasses class-data)
+     :jawActivation (if (:diphthong segment)
+                      (jaw-activation-for-viseme viseme-id)
+                      (jaw-activation-for-phoneme phoneme viseme-id))
+     :offsetMs (+ current-ms (:relativeOffsetMs segment))
+     :durationMs (:durationMs segment)}))
+
 (defn adjust-duration [duration speech-rate]
   (js/Math.round (/ (* duration fallback-text-duration-scale)
                     (state/clamp 0.2 3 (state/number-or speech-rate 1)))))
@@ -311,19 +367,15 @@
           events []]
      (if (empty? remaining)
        events
-       (let [{:keys [phoneme phonemeClass phonemeClasses viseme jawActivation duration]} (phoneme->viseme-duration (first remaining))
+       (let [{:keys [phoneme viseme duration]} (phoneme->viseme-duration (first remaining))
              scaled-duration (adjust-duration duration speech-rate)]
          (if (<= scaled-duration 0)
            (recur (rest remaining) current-ms events)
            (recur (rest remaining)
                   (+ current-ms scaled-duration)
-                  (conj events {:visemeId viseme
-                                :phoneme phoneme
-                                :phonemeClass phonemeClass
-                                :phonemeClasses phonemeClasses
-                                :jawActivation jawActivation
-                                :offsetMs current-ms
-                                :durationMs scaled-duration}))))))))
+                  (into events
+                        (map #(phoneme-event phoneme current-ms %)
+                             (diphthong-segments phoneme viseme scaled-duration))))))))))
 
 (defn word->visemes
   ([word] (word->visemes word 0 1))

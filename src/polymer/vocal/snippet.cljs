@@ -1,5 +1,6 @@
 (ns polymer.vocal.snippet
   (:require [clojure.string :as str]
+            [polymer.vocal.jaw :as jaw]
             [polymer.vocal.state :as state]
             [polymer.vocal.visemes :as visemes]))
 
@@ -12,10 +13,6 @@
 (def coarticulation-strength 0.52)
 (def envelope-shoulder-ratio 0.55)
 (def envelope-shoulder-intensity 0.62)
-(def jaw-attack-sec 0.04)
-(def jaw-release-sec 0.065)
-(def jaw-transition-lead-sec 0.024)
-(def jaw-long-gap-sec 0.09)
 (def lip-total-activation-cap 1.05)
 (def lip-dominant-cap 1)
 (def lip-secondary-ratio 0.30)
@@ -370,55 +367,8 @@
                         (reduce-curve-keys (js/parseInt key 10) ordered))])))
         curves))
 
-(defn push-jaw-frame [curve time intensity]
-  (if (or (not (finite-number? time)) (not (finite-number? intensity)))
-    curve
-    (let [frame {:time (max 0 time)
-                 :intensity (state/clamp 0 2 intensity)}
-          previous (last curve)]
-      (if (and previous (< (js/Math.abs (- (:time previous) (:time frame))) 0.001))
-        (assoc-in curve [(dec (count curve)) :intensity] (:intensity frame))
-        (conj curve frame)))))
-
 (defn build-jaw-curve [events jaw-scale]
-  (let [scale (state/clamp 0 2 (state/number-or jaw-scale 1))
-        sorted-events (vec (sort-by :offsetMs events))
-        has-jaw? (some (fn [event]
-                         (> (* scale (state/number-or (:jawActivation event) 0)) intensity-eps))
-                       sorted-events)]
-    (if-not has-jaw?
-      []
-      (loop [index 0
-             curve []]
-        (if (>= index (count sorted-events))
-          (->> curve (sort-by :time) deduplicate-curve vec)
-          (let [event (get sorted-events index)
-                previous (get sorted-events (dec index))
-                next-event (get sorted-events (inc index))
-                start-sec (/ (:offsetMs event) 1000)
-                duration-sec (/ (:durationMs event) 1000)
-                end-sec (+ start-sec duration-sec)
-                jaw-activation (state/clamp 0 2 (* (state/number-or (:jawActivation event) 0) scale))
-                attack-sec (min jaw-attack-sec (max 0.006 (* duration-sec 0.35)))
-                release-sec (min jaw-release-sec (max 0.010 (* duration-sec 0.45)))
-                previous-end-sec (if previous (/ (+ (:offsetMs previous) (:durationMs previous)) 1000) 0)
-                starts-after-gap? (or (nil? previous) (> (- start-sec previous-end-sec) jaw-long-gap-sec))
-                curve-a (if starts-after-gap? (push-jaw-frame curve start-sec 0) curve)
-                curve-b (push-jaw-frame curve-a (+ start-sec attack-sec) jaw-activation)]
-            (recur (inc index)
-                   (if next-event
-                     (let [next-start-sec (/ (:offsetMs next-event) 1000)
-                           gap-sec (- next-start-sec end-sec)]
-                       (if (> gap-sec jaw-long-gap-sec)
-                         (-> curve-b
-                             (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-activation)
-                             (push-jaw-frame end-sec 0))
-                         (push-jaw-frame curve-b
-                                         (max (+ start-sec attack-sec) (- next-start-sec jaw-transition-lead-sec))
-                                         jaw-activation)))
-                     (-> curve-b
-                         (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-activation)
-                         (push-jaw-frame end-sec 0))))))))))
+  (jaw/build-jaw-curve events jaw-scale))
 
 (def snippet-counter (atom 0))
 

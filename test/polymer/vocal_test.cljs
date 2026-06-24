@@ -57,6 +57,28 @@
 (defn channel-max-intensity [channel]
   (max-intensity (:keyframes channel)))
 
+(defn sample-channel [channel time-sec]
+  (snippet/sample-curve-at (:keyframes channel) time-sec))
+
+(defn frames-in-range [channel start-sec end-sec]
+  (filter #(and (>= (:time %) start-sec)
+                (<= (:time %) end-sec))
+          (:keyframes channel)))
+
+(defn local-peak-count [channel]
+  (let [frames (vec (:keyframes channel))]
+    (count
+     (filter identity
+             (map-indexed
+              (fn [index frame]
+                (let [previous (get frames (dec index))
+                      next-frame (get frames (inc index))]
+                  (and previous
+                       next-frame
+                       (> (:intensity frame) (+ (:intensity previous) 0.025))
+                       (> (:intensity frame) (+ (:intensity next-frame) 0.025)))))
+              frames)))))
+
 (defn total-keyframes [snippet]
   (reduce + 0 (map #(count (:keyframes %)) (:channels snippet))))
 
@@ -207,6 +229,59 @@
     (is (>= (channel-max-intensity labiodental) 0.8))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
     (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
+
+(deftest web-speech-diphthongs-expand-lip-travel-without-second-jaw-flap
+  (let [events (visemes/text->visemes "choice")
+        snippet (snippet/build-text-snippet "choice"
+                                            events
+                                            {:intensity 1 :jawScale 1})
+        oh-channel (viseme-channel snippet (:Oh visemes/canonical-visemes))
+        ee-channel (viseme-channel snippet (:EE visemes/canonical-visemes))
+        jaw (jaw-channel snippet)
+        diphthong-events (filter #(= "OY" (:phoneme %)) events)
+        jaw-frames-during-diphthong (frames-in-range jaw 0.12 0.21)]
+    (is (>= (count diphthong-events) 2))
+    (is oh-channel)
+    (is ee-channel)
+    (is (>= (channel-max-intensity oh-channel) 0.85))
+    (is (>= (channel-max-intensity ee-channel) 0.85))
+    (is (<= (local-peak-count jaw) 1))
+    (is (every? #(> (:intensity %) 0.20) jaw-frames-during-diphthong))))
+
+(deftest vocal-jaw-planner-keeps-one-arc-through-provider-diphthong
+  (let [snippet (snippet/build-vocal-snippet
+                 [{:visemeId (:Oh visemes/canonical-visemes)
+                   :phoneme "OW"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel" "diphthong"]
+                   :jawActivation 0.40
+                   :offsetMs 0
+                   :durationMs 92}
+                  {:visemeId (:W_OO visemes/canonical-visemes)
+                   :phoneme "OW"
+                   :phonemeClass "glide"
+                   :phonemeClasses ["glide" "lip-heavy" "diphthong"]
+                   :jawActivation 0.34
+                   :offsetMs 54
+                   :durationMs 78}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:diphthong")
+        jaw (jaw-channel snippet)]
+    (is jaw)
+    (is (> (sample-channel jaw 0.06) 0.30))
+    (is (> (sample-channel jaw 0.11) 0.30))
+    (is (<= (local-peak-count jaw) 1))))
+
+(deftest vocal-jaw-planner-collapses-stacked-consonants
+  (let [snippet (build-text-fixture "texts")
+        jaw (jaw-channel snippet)]
+    (is jaw)
+    ;; "texts" has a vowel followed by a K/S/T/S coda. The coda should narrow
+    ;; or close around one low target, not produce multiple jaw-open beats.
+    (is (>= (channel-max-intensity jaw) 0.12))
+    (is (<= (sample-channel jaw 0.30) 0.16))
+    (is (<= (sample-channel jaw 0.36) 0.16))
+    (is (<= (local-peak-count jaw) 1))))
 
 (deftest jali-text-fallback-events-carry-phoneme-class-metadata
   (let [events (visemes/text->visemes "five pop")
