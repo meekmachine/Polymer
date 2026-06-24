@@ -442,11 +442,18 @@
                                                                     :durationMs 160}]}}})
     (is (some #(= "vocalTimelineStarted" (:type %)) @(:events events)))
     (is (some #(= "animationSnippetScheduled" (:type %)) @(:events events)))
-    (is (= "playTypedSnippet" (:method (first @calls))))
+    (is (= "playSnippet" (:method (first @calls))))
     (is (= "vocal" (get-in (first @calls) [:options :sourceAgency])))
+    (is (= "visemeSnippet" (get-in (first @calls) [:options :snippetCategory])))
+    (is (false? (get-in (first @calls) [:options :autoVisemeJaw])))
+    (is (seq (get-in (first @calls) [:curves :1])))
+    (is (seq (get-in (first @calls) [:curves :26])))
     (is (some #(and (= "au" (get-in % [:target :type]))
                     (= 26 (get-in % [:target :id])))
-              (:channels (first @calls))))
+              (:channels
+               (:snippet
+                (some #(when (= "animationSnippetScheduled" (:type %)) %)
+                      @(:events events))))))
     ((:unsubscribe events))
     (.dispose ^js system)))
 
