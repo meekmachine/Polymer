@@ -173,6 +173,20 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest web-speech-short-function-word-phrases-are-not-compressed
+  (let [agency (polymer/createVocalAgency #js {:speechRate 1})
+        events (domain-events agency)
+        text "This is a test of web speech lip sync over a whole phrase."]
+    (.dispatch ^js agency #js {:type "startText" :text text :source "webSpeech"})
+    (let [snippet (first (scheduled-snippets events))
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
+          last-word (last (:wordTimings snapshot))]
+      (is (> (:maxTime snippet) 4.4))
+      (is (> (:endSec last-word) 4.4))
+      (is (= "phrase" (:word last-word))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest jali-fixtures-produce-independent-channel-surface
   (doseq [phrase jali-fixture-phrases]
     (let [snippet (build-text-fixture phrase)
@@ -511,6 +525,31 @@
       (is seek-call)
       (is (> (:offsetSec seek-call) 0.64))
       (is (< (:offsetSec seek-call) 0.66)))
+    (.dispose ^js system)))
+
+(deftest web-speech-word-boundary-zero-clock-uses-host-elapsed-time
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "startText"
+                                  :name "voice:webspeech-zero-clock"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    ;; Some browser voices emit boundary events but keep elapsedTime at 0. The
+    ;; host clock keeps those later boundaries from seeking the full phrase
+    ;; snippet back to the beginning.
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "wordBoundary"
+                                  :word "world"
+                                  :wordIndex 1
+                                  :observedElapsedSec 0
+                                  :hostElapsedSec 0.64}})
+    (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
+      (is seek-call)
+      (is (> (:offsetSec seek-call) 0.63))
+      (is (< (:offsetSec seek-call) 0.65)))
     (.dispose ^js system)))
 
 (deftest vocal-can-receive-provider-word-timings-after-start

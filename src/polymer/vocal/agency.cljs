@@ -72,6 +72,82 @@
         millis
         raw))))
 
+(defn choose-boundary-elapsed-sec [payload expected max-time]
+  ;; Prefer Web Speech's elapsedTime after unit normalization. Some browsers
+  ;; report 0 for later word boundaries, so LoomLarge also sends a monotonic
+  ;; host clock. Use that host clock only when the provider clock is clearly not
+  ;; advancing; otherwise provider timing remains the authority.
+  (let [observed (normalize-observed-elapsed-sec (:observedElapsedSec payload)
+                                                expected
+                                                max-time)
+        host (when (state/finite-number? (:hostElapsedSec payload))
+               (max 0 (:hostElapsedSec payload)))
+        expected-start (when expected (:startSec expected))]
+    (cond
+      (and host
+           observed
+           (state/finite-number? expected-start)
+           (> expected-start 0.08)
+           (< observed 0.001)
+           (> host 0.001))
+      host
+
+      observed
+      observed
+
+      host
+      host
+
+      :else
+      nil)))
+
+(defn payload-duration-sec [payload]
+  (or (when (state/finite-number? (:durationSec payload))
+        (max 0 (:durationSec payload)))
+      (when (state/finite-number? (:totalDurationMs payload))
+        (/ (max 0 (:totalDurationMs payload)) 1000))))
+
+(defn timing-duration-sec [word-timings]
+  (when (seq word-timings)
+    (apply max 0 (map :endSec (state/normalize-word-timings word-timings)))))
+
+(defn prepare-text-timeline [text speech-rate payload]
+  (let [source (or (:source payload) "text")
+        events (visemes/text->visemes text speech-rate)
+        generated-word-timings (visemes/text->word-timings text speech-rate)
+        supplied-word-timings (state/normalize-word-timings (:wordTimings payload))
+        base-duration-ms (visemes/timeline-duration-ms events)
+        explicit-duration-sec (or (payload-duration-sec payload)
+                                  (timing-duration-sec supplied-word-timings))
+        web-speech-duration-sec (when (= "webSpeech" source)
+                                  (/ (visemes/web-speech-duration-ms text speech-rate base-duration-ms)
+                                     1000))
+        target-duration-sec (or explicit-duration-sec
+                                web-speech-duration-sec
+                                (/ base-duration-ms 1000))
+        base-duration-sec (/ base-duration-ms 1000)
+        scale (if (and (pos? base-duration-sec)
+                       (state/finite-number? target-duration-sec)
+                       (> target-duration-sec 0))
+                (/ target-duration-sec base-duration-sec)
+                1)
+        should-scale? (> (js/Math.abs (- scale 1)) 0.02)
+        word-timings (if (seq supplied-word-timings)
+                       supplied-word-timings
+                       (if should-scale?
+                         (visemes/scale-word-timings generated-word-timings scale)
+                         generated-word-timings))]
+    {:name (:name payload)
+     :text text
+     :source source
+     :visemes (if should-scale?
+                (visemes/scale-events events scale)
+                events)
+     :wordTimings word-timings
+     :durationSec (if (state/finite-number? target-duration-sec)
+                    target-duration-sec
+                    base-duration-sec)}))
+
 (defn timeline-name [timeline]
   (or (:name timeline)
       (str "vocal_timeline_" (.now js/Date))))
@@ -172,12 +248,7 @@
               (let [text (:text payload)
                     speech-rate (get-in @state-atom [:config :speechRate])]
                 (if (and (string? text) (pos? (count text)))
-                  (start-timeline! {:name (:name payload)
-                                    :text text
-                                    :source (or (:source payload) "text")
-                                    :visemes (visemes/text->visemes text speech-rate)
-                                    :wordTimings (or (:wordTimings payload)
-                                                     (visemes/text->word-timings text speech-rate))})
+                  (start-timeline! (prepare-text-timeline text speech-rate payload))
                   (emit-event {:type "error"
                                :agency "vocal"
                                :message "Vocal startText command requires text"}))))
@@ -210,11 +281,10 @@
                              :observedAt observed-at})
                 (let [current @state-atom
                       expected (get (:wordTimings current) word-index)
-                      normalized-observed-sec (normalize-observed-elapsed-sec
-                                               (:observedElapsedSec payload)
-                                               expected
-                                               (:maxTime current))
-                      elapsed-sec (state/number-or normalized-observed-sec
+                      observed-elapsed-sec (choose-boundary-elapsed-sec payload
+                                                                         expected
+                                                                         (:maxTime current))
+                      elapsed-sec (state/number-or observed-elapsed-sec
                                                    (if (:startTime current)
                                                      (/ (- observed-at (:startTime current)) 1000)
                                                      0))

@@ -182,6 +182,9 @@
 
 (def fallback-text-duration-scale 2)
 
+(def web-speech-word-floor-ms 360)
+(def web-speech-char-floor-ms 65)
+
 (def pause-durations
   {"PAUSE_SPACE" 0
    "PAUSE_COMMA" 50
@@ -394,6 +397,49 @@
    (map (fn [phoneme]
           (adjust-duration (:duration (phoneme->viseme-duration phoneme)) speech-rate))
         phonemes)))
+
+(defn word-tokens [text]
+  (vec (re-seq #"[A-Za-z]+" (or text ""))))
+
+(defn word-char-count [words]
+  (reduce + 0 (map count words)))
+
+(defn timeline-duration-ms [events]
+  (if (empty? events)
+    0
+    (apply max (map #(+ (:offsetMs %) (:durationMs %)) events))))
+
+(defn scale-event [scale event]
+  (-> event
+      (update :offsetMs #(js/Math.round (* scale %)))
+      (update :durationMs #(max 1 (js/Math.round (* scale %))))))
+
+(defn scale-events [events scale]
+  (mapv #(scale-event scale %) events))
+
+(defn scale-word-timings [word-timings scale]
+  (mapv (fn [timing]
+          (-> timing
+              (update :startSec #(* scale %))
+              (update :endSec #(* scale %))))
+        word-timings))
+
+(defn web-speech-duration-ms
+  "Estimate a Web Speech utterance floor from text shape, not just phoneme count.
+
+  Browser Web Speech does not expose provider viseme timing or total audio
+  duration. Short function words are especially under-estimated by pure phoneme
+  sums, so use a conservative word/character floor and keep the longer of that
+  floor and the phoneme-derived timeline. Boundary events can still correct
+  drift later, but they should not immediately clamp a too-short phrase snippet
+  to its end."
+  [text speech-rate base-duration-ms]
+  (let [rate (state/clamp 0.2 3 (state/number-or speech-rate 1))
+        words (word-tokens text)
+        word-floor (/ (* (count words) web-speech-word-floor-ms) rate)
+        char-floor (/ (* (word-char-count words) web-speech-char-floor-ms) rate)
+        floor-ms (max word-floor char-floor)]
+    (js/Math.round (max base-duration-ms floor-ms))))
 
 (defn text->word-timings
   "Estimate word timing from the same deterministic text planner used for

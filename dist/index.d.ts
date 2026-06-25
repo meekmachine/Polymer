@@ -249,7 +249,15 @@ export interface VocalState {
 
 export type VocalDispatch =
   | { type: 'configure'; config: VocalConfig }
-  | { type: 'startText'; text: string; name?: string; source?: string; wordTimings?: VocalWordTiming[] }
+  | {
+      type: 'startText';
+      text: string;
+      name?: string;
+      source?: string;
+      wordTimings?: VocalWordTiming[];
+      durationSec?: number;
+      totalDurationMs?: number;
+    }
   | { type: 'startTimeline'; timeline: VocalTimeline }
   | {
       type: 'processAzureVisemes';
@@ -261,7 +269,7 @@ export type VocalDispatch =
       wordTimings?: VocalWordTiming[];
       options?: { wordTimings?: VocalWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
     }
-  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number }
+  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number; hostElapsedSec?: number }
   | { type: 'updateWordTimings'; wordTimings: VocalWordTiming[] }
   | { type: 'stop' }
   | { type: 'reset' };
