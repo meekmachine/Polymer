@@ -488,6 +488,31 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
+(deftest web-speech-word-boundary-millisecond-clock-does-not-seek-to-end
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "startText"
+                                  :name "voice:webspeech-ms"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    ;; Some Web Speech implementations report boundary elapsedTime in a
+    ;; millisecond-looking clock. Normalize that before drift correction so a
+    ;; second-word boundary like 650 does not clamp the phrase snippet to its
+    ;; end and make the lips move only once at the beginning.
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "wordBoundary"
+                                  :word "world"
+                                  :wordIndex 1
+                                  :observedElapsedSec 650}})
+    (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
+      (is seek-call)
+      (is (> (:offsetSec seek-call) 0.64))
+      (is (< (:offsetSec seek-call) 0.66)))
+    (.dispose ^js system)))
+
 (deftest vocal-can-receive-provider-word-timings-after-start
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})

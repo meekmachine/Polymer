@@ -42,6 +42,36 @@
                                      (apply max (map #(/ (+ (:offsetMs %) (:durationMs %)) 1000) viseme-events))))
      :config config}))
 
+(defn normalize-observed-elapsed-sec [value expected max-time]
+  ;; Web Speech boundary clocks are not consistent enough to trust blindly
+  ;; across browsers. The spec says seconds, but some engines/adapters have
+  ;; reported millisecond-looking values. Treat a value as milliseconds only
+  ;; when it is clearly farther from the expected word start than value/1000.
+  ;; Without this guard, the first nonzero boundary can seek a whole utterance
+  ;; clip to its end, which looks like one lip movement at the beginning.
+  (when (state/finite-number? value)
+    (let [raw (max 0 value)
+          millis (/ raw 1000)
+          expected-start (when expected (:startSec expected))
+          raw-error (when (state/finite-number? expected-start)
+                      (js/Math.abs (- raw expected-start)))
+          millis-error (when (state/finite-number? expected-start)
+                         (js/Math.abs (- millis expected-start)))
+          max-time (max 0 (state/number-or max-time 0))
+          within-utterance? (or (zero? max-time)
+                                (<= millis (+ max-time 2)))
+          expected-says-ms? (and (> raw 10)
+                                 raw-error
+                                 millis-error
+                                 (< millis-error raw-error)
+                                 within-utterance?)
+          max-time-says-ms? (and (> raw (+ max-time 2))
+                                  (> raw 50)
+                                  within-utterance?)]
+      (if (or expected-says-ms? max-time-says-ms?)
+        millis
+        raw))))
+
 (defn timeline-name [timeline]
   (or (:name timeline)
       (str "vocal_timeline_" (.now js/Date))))
@@ -180,7 +210,11 @@
                              :observedAt observed-at})
                 (let [current @state-atom
                       expected (get (:wordTimings current) word-index)
-                      elapsed-sec (state/number-or (:observedElapsedSec payload)
+                      normalized-observed-sec (normalize-observed-elapsed-sec
+                                               (:observedElapsedSec payload)
+                                               expected
+                                               (:maxTime current))
+                      elapsed-sec (state/number-or normalized-observed-sec
                                                    (if (:startTime current)
                                                      (/ (- observed-at (:startTime current)) 1000)
                                                      0))
