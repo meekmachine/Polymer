@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [polymer.vocal.jaw :as jaw]
             [polymer.vocal.state :as state]
+            [polymer.vocal.tongue :as tongue]
             [polymer.vocal.visemes :as visemes]))
 
 ;; Snippet construction is pure: it turns a normalized viseme timeline into the
@@ -399,18 +400,32 @@
                         (apply-coarticulation events)
                         limit-concurrent-lip-activation
                         reduce-lip-keys)
-        jaw-curve (build-jaw-curve events (:jawScale config))]
-    (if (empty? jaw-curve)
-      articulated
-      (assoc articulated jaw-au jaw-curve))))
+        jaw-curve (build-jaw-curve events (:jawScale config))
+        tongue-curves (tongue/build-tongue-curves events (:tongueScale config))
+        with-jaw (if (empty? jaw-curve)
+                   articulated
+                   (assoc articulated jaw-au jaw-curve))]
+    ;; Tongue curves are added after lip limiting because AU 37 is an ordinary
+    ;; AU/composite control, not a viseme slot competing for lip-shape budget.
+    (merge with-jaw tongue-curves)))
 
 (defn vocal-channel-target [curve-key]
   ;; Vocal owns its animation namespace explicitly. Numeric keys 0-14 are
-  ;; canonical viseme slots; the jaw curve is AU 26. Keeping this as data lets
-  ;; Embody route viseme 1 and AU 1 at the same time without snippetCategory.
-  (if (= jaw-au (str curve-key))
-    {:type "au" :id 26}
-    {:type "viseme" :id (js/parseInt (str curve-key) 10)}))
+  ;; canonical viseme slots. Numeric keys above that are regular AUs, including
+  ;; AU 26 for jaw and AU 37 for tongue-up. Keeping this as data lets Embody
+  ;; route viseme 1 and AU 1 at the same time without snippetCategory.
+  (let [key (str curve-key)
+        numeric-id (when (re-matches #"^\d+$" key)
+                     (js/parseInt key 10))]
+    (cond
+      (and (some? numeric-id) (<= 0 numeric-id 14))
+      {:type "viseme" :id numeric-id}
+
+      (some? numeric-id)
+      {:type "au" :id numeric-id}
+
+      :else
+      {:type "morph" :id key})))
 
 (defn curves->channels [curves]
   (->> curves
@@ -449,7 +464,8 @@
       :curves curves
       :channels (curves->channels curves)
       :metadata {:agency "vocal"
-                 :visemeCount (count normalized-events)}})))
+                 :visemeCount (count normalized-events)
+                 :tongueCurveCount (count (select-keys curves [tongue/tongue-up-au]))}})))
 
 (defn build-text-snippet [text events config]
   (build-vocal-snippet events config (text-snippet-name text)))

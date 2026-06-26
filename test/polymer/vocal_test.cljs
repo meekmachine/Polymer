@@ -3,6 +3,7 @@
             [polymer.core :as polymer]
             [polymer.vocal.azure :as azure]
             [polymer.vocal.snippet :as snippet]
+            [polymer.vocal.tongue :as tongue]
             [polymer.vocal.visemes :as visemes]))
 
 (defn collect [target subscribe-fn]
@@ -50,6 +51,9 @@
 
 (defn jaw-channel [snippet]
   (channel-by-target snippet "au" 26))
+
+(defn tongue-channel [snippet]
+  (channel-by-target snippet "au" (js/parseInt tongue/tongue-up-au 10)))
 
 (defn viseme-channel [snippet viseme-id]
   (channel-by-target snippet "viseme" viseme-id))
@@ -327,6 +331,40 @@
     (is (<= (local-peak-count jaw) 1))
     (is (<= (sample-channel jaw 0.70) 0.16))
     (is (<= (sample-channel jaw 0.82) 0.16))))
+
+(deftest vocal-tongue-planner-emits-independent-au-channel
+  (let [snippet (build-text-fixture "tiny dog")
+        tongue (tongue-channel snippet)
+        jaw (jaw-channel snippet)]
+    (is tongue)
+    (is jaw)
+    (is (= "au" (get-in tongue [:target :type])))
+    (is (= 37 (get-in tongue [:target :id])))
+    (is (>= (channel-max-intensity tongue) 0.45))
+    (is (<= (local-peak-count tongue) 2))
+    (is (seq (get-in snippet [:curves "37"])))))
+
+(deftest vocal-tongue-planner-skips-lip-only-phrases
+  (let [snippet (build-text-fixture "five pop")]
+    (is (nil? (tongue-channel snippet)))
+    (is (nil? (get-in snippet [:curves "37"])))))
+
+(deftest vocal-tongue-planner-collapses-stacked-consonants
+  (let [snippet (build-text-fixture "strengths")
+        tongue (tongue-channel snippet)]
+    (is tongue)
+    ;; The initial STR cluster and the final NG/TH/S cluster should each read as
+    ;; one tongue gesture, not separate flaps for every consonant in the stack.
+    (is (>= (channel-max-intensity tongue) 0.45))
+    (is (<= (local-peak-count tongue) 2))
+    (is (<= (sample-channel tongue 0.70) 0.50))
+    (is (<= (sample-channel tongue 0.82) 0.50))))
+
+(deftest vocal-tongue-scale-zero-preserves-lips-and-jaw
+  (let [snippet (build-text-fixture "tiny dog" {:tongueScale 0})]
+    (is (seq (channels-of-type snippet "viseme")))
+    (is (jaw-channel snippet))
+    (is (nil? (tongue-channel snippet)))))
 
 (deftest jali-text-fallback-events-carry-phoneme-class-metadata
   (let [events (visemes/text->visemes "five pop")

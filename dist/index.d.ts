@@ -170,6 +170,8 @@ export interface VocalConfig {
   intensity?: number;
   speechRate?: number;
   jawScale?: number;
+  /** Scale for independently planned tongue AU curves. Set 0 to disable tongue motion. */
+  tongueScale?: number;
   rampMs?: number;
   holdMs?: number;
   priority?: number;

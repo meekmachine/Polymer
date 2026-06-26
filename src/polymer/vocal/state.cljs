@@ -10,6 +10,7 @@
   {:intensity 1
    :speechRate 1
    :jawScale 1
+   :tongueScale 1
    :rampMs 15
    :holdMs 40
    :priority 50
@@ -54,6 +55,7 @@
     {:intensity (clamp 0 2 (number-or (:intensity merged) (:intensity default-config)))
      :speechRate (clamp 0.2 3 (number-or (:speechRate merged) (:speechRate default-config)))
      :jawScale (clamp 0 2 (number-or (:jawScale merged) (:jawScale default-config)))
+     :tongueScale (clamp 0 2 (number-or (:tongueScale merged) (:tongueScale default-config)))
      :rampMs (clamp 0 200 (number-or (:rampMs merged) (:rampMs default-config)))
      :holdMs (clamp 0 500 (number-or (:holdMs merged) (:holdMs default-config)))
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
