@@ -195,7 +195,12 @@
    "PAUSE_COLON" 75})
 
 (def diphthong-targets
-  {"OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
+  {;; Web Speech fallback starts from text, so it does not get provider
+   ;; phoneme timing. Treat English diphthongs as internal lip travel inside
+   ;; one vocalic jaw gesture: the lips move through two targets, but AU26
+   ;; should stay on the same jaw arc instead of flapping twice.
+   "EY" [(:AE canonical-visemes) (:EE canonical-visemes)]
+   "OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
    "AW" [(:Ah canonical-visemes) (:W_OO canonical-visemes)]
    "OY" [(:Oh canonical-visemes) (:EE canonical-visemes)]
    "AY" [(:Ah canonical-visemes) (:Ih canonical-visemes)]})

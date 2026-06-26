@@ -69,6 +69,11 @@ Polymer Animation. Viseme channels target `{ type: "viseme" }`; jaw motion uses
 an explicit AU 26 channel, so Polymer does not rely on `snippetCategory` for
 normal namespace routing.
 
+The vocal planner treats lip shape and jaw opening as separate controls. Text
+fallback and Azure timelines can expand diphthongs into two lip targets while
+keeping one jaw arc, and stacked consonants collapse to a low jaw target instead
+of reopening AU 26 for every consonant.
+
 Supported inputs:
 
 - `startText`: fallback deterministic text-to-viseme planning.

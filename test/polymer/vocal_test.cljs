@@ -262,6 +262,23 @@
     (is (<= (local-peak-count jaw) 1))
     (is (every? #(> (:intensity %) 0.20) jaw-frames-during-diphthong))))
 
+(deftest web-speech-ey-diphthong-travels-from-ae-to-ee
+  (let [events (visemes/text->visemes "say")
+        snippet (snippet/build-text-snippet "say"
+                                            events
+                                            {:intensity 1 :jawScale 1})
+        ae-channel (viseme-channel snippet (:AE visemes/canonical-visemes))
+        ee-channel (viseme-channel snippet (:EE visemes/canonical-visemes))
+        jaw (jaw-channel snippet)
+        diphthong-events (filter #(= "EY" (:phoneme %)) events)]
+    (is (= 2 (count diphthong-events)))
+    (is (every? #(contains? (set (:phonemeClasses %)) "diphthong") diphthong-events))
+    (is ae-channel)
+    (is ee-channel)
+    (is (>= (channel-max-intensity ae-channel) 0.75))
+    (is (>= (channel-max-intensity ee-channel) 0.80))
+    (is (<= (local-peak-count jaw) 1))))
+
 (deftest vocal-jaw-planner-keeps-one-arc-through-provider-diphthong
   (let [snippet (snippet/build-vocal-snippet
                  [{:visemeId (:Oh visemes/canonical-visemes)
@@ -296,6 +313,20 @@
     (is (<= (sample-channel jaw 0.30) 0.16))
     (is (<= (sample-channel jaw 0.36) 0.16))
     (is (<= (local-peak-count jaw) 1))))
+
+(deftest vocal-jaw-planner-keeps-stacked-consonants-from-reopening-jaw
+  (let [snippet (build-text-fixture "strengths")
+        jaw (jaw-channel snippet)
+        events (visemes/text->visemes "strengths")
+        coda-events (filter #(contains? #{"NG" "TH" "S"} (:phoneme %)) events)]
+    (is (>= (count coda-events) 3))
+    (is jaw)
+    ;; The consonant stack after the vowel should stay as one low narrowing
+    ;; target. The lip/tongue visemes still fire, but AU26 should not reopen
+    ;; for NG, TH, and S as separate jaw beats.
+    (is (<= (local-peak-count jaw) 1))
+    (is (<= (sample-channel jaw 0.70) 0.16))
+    (is (<= (sample-channel jaw 0.82) 0.16))))
 
 (deftest jali-text-fallback-events-carry-phoneme-class-metadata
   (let [events (visemes/text->visemes "five pop")
@@ -353,6 +384,20 @@
     (is (= "sibilant" (:phonemeClass s-event)))
     (is (contains? (set (:phonemeClasses s-event)) "fricative"))
     (is (= "bilabial" (:phonemeClass b-event)))))
+
+(deftest azure-expanded-diphthongs-carry-diphthong-class-metadata
+  (let [timeline (azure/azure-visemes->timeline
+                  [{:id 8 :time 0}]
+                  180
+                  {})
+        oh-event (some #(when (= (:Oh visemes/canonical-visemes) (:visemeId %)) %) timeline)
+        rounded-event (some #(when (= (:W_OO visemes/canonical-visemes) (:visemeId %)) %) timeline)]
+    (is oh-event)
+    (is rounded-event)
+    (is (contains? (set (:phonemeClasses oh-event)) "diphthong"))
+    (is (contains? (set (:phonemeClasses rounded-event)) "diphthong"))
+    (is (>= (:jawActivation oh-event) 0.30))
+    (is (>= (:jawActivation rounded-event) 0.30))))
 
 (deftest vocal-snippet-limits-overlapping-lip-activation
   (let [built (snippet/build-vocal-snippet
