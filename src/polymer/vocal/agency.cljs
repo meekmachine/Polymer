@@ -189,6 +189,13 @@
                            :offsetSec offset-sec
                            :reason reason}))
 
+            (audio-clock-sec [payload]
+              (max 0
+                   (state/number-or (or (:audioTimeSec payload)
+                                        (:currentTimeSec payload)
+                                        (:offsetSec payload))
+                                    0)))
+
             (stop-local! [reason remove?]
               (when-let [name (active-name)]
                 (when remove?
@@ -307,6 +314,41 @@
                                    :correctedAt corrected-at})
                       (emit-animation-seek! name target-sec "word-boundary-drift"))))))
 
+            (handle-audio-started! [payload]
+              ;; The host owns audio playback. This command tells Vocal when
+              ;; that side effect actually started so Animation can align the
+              ;; scheduled snippet to the audio clock without LoomLarge calling
+              ;; Animation directly.
+              (let [current @state-atom
+                    name (or (:name payload) (:snippetName current))
+                    audio-time-sec (min (:maxTime current) (audio-clock-sec payload))
+                    observed-at (state/now-ms)]
+                (swap! state-atom state/record-audio-started audio-time-sec observed-at)
+                (emit-event {:type "vocalAudioStarted"
+                             :agency "vocal"
+                             :name name
+                             :audioTimeSec audio-time-sec
+                             :observedAt observed-at})
+                (when name
+                  (emit-animation-seek! name audio-time-sec "audio-started"))))
+
+            (handle-audio-time! [payload]
+              ;; Optional low-frequency host clock correction. This is not a
+              ;; frame loop; callers should send it only when a material drift
+              ;; correction is needed.
+              (let [current @state-atom
+                    name (or (:name payload) (:snippetName current))
+                    audio-time-sec (min (:maxTime current) (audio-clock-sec payload))
+                    observed-at (state/now-ms)]
+                (swap! state-atom state/record-audio-time audio-time-sec observed-at)
+                (emit-event {:type "vocalAudioTime"
+                             :agency "vocal"
+                             :name name
+                             :audioTimeSec audio-time-sec
+                             :observedAt observed-at})
+                (when name
+                  (emit-animation-seek! name audio-time-sec "audio-time"))))
+
             (update-word-timings! [payload]
               (let [updated-at (state/now-ms)
                     timings (:wordTimings payload)]
@@ -342,6 +384,12 @@
 
                     "wordBoundary"
                     (handle-word-boundary! payload)
+
+                    "audioStarted"
+                    (handle-audio-started! payload)
+
+                    "audioTime"
+                    (handle-audio-time! payload)
 
                     "updateWordTimings"
                     (update-word-timings! payload)
@@ -388,6 +436,14 @@
                                             :word word
                                             :wordIndex word-index
                                             :observedElapsedSec observed-elapsed-sec})))
+           :audioStarted (fn
+                           ([] (dispatch! #js {:type "audioStarted"}))
+                           ([audio-time-sec]
+                            (dispatch! #js {:type "audioStarted"
+                                            :audioTimeSec audio-time-sec})))
+           :audioTime (fn [audio-time-sec]
+                        (dispatch! #js {:type "audioTime"
+                                        :audioTimeSec audio-time-sec}))
            :updateWordTimings (fn [word-timings]
                                 (dispatch! #js {:type "updateWordTimings"
                                                 :wordTimings word-timings}))

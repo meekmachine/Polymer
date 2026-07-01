@@ -668,6 +668,56 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
+(deftest vocal-audio-started-seeks-through-animation
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "startTimeline"
+                                  :timeline #js {:name "voice:audio-start"
+                                                 :source "azure"
+                                                 :durationSec 1.2
+                                                 :visemes #js [#js {:visemeId 1
+                                                                    :offsetMs 0
+                                                                    :durationMs 400}]}}})
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "audioStarted"
+                                  :audioTimeSec 0.18}})
+    (is (some #(= "vocalAudioStarted" (:type %)) @(:events events)))
+    (is (some #(and (= "setSnippetTime" (:method %))
+                    (= "voice:audio-start" (:name %))
+                    (= 0.18 (:offsetSec %)))
+              @calls))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest vocal-audio-time-command-clamps-to-active-timeline
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "startTimeline"
+                                  :timeline #js {:name "voice:audio-time"
+                                                 :source "azure"
+                                                 :durationSec 0.5
+                                                 :visemes #js [#js {:visemeId 1
+                                                                    :offsetMs 0
+                                                                    :durationMs 400}]}}})
+    (.dispatch ^js system
+               #js {:agency "vocal"
+                    :command #js {:type "audioTime"
+                                  :audioTimeSec 2.0}})
+    (is (some #(= "vocalAudioTime" (:type %)) @(:events events)))
+    (is (some #(and (= "setSnippetTime" (:method %))
+                    (= "voice:audio-time" (:name %))
+                    (= 0.5 (:offsetSec %)))
+              @calls))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
 (deftest vocal-stop-requests-animation-removal-through-character-network
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})

@@ -26,6 +26,8 @@
    :source nil
    :text nil
    :startTime nil
+   :audioStartedAt nil
+   :audioTimeSec nil
    :maxTime 0
    :wordIndex 0
    :wordTimings []
@@ -121,6 +123,8 @@
                :source (or (:source timeline) "unknown")
                :text (:text timeline)
                :startTime started-at
+               :audioStartedAt nil
+               :audioTimeSec nil
                :maxTime max-time
                :wordIndex 0
                :wordTimings (normalize-word-timings (:wordTimings timeline)))
@@ -139,6 +143,8 @@
              :source nil
              :text nil
              :startTime nil
+             :audioStartedAt nil
+             :audioTimeSec nil
              :maxTime 0
              :wordIndex 0
              :wordTimings [])
@@ -174,6 +180,23 @@
                          :name name
                          :offsetSec offset-sec
                          :at corrected-at})))
+
+(defn record-audio-started [state audio-time-sec observed-at]
+  ;; Audio remains a host side effect; Vocal only records the host clock value
+  ;; that should drive the already-scheduled animation timeline.
+  (-> state
+      (assoc :audioStartedAt observed-at
+             :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "vocalAudioStarted"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
+
+(defn record-audio-time [state audio-time-sec observed-at]
+  (-> state
+      (assoc :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "vocalAudioTime"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
 
 (defn visible-state [state]
   (clj->js state))
