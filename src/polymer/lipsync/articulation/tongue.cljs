@@ -1,9 +1,9 @@
-(ns polymer.vocal.tongue
+(ns polymer.lipsync.articulation.tongue
   (:require [clojure.string :as str]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
-;; Tongue planning is a third independent vocal control surface beside lips and
+;; Tongue planning is a third independent lipSync control surface beside lips and
 ;; jaw. The input is the same normalized viseme/phoneme sequence used by those
 ;; planners; the output is an ordinary AU curve. Embody already maps AU 37 to
 ;; the CC4 TONGUE pitch composite, so this stays on the same scheduled snippet

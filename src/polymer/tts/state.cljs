@@ -1,6 +1,6 @@
 (ns polymer.tts.state)
 
-;; The TTS agency state is intentionally separate from LipSync/Vocal state.
+;; The TTS agency state is intentionally separate from LipSync state.
 ;; TTS owns provider/session facts; LipSync owns mouth planning.
 
 (defn finite-number?
@@ -109,7 +109,7 @@
   (update state :sessionId inc))
 
 (defn record-plan
-  "Store the GOAP plan data that explains how this speech command will execute."
+  "Store provider-plan data that explains how this speech command will execute."
   [state plan]
   (assoc state :lastPlan plan))
 

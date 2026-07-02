@@ -3,14 +3,14 @@
             [polymer.blink.agency :as blink]
             [polymer.stream :as stream]
             [polymer.tts.agency :as tts]
-            [polymer.vocal.agency :as vocal]))
+            [polymer.lipsync.agency :as lipsync]))
 
 ;; A character is a network of Polymer agencies.
 ;;
 ;; LoomLarge may still consume streams from legacy Latticework services during
 ;; the migration, but it should not consume Polymer animation events and turn
 ;; them into animation calls. Inside Polymer, Blink emits animation intent, TTS
-;; emits speech timing facts, Vocal/LipSync emits mouth animation intent, this
+;; emits speech timing facts, LipSync emits mouth animation intent, this
 ;; network routes the messages, and Animation talks directly to Embody.
 
 (def fast-blink-prosodic-cooldown-ms 1200)
@@ -57,7 +57,7 @@
         animation-agency (animation/create-animation-agency (when config (aget config "animation")))
         blink-agency (blink/create-blink-agency (when config (aget config "blink")))
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
-        vocal-agency (vocal/create-vocal-agency (when config (aget config "vocal")))
+        lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         unsubscribers (atom [])
         disposed? (atom false)
         last-fast-blink-cue-at (atom 0)]
@@ -91,7 +91,7 @@
                     "blink" (.dispatch ^js blink-agency (clj->js (:command payload)))
                     "animation" (.dispatch ^js animation-agency (clj->js (:command payload)))
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
-                    "vocal" (.dispatch ^js vocal-agency (clj->js (:command payload)))
+                    "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
                     (emit-event {:type "error"
                                  :agency (or (:agency payload) "unknown")
                                  :message "Unknown Polymer agency"})))))
@@ -99,7 +99,7 @@
             (snapshot! []
               (clj->js {:blink (js->clj (.snapshot ^js blink-agency) :keywordize-keys true)
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
-                        :vocal (js->clj (.snapshot ^js vocal-agency) :keywordize-keys true)
+                        :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :animation (js->clj (.snapshot ^js animation-agency) :keywordize-keys true)}))
 
             (route-blink-event! [event]
@@ -117,11 +117,11 @@
             (route-tts-event! [event]
               (case (:type event)
                 "lipSync.command"
-                (.dispatch ^js vocal-agency (clj->js (:command event)))
+                (.dispatch ^js lipsync-agency (clj->js (:command event)))
 
                 nil))
 
-            (route-vocal-event! [event]
+            (route-lipsync-event! [event]
               (case (:type event)
                 "animation.requestScheduleSnippet"
                 (schedule-animation! (:agency event) (:snippet event) (:options event))
@@ -161,12 +161,12 @@
                                     (emit-event payload)))))
       (track! (.subscribeEffects ^js tts-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
-      (track! (.subscribeEvents ^js vocal-agency
+      (track! (.subscribeEvents ^js lipsync-agency
                                 (fn [event]
                                   (let [payload (js->clj event :keywordize-keys true)]
-                                    (route-vocal-event! payload)
+                                    (route-lipsync-event! payload)
                                     (emit-event payload)))))
-      (track! (.subscribeEffects ^js vocal-agency
+      (track! (.subscribeEffects ^js lipsync-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
       #js {:dispatch dispatch!
            :input (stream/writable-port input-stream dispatch!)
@@ -178,7 +178,7 @@
                        "animation" animation-agency
                        "blink" blink-agency
                        "tts" tts-agency
-                       "vocal" vocal-agency
+                       "lipSync" lipsync-agency
                        nil))
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
@@ -194,7 +194,7 @@
                         (reset! unsubscribers [])
                         (.dispose ^js blink-agency)
                         (.dispose ^js tts-agency)
-                        (.dispose ^js vocal-agency)
+                        (.dispose ^js lipsync-agency)
                         (.dispose ^js animation-agency)
                         ((:dispose input-stream))
                         ((:dispose event-stream))

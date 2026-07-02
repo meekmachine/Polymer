@@ -117,17 +117,17 @@
 
 (deftest automatic-blink-uses-enabled-timer
   (async done
-    (let [agency (polymer/createBlinkAgency #js {:frequency 60 :randomness 0})
-          events (domain-events agency)]
-      (.enable ^js agency)
-      (js/setTimeout
-       (fn []
-         (try
-           (is (some #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
-           ((:unsubscribe events))
-           (.dispose ^js agency)
-           (done)
-           (catch :default error
-             (.dispose ^js agency)
-             (throw error))))
-       1150))))
+         (let [agency (polymer/createBlinkAgency #js {:frequency 60 :randomness 0})
+               events (domain-events agency)]
+           (.enable ^js agency)
+           (js/setTimeout
+            (fn []
+              (try
+                (is (some #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            1150))))

@@ -1,10 +1,10 @@
-(ns polymer.vocal-test
+(ns polymer.lipsync-test
   (:require [cljs.test :refer [deftest is testing]]
             [polymer.core :as polymer]
-            [polymer.vocal.azure :as azure]
-            [polymer.vocal.snippet :as snippet]
-            [polymer.vocal.tongue :as tongue]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.articulation.azure :as azure]
+            [polymer.lipsync.articulation.snippet :as snippet]
+            [polymer.lipsync.articulation.tongue :as tongue]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
 (defn collect [target subscribe-fn]
   (let [events (atom [])]
@@ -116,8 +116,8 @@
          (swap! calls conj {:method "cleanupSnippet" :name name})
          true)})
 
-(deftest vocal-start-text-emits-one-animation-request
-  (let [agency (polymer/createVocalAgency nil)
+(deftest LipSync-start-text-emits-one-animation-request
+  (let [agency (polymer/createLipSyncAgency nil)
         events (domain-events agency)
         effects (effect-events agency)]
     (.dispatch ^js agency #js {:type "startText" :text "hello world"})
@@ -125,7 +125,7 @@
           snippet (:snippet request)
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is request)
-      (is (= "vocal" (:agency request)))
+      (is (= "lipSync" (:agency request)))
       (is (not (contains? snippet :snippetCategory)))
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
@@ -143,7 +143,7 @@
     (.dispose ^js agency)))
 
 (deftest web-speech-text-emits-lip-and-independent-jaw-channels
-  (let [agency (polymer/createVocalAgency #js {:speechRate 1 :jawScale 1})
+  (let [agency (polymer/createLipSyncAgency #js {:speechRate 1 :jawScale 1})
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "startText"
                                :text "hello world"
@@ -164,7 +164,7 @@
     (.dispose ^js agency)))
 
 (deftest web-speech-fallback-timeline-uses-speech-length-scale
-  (let [agency (polymer/createVocalAgency #js {:speechRate 1})
+  (let [agency (polymer/createLipSyncAgency #js {:speechRate 1})
         events (domain-events agency)
         text "The saddest aspect of life right now is that science gathers knowledge faster than society gathers wisdom."]
     (.dispatch ^js agency #js {:type "startText" :text text :source "webSpeech"})
@@ -178,7 +178,7 @@
     (.dispose ^js agency)))
 
 (deftest web-speech-short-function-word-phrases-are-not-compressed
-  (let [agency (polymer/createVocalAgency #js {:speechRate 1})
+  (let [agency (polymer/createLipSyncAgency #js {:speechRate 1})
         events (domain-events agency)
         text "This is a test of web speech lip sync over a whole phrase."]
     (.dispatch ^js agency #js {:type "startText" :text text :source "webSpeech"})
@@ -283,8 +283,8 @@
     (is (>= (channel-max-intensity ee-channel) 0.80))
     (is (<= (local-peak-count jaw) 1))))
 
-(deftest vocal-jaw-planner-keeps-one-arc-through-provider-diphthong
-  (let [snippet (snippet/build-vocal-snippet
+(deftest LipSync-jaw-planner-keeps-one-arc-through-provider-diphthong
+  (let [snippet (snippet/build-lipsync-snippet
                  [{:visemeId (:Oh visemes/canonical-visemes)
                    :phoneme "OW"
                    :phonemeClass "vowel"
@@ -307,7 +307,7 @@
     (is (> (sample-channel jaw 0.11) 0.30))
     (is (<= (local-peak-count jaw) 1))))
 
-(deftest vocal-jaw-planner-collapses-stacked-consonants
+(deftest LipSync-jaw-planner-collapses-stacked-consonants
   (let [snippet (build-text-fixture "texts")
         jaw (jaw-channel snippet)]
     (is jaw)
@@ -318,7 +318,7 @@
     (is (<= (sample-channel jaw 0.36) 0.16))
     (is (<= (local-peak-count jaw) 1))))
 
-(deftest vocal-jaw-planner-keeps-stacked-consonants-from-reopening-jaw
+(deftest LipSync-jaw-planner-keeps-stacked-consonants-from-reopening-jaw
   (let [snippet (build-text-fixture "strengths")
         jaw (jaw-channel snippet)
         events (visemes/text->visemes "strengths")
@@ -332,7 +332,7 @@
     (is (<= (sample-channel jaw 0.70) 0.16))
     (is (<= (sample-channel jaw 0.82) 0.16))))
 
-(deftest vocal-tongue-planner-emits-independent-au-channel
+(deftest LipSync-tongue-planner-emits-independent-au-channel
   (let [snippet (build-text-fixture "tiny dog")
         tongue (tongue-channel snippet)
         jaw (jaw-channel snippet)]
@@ -344,12 +344,12 @@
     (is (<= (local-peak-count tongue) 2))
     (is (seq (get-in snippet [:curves "37"])))))
 
-(deftest vocal-tongue-planner-skips-lip-only-phrases
+(deftest LipSync-tongue-planner-skips-lip-only-phrases
   (let [snippet (build-text-fixture "five pop")]
     (is (nil? (tongue-channel snippet)))
     (is (nil? (get-in snippet [:curves "37"])))))
 
-(deftest vocal-tongue-planner-collapses-stacked-consonants
+(deftest LipSync-tongue-planner-collapses-stacked-consonants
   (let [snippet (build-text-fixture "strengths")
         tongue (tongue-channel snippet)]
     (is tongue)
@@ -360,7 +360,7 @@
     (is (<= (sample-channel tongue 0.70) 0.50))
     (is (<= (sample-channel tongue 0.82) 0.50))))
 
-(deftest vocal-tongue-scale-zero-preserves-lips-and-jaw
+(deftest LipSync-tongue-scale-zero-preserves-lips-and-jaw
   (let [snippet (build-text-fixture "tiny dog" {:tongueScale 0})]
     (is (seq (channels-of-type snippet "viseme")))
     (is (jaw-channel snippet))
@@ -437,8 +437,8 @@
     (is (>= (:jawActivation oh-event) 0.30))
     (is (>= (:jawActivation rounded-event) 0.30))))
 
-(deftest vocal-snippet-limits-overlapping-lip-activation
-  (let [built (snippet/build-vocal-snippet
+(deftest LipSync-snippet-limits-overlapping-lip-activation
+  (let [built (snippet/build-lipsync-snippet
                [{:visemeId (:B_M_P visemes/canonical-visemes) :offsetMs 0 :durationMs 120}
                 {:visemeId (:Ah visemes/canonical-visemes) :offsetMs 0 :durationMs 120}]
                {:intensity 2 :jawScale 1}
@@ -451,8 +451,8 @@
     (is (>= closure-value 0.55))
     (is (<= secondary-value 0.04))))
 
-(deftest vocal-jaw-activation-is-independent-from-viseme-morphs
-  (let [built (snippet/build-vocal-snippet
+(deftest LipSync-jaw-activation-is-independent-from-viseme-morphs
+  (let [built (snippet/build-lipsync-snippet
                [{:visemeId (:Ah visemes/canonical-visemes)
                  :jawActivation 0
                  :offsetMs 0
@@ -469,8 +469,8 @@
     (is (<= (snippet/sample-curve-at jaw-curve 0.06) 0.001))
     (is (> (snippet/sample-curve-at jaw-curve 0.27) 0.4))))
 
-(deftest vocal-jaw-scale-zero-keeps-lip-visemes-without-jaw-channel
-  (let [built (snippet/build-vocal-snippet
+(deftest LipSync-jaw-scale-zero-keeps-lip-visemes-without-jaw-channel
+  (let [built (snippet/build-lipsync-snippet
                [{:visemeId (:Ah visemes/canonical-visemes)
                  :jawActivation 0.8
                  :offsetMs 0
@@ -483,8 +483,8 @@
                          (= 26 (get-in % [:target :id])))
                    (:channels built))))))
 
-(deftest vocal-source-label-does-not-change-viseme-jaw-mixing
-  (let [agency (polymer/createVocalAgency #js {:visualLeadMs 0})
+(deftest LipSync-source-label-does-not-change-viseme-jaw-mixing
+  (let [agency (polymer/createLipSyncAgency #js {:visualLeadMs 0})
         events (domain-events agency)
         canonical-visemes #js [#js {:visemeId 1 :offsetMs 100 :durationMs 180}
                                #js {:visemeId 14 :offsetMs 320 :durationMs 160}]]
@@ -509,8 +509,8 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
-(deftest vocal-visual-lead-is-applied-before-shared-snippet-build
-  (let [agency (polymer/createVocalAgency #js {:visualLeadMs 50})
+(deftest LipSync-visual-lead-is-applied-before-shared-snippet-build
+  (let [agency (polymer/createLipSyncAgency #js {:visualLeadMs 50})
         events (domain-events agency)]
     (.dispatch ^js agency
                #js {:type "startTimeline"
@@ -525,22 +525,22 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
-(deftest character-network-routes-vocal-to-animation-runtime
+(deftest character-network-routes-LipSync-to-animation-runtime
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:test"
                                                  :source "test"
                                                  :visemes #js [#js {:visemeId 1
                                                                     :offsetMs 0
                                                                     :durationMs 160}]}}})
-    (is (some #(= "vocalTimelineStarted" (:type %)) @(:events events)))
+    (is (some #(= "lipSyncTimelineStarted" (:type %)) @(:events events)))
     (is (some #(= "animationSnippetScheduled" (:type %)) @(:events events)))
     (is (= "playSnippet" (:method (first @calls))))
-    (is (= "vocal" (get-in (first @calls) [:options :sourceAgency])))
+    (is (= "lipSync" (get-in (first @calls) [:options :sourceAgency])))
     (is (= "visemeSnippet" (get-in (first @calls) [:options :snippetCategory])))
     (is (false? (get-in (first @calls) [:options :autoVisemeJaw])))
     (is (seq (get-in (first @calls) [:curves :1])))
@@ -554,12 +554,12 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest vocal-word-boundary-drift-seeks-through-animation
+(deftest LipSync-word-boundary-drift-seeks-through-animation
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:drift"
                                                  :source "azure"
@@ -571,12 +571,12 @@
                                                                         :startSec 0.1
                                                                         :endSec 0.5}]}}})
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "wordBoundary"
                                   :word "hello"
                                   :wordIndex 0
                                   :observedElapsedSec 0.3}})
-    (is (some #(= "vocalSyncDrift" (:type %)) @(:events events)))
+    (is (some #(= "lipSyncSyncDrift" (:type %)) @(:events events)))
     (is (some #(= "animationSnippetSeeked" (:type %)) @(:events events)))
     (is (some #(and (= "setSnippetTime" (:method %))
                     (= "voice:drift" (:name %))
@@ -589,7 +589,7 @@
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startText"
                                   :name "voice:webspeech-ms"
                                   :text "hello world"
@@ -599,7 +599,7 @@
     ;; second-word boundary like 650 does not clamp the phrase snippet to its
     ;; end and make the lips move only once at the beginning.
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "wordBoundary"
                                   :word "world"
                                   :wordIndex 1
@@ -614,7 +614,7 @@
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startText"
                                   :name "voice:webspeech-zero-clock"
                                   :text "hello world"
@@ -623,7 +623,7 @@
     ;; host clock keeps those later boundaries from seeking the full phrase
     ;; snippet back to the beginning.
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "wordBoundary"
                                   :word "world"
                                   :wordIndex 1
@@ -635,12 +635,12 @@
       (is (< (:offsetSec seek-call) 0.65)))
     (.dispose ^js system)))
 
-(deftest vocal-can-receive-provider-word-timings-after-start
+(deftest LipSync-can-receive-provider-word-timings-after-start
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:late-words"
                                                  :source "azure"
@@ -649,18 +649,18 @@
                                                                     :offsetMs 0
                                                                     :durationMs 400}]}}})
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "updateWordTimings"
                                   :wordTimings #js [#js {:word "hello"
                                                          :startSec 0.1
                                                          :endSec 0.5}]}})
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "wordBoundary"
                                   :word "hello"
                                   :wordIndex 0
                                   :observedElapsedSec 0.3}})
-    (is (some #(= "vocalWordTimingsUpdated" (:type %)) @(:events events)))
+    (is (some #(= "lipSyncWordTimingsUpdated" (:type %)) @(:events events)))
     (is (some #(and (= "setSnippetTime" (:method %))
                     (= "voice:late-words" (:name %))
                     (= 0.3 (:offsetSec %)))
@@ -668,12 +668,12 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest vocal-audio-started-seeks-through-animation
+(deftest LipSync-audio-started-seeks-through-animation
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:audio-start"
                                                  :source "azure"
@@ -682,10 +682,10 @@
                                                                     :offsetMs 0
                                                                     :durationMs 400}]}}})
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "audioStarted"
                                   :audioTimeSec 0.18}})
-    (is (some #(= "vocalAudioStarted" (:type %)) @(:events events)))
+    (is (some #(= "lipSyncAudioStarted" (:type %)) @(:events events)))
     (is (some #(and (= "setSnippetTime" (:method %))
                     (= "voice:audio-start" (:name %))
                     (= 0.18 (:offsetSec %)))
@@ -693,12 +693,12 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest vocal-audio-time-command-clamps-to-active-timeline
+(deftest LipSync-audio-time-command-clamps-to-active-timeline
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:audio-time"
                                                  :source "azure"
@@ -707,10 +707,10 @@
                                                                     :offsetMs 0
                                                                     :durationMs 400}]}}})
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "audioTime"
                                   :audioTimeSec 2.0}})
-    (is (some #(= "vocalAudioTime" (:type %)) @(:events events)))
+    (is (some #(= "lipSyncAudioTime" (:type %)) @(:events events)))
     (is (some #(and (= "setSnippetTime" (:method %))
                     (= "voice:audio-time" (:name %))
                     (= 0.5 (:offsetSec %)))
@@ -718,19 +718,19 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest vocal-stop-requests-animation-removal-through-character-network
+(deftest LipSync-stop-requests-animation-removal-through-character-network
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
     (.dispatch ^js system
-               #js {:agency "vocal"
+               #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
                                   :timeline #js {:name "voice:stop"
                                                  :source "test"
                                                  :visemes #js [#js {:visemeId 1
                                                                     :offsetMs 0
                                                                     :durationMs 160}]}}})
-    (.dispatch ^js system #js {:agency "vocal" :command #js {:type "stop"}})
+    (.dispatch ^js system #js {:agency "lipSync" :command #js {:type "stop"}})
     (is (some #(and (= "animationSnippetRemoved" (:type %))
                     (= "voice:stop" (:name %)))
               @(:events events)))

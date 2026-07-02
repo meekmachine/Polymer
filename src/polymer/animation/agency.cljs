@@ -181,10 +181,10 @@
         (call-js runtime "playSnippet" name curves-js clip-options)))))
 
 (defn play-runtime-snippet! [runtime snippet options]
-  ;; Vocal snippets keep typed channels as the canonical Polymer data surface,
+  ;; LipSync snippets keep typed channels as the canonical Polymer data surface,
   ;; but today Embody can legitimately return a typed clip handle after only
   ;; resolving AU26. That makes Web Speech look like jaw-only flapping. When
-  ;; Vocal also provides the enclosure curves, prefer the mature visemeSnippet
+  ;; LipSync also provides the enclosure curves, prefer the mature visemeSnippet
   ;; curve route so numeric viseme keys resolve through the same profile-aware
   ;; morph-target path that the stable Latticework implementation used.
   (or (when (typed-viseme-curves-snippet? snippet)

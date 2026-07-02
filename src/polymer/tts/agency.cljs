@@ -1,7 +1,8 @@
 (ns polymer.tts.agency
   (:require [clojure.string :as str]
+            [polymer.lipsync.transducers :as lipsync-transducers]
             [polymer.stream :as stream]
-            [polymer.tts.goap :as goap]
+            [polymer.tts.planner :as planner]
             [polymer.tts.state :as state]
             [polymer.tts.transducers :as transducers]))
 
@@ -68,7 +69,7 @@
     (js->clj event :keywordize-keys true)))
 
 (defn plan-failure-message
-  "Turn the first failed GOAP step into a user/debug friendly error string."
+  "Turn the first failed provider-plan step into a user/debug friendly error string."
   [plan]
   (let [step (first (:steps plan))
         reason (:reason step)
@@ -447,14 +448,14 @@
 
             (emit-lipsync! [command]
                 ;; This is an event-stream bridge inside Polymer. The character
-                ;; network routes this command to Vocal/LipSync, which then emits
+                ;; network routes this command to LipSync, which then emits
                 ;; animation intent for the Animation agency.
               (emit-event {:type "lipSync.command"
                            :agency "tts"
                            :command command}))
 
             (configure-lipsync! [engine command]
-                ;; TTS knows provider timing and user speech controls; Vocal knows
+                ;; TTS knows provider timing and user speech controls; LipSync knows
                 ;; how those controls become mouth/jaw/tongue animation.
               (let [config (:config @state-atom)]
                 (emit-lipsync! {:type "configure"
@@ -586,7 +587,7 @@
                                      duration-sec (or (:durationSec payload) (aget playback "durationSec") 0)
                                      word-timings (:wordTimings payload)]
                                  (configure-lipsync! "azure" command)
-                                 (emit-lipsync! (transducers/azure-synthesis->lipsync-command
+                                 (emit-lipsync! (lipsync-transducers/azure-synthesis->lipsync-command
                                                  snippet-name
                                                  text
                                                  (assoc payload :durationSec duration-sec)
@@ -621,13 +622,14 @@
                     engine (or (:engine command) (:engine config))
                     text (:text command)
                     snippet-name (or (:name command) (str "tts_" engine "_" (.now js/Date)))
-                      ;; GOAP sees only capability facts. It does not receive JS
-                      ;; handles or secrets, and it never performs side effects.
+                    ;; Provider planning sees only capability facts. It does not
+                    ;; receive JS handles or secrets, and it never performs side
+                    ;; effects.
                     world {:backendUrl (backend-url config command)
                            :hasAzureSynthesize (boolean (custom-provider config :azureSynthesize))
                            :hasWebSpeech (boolean (or (custom-provider config :webSpeechSpeak)
                                                       (speech-synthesis*)))}
-                    plan (goap/plan-speech (assoc command :engine engine) config world)]
+                    plan (planner/plan-speech (assoc command :engine engine) config world)]
                 (swap! state-atom (fn [state]
                                     (-> state
                                         state/next-session
@@ -652,7 +654,7 @@
                            :hasAzureVoices (boolean (custom-provider config :azureVoices))
                            :hasWebSpeech (boolean (or (custom-provider config :webSpeechVoices)
                                                       (speech-synthesis*)))}
-                    plan (goap/plan-voice-load engine world)]
+                    plan (planner/plan-voice-load engine world)]
                 (emit-event {:type "ttsPlanCreated"
                              :agency "tts"
                              :plan plan})

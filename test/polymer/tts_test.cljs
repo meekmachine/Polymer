@@ -1,7 +1,8 @@
 (ns polymer.tts-test
   (:require [cljs.test :refer [async deftest is testing]]
             [polymer.core :as polymer]
-            [polymer.tts.goap :as goap]
+            [polymer.lipsync.transducers :as lipsync-transducers]
+            [polymer.tts.planner :as planner]
             [polymer.tts.transducers :as transducers]))
 
 ;; These tests keep the TTS provider boundary honest.
@@ -45,68 +46,73 @@
          (swap! calls conj {:method "cleanupSnippet" :name name})
          true)})
 
-(deftest goap-plans-provider-specific-speech
+(deftest provider-planner-plans-provider-specific-speech
   (testing "web speech gets a speech plan with no Azure synthesis step"
-    (let [plan (goap/plan-speech {:type "speak"
-                                  :engine "webSpeech"
-                                  :text "hello"}
-                                 {:engine "webSpeech"}
-                                 {:hasWebSpeech true})]
+    (let [plan (planner/plan-speech {:type "speak"
+                                     :engine "webSpeech"
+                                     :text "hello"}
+                                    {:engine "webSpeech"}
+                                    {:hasWebSpeech true})]
       (is (:ok plan))
       (is (= ["configure-lipsync" "speak-web-speech" "use-web-speech-boundaries"]
              (map :op (:steps plan))))))
   (testing "azure gets synthesis and audio playback steps"
-    (let [plan (goap/plan-speech {:type "speak"
-                                  :engine "azure"
-                                  :text "hello"}
-                                 {:engine "azure"}
-                                 {:backendUrl "http://backend"})]
+    (let [plan (planner/plan-speech {:type "speak"
+                                     :engine "azure"
+                                     :text "hello"}
+                                    {:engine "azure"}
+                                    {:backendUrl "http://backend"})]
       (is (:ok plan))
       (is (= ["configure-lipsync" "synthesize-azure" "play-azure-audio" "emit-word-boundaries"]
              (map :op (:steps plan))))))
   (testing "voice loading fails before side effects when the provider is missing"
-    (let [plan (goap/plan-voice-load "azure" {})]
+    (let [plan (planner/plan-voice-load "azure" {})]
       (is (false? (:ok plan)))
       (is (= [{:op "fail" :reason "provider-not-ready" :engine "azure"}]
              (:steps plan)))))
-  (testing "injected Azure providers satisfy GOAP without exposing keys to the browser"
-    (let [plan (goap/plan-speech {:type "speak"
-                                  :engine "azure"
-                                  :text "hello"}
-                                 {:engine "azure"}
-                                 {:hasAzureSynthesize true})]
+  (testing "injected Azure providers satisfy provider planning without exposing keys to the browser"
+    (let [plan (planner/plan-speech {:type "speak"
+                                     :engine "azure"
+                                     :text "hello"}
+                                    {:engine "azure"}
+                                    {:hasAzureSynthesize true})]
       (is (:ok plan)))))
 
-(deftest transducers-normalize-provider-payloads
-  (let [visemes (transducers/normalize-azure-visemes [{:viseme_id 3 :audio_offset 0.2}
-                                                      {:visemeId 1 :audioOffset 0.1}
-                                                      {:id 2 :time 0.15}])
-        words (transducers/normalize-word-boundaries [{:word "hi" :start_time 0 :end_time 0.2}
-                                                      {:word "" :start_time 0.3 :end_time 0.4}])
+(deftest transducers-keep-tts-provider-fields-and-let-lipsync-normalize-timing
+  (let [visemes (lipsync-transducers/normalize-azure-visemes [{:viseme_id 3 :audio_offset 0.2}
+                                                              {:visemeId 1 :audioOffset 0.1}
+                                                              {:id 2 :time 0.15}])
+        words (lipsync-transducers/normalize-word-boundaries [{:word "hi" :start_time 0 :end_time 0.2}
+                                                              {:word "" :start_time 0.3 :end_time 0.4}])
         synthesis (transducers/normalize-azure-synthesis {:audioBase64 "ZmFrZQ=="
                                                           :audioFormat "audio/mpeg"
                                                           :durationSec 0.42
                                                           :visemes [{:viseme_id 2 :audio_offset 0.1}]
-                                                          :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})]
+                                                          :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})
+        command (lipsync-transducers/azure-synthesis->lipsync-command
+                 "tts:test"
+                 "there"
+                 synthesis
+                 {:visualLeadMs 35})
+        normalized-command (lipsync-transducers/normalize-process-azure-command command)]
     (is (= [1 2 3] (map :id visemes)))
     (is (= [0.1 0.15 0.2] (map :time visemes)))
     (is (= [{:word "hi" :startSec 0 :endSec 0.2}] words))
     (is (= 0.42 (:durationSec synthesis)))
+    (is (= [{:viseme_id 2 :audio_offset 0.1}] (:visemes synthesis)))
     (is (= {:type "processAzureVisemes"
             :name "tts:test"
             :text "there"
             :source "azure"
-            :visemes [{:id 2 :time 0.1}]
+            :visemes [{:viseme_id 2 :audio_offset 0.1}]
             :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]
             :totalDurationMs 420
             :options {:visualLeadMs 35}}
-           (transducers/azure-synthesis->lipsync-command
-            "tts:test"
-            "there"
-            synthesis
-            {:visualLeadMs 35})))))
+           command))
+    (is (= [{:id 2 :time 0.1}] (:visemes normalized-command)))
+    (is (= [{:word "there" :startSec 0.1 :endSec 0.4}] (:wordTimings normalized-command)))))
 
-(deftest tts-agency-gates-provider-side-effects-with-goap
+(deftest tts-agency-gates-provider-side-effects-with-provider-plan
   (let [agency (polymer/createTTSAgency)
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "loadVoices" :engine "azure"})
@@ -141,7 +147,7 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
-(deftest character-network-routes-tts-to-vocal-and-animation
+(deftest character-network-routes-tts-to-lipsync-and-animation
   (let [calls (atom [])
         system (polymer/createCharacterAgencies
                 #js {:tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}
@@ -154,13 +160,13 @@
                                              :name "tts:test:character"}})
     (let [event-types (map :type @(:events events))]
       (is (some #{"ttsSpeechStarted"} event-types))
-      (is (some #{"vocalTimelineStarted"} event-types))
+      (is (some #{"lipSyncTimelineStarted"} event-types))
       (is (some #{"animationSnippetScheduled"} event-types))
       (is (= "playSnippet" (:method (first @calls)))))
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest tts-agency-normalizes-azure-before-lipsync
+(deftest tts-agency-emits-raw-azure-facts-for-lipsync-normalization
   (async done
          (let [agency (polymer/createTTSAgency
                        #js {:providers #js {:azureSynthesize
@@ -190,8 +196,8 @@
                 (let [commands (keep #(when (= "lipSync.command" (:type %)) (:command %)) @(:events events))
                       process-command (some #(when (= "processAzureVisemes" (:type %)) %) commands)]
                   (is process-command)
-                  (is (= [{:id 2 :time 0.1}] (:visemes process-command)))
-                  (is (= [{:word "hello" :startSec 0 :endSec 0.3}] (:wordTimings process-command))))
+                  (is (= [{:viseme_id 2 :audio_offset 0.1}] (:visemes process-command)))
+                  (is (= [{:word "hello" :start_time 0 :end_time 0.3}] (:wordTimings process-command))))
                 ((:unsubscribe events))
                 (.dispose ^js agency)
                 (done)

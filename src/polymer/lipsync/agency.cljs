@@ -1,19 +1,33 @@
-(ns polymer.vocal.agency
-  (:require [polymer.stream :as stream]
-            [polymer.vocal.azure :as azure]
-            [polymer.vocal.scheduler :as scheduler]
-            [polymer.vocal.snippet :as snippet]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.visemes :as visemes]))
+(ns polymer.lipsync.agency
+  (:require [polymer.lipsync.goap :as goap]
+            [polymer.lipsync.transducers :as transducers]
+            [polymer.stream :as stream]
+            [polymer.lipsync.articulation.azure :as azure]
+            [polymer.lipsync.scheduler :as scheduler]
+            [polymer.lipsync.articulation.snippet :as snippet]
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
-;; Vocal/LipSync accepts provider/text timing data and produces animation intent.
+;; LipSync accepts provider/text timing data and produces animation intent.
 ;; It does not own audio playback, provider credentials, HTTP, LiveKit, React,
 ;; storage, or DOM APIs. Those are host-side side effects that feed commands
-;; into this agency. Inside Polymer, the character network routes Vocal's
+;; into this agency. Inside Polymer, the character network routes LipSync's
 ;; animation requests to the Animation agency.
 
 (defn js-command [type value]
   #js {:type type :value value})
+
+(defn plan-failure-message
+  "Turn the failed LipSync plan step into a readable domain error."
+  [plan]
+  (let [step (first (:steps plan))]
+    (case (:reason step)
+      "unsupported-command" (str "lipSync plan failed: unsupported command " (:commandType step))
+      "missing-text" "lipSync plan failed: startText requires text"
+      "missing-timeline-visemes" "lipSync plan failed: startTimeline requires visemes"
+      "missing-provider-visemes" "lipSync plan failed: processAzureVisemes requires provider visemes"
+      "missing-word" "lipSync plan failed: wordBoundary requires a word"
+      (str "lipSync plan failed: " (:reason step)))))
 
 (defn visual-lead-ms [input config]
   (state/clamp 0 250 (state/number-or (:visualLeadMs input) (:visualLeadMs config))))
@@ -66,8 +80,8 @@
                                  (< millis-error raw-error)
                                  within-utterance?)
           max-time-says-ms? (and (> raw (+ max-time 2))
-                                  (> raw 50)
-                                  within-utterance?)]
+                                 (> raw 50)
+                                 within-utterance?)]
       (if (or expected-says-ms? max-time-says-ms?)
         millis
         raw))))
@@ -78,8 +92,8 @@
   ;; host clock. Use that host clock only when the provider clock is clearly not
   ;; advancing; otherwise provider timing remains the authority.
   (let [observed (normalize-observed-elapsed-sec (:observedElapsedSec payload)
-                                                expected
-                                                max-time)
+                                                 expected
+                                                 max-time)
         host (when (state/finite-number? (:hostElapsedSec payload))
                (max 0 (:hostElapsedSec payload)))
         expected-start (when expected (:startSec expected))]
@@ -150,9 +164,9 @@
 
 (defn timeline-name [timeline]
   (or (:name timeline)
-      (str "vocal_timeline_" (.now js/Date))))
+      (str "lipSync_timeline_" (.now js/Date))))
 
-(defn create-vocal-agency [config]
+(defn create-lipsync-agency [config]
   (let [input-stream (stream/create-stream)
         event-stream (stream/create-stream)
         effect-stream (stream/create-stream)
@@ -169,21 +183,21 @@
               ;; Polymer character network consumes it and dispatches directly
               ;; to Polymer Animation.
               (emit-event {:type "animation.requestScheduleSnippet"
-                           :agency "vocal"
+                           :agency "lipSync"
                            :requestId (:name snippet-data)
                            :snippet snippet-data
                            :options {:autoPlay true}}))
 
             (emit-animation-remove! [name reason]
               (emit-event {:type "animation.requestRemoveSnippet"
-                           :agency "vocal"
+                           :agency "lipSync"
                            :requestId name
                            :name name
                            :reason reason}))
 
             (emit-animation-seek! [name offset-sec reason]
               (emit-event {:type "animation.requestSeekSnippet"
-                           :agency "vocal"
+                           :agency "lipSync"
                            :requestId (str name ":seek:" (.now js/Date))
                            :name name
                            :offsetSec offset-sec
@@ -204,8 +218,8 @@
                 ((:stop s)))
               (let [stopped-at (state/now-ms)]
                 (swap! state-atom state/record-stop stopped-at reason)
-                (emit-event {:type "vocalTimelineStopped"
-                             :agency "vocal"
+                (emit-event {:type "lipSyncTimelineStopped"
+                             :agency "lipSync"
                              :reason reason
                              :stoppedAt stopped-at})))
 
@@ -218,8 +232,8 @@
                     normalized (normalize-timeline timeline config)]
                 (if (empty? (:visemes normalized))
                   (emit-event {:type "error"
-                               :agency "vocal"
-                               :message "Vocal timeline requires at least one viseme event"})
+                               :agency "lipSync"
+                               :message "lipSync timeline requires at least one viseme event"})
                   (do
                     ;; One active utterance at a time keeps lip sync from
                     ;; accumulating stale viseme snippets.
@@ -230,16 +244,16 @@
                                   (snippet/build-text-snippet (:text normalized)
                                                               (:visemes normalized)
                                                               config)
-                                  (snippet/build-vocal-snippet (:visemes normalized)
-                                                               config
-                                                               name))
+                                  (snippet/build-lipsync-snippet (:visemes normalized)
+                                                                 config
+                                                                 name))
                           snippet-data (cond-> (assoc built :name (or (:name normalized) (:name built)))
                                          (state/finite-number? (:durationSec normalized))
                                          (assoc :maxTime (max (:maxTime built) (:durationSec normalized))))
                           started-at (state/now-ms)]
                       (swap! state-atom state/record-start normalized (:name snippet-data) started-at (:maxTime snippet-data))
-                      (emit-event {:type "vocalTimelineStarted"
-                                   :agency "vocal"
+                      (emit-event {:type "lipSyncTimelineStarted"
+                                   :agency "lipSync"
                                    :name (:name snippet-data)
                                    :source (:source normalized)
                                    :text (:text normalized)
@@ -257,11 +271,12 @@
                 (if (and (string? text) (pos? (count text)))
                   (start-timeline! (prepare-text-timeline text speech-rate payload))
                   (emit-event {:type "error"
-                               :agency "vocal"
-                               :message "Vocal startText command requires text"}))))
+                               :agency "lipSync"
+                               :message "lipSync startText command requires text"}))))
 
             (process-azure! [payload]
-              (let [options (merge {:wordTimings (:wordTimings payload)
+              (let [payload (transducers/normalize-process-azure-command payload)
+                    options (merge {:wordTimings (:wordTimings payload)
                                     :visualLeadMs (get-in @state-atom [:config :visualLeadMs])}
                                    (:options payload))
                     timeline (azure/azure-visemes->timeline (:visemes payload)
@@ -281,16 +296,16 @@
                     word-index (int (state/number-or (:wordIndex payload) (:wordIndex @state-atom)))
                     observed-at (state/now-ms)]
                 (swap! state-atom state/record-word-boundary word word-index observed-at)
-                (emit-event {:type "vocalWordBoundary"
-                             :agency "vocal"
+                (emit-event {:type "lipSyncWordBoundary"
+                             :agency "lipSync"
                              :word word
                              :wordIndex word-index
                              :observedAt observed-at})
                 (let [current @state-atom
                       expected (get (:wordTimings current) word-index)
                       observed-elapsed-sec (choose-boundary-elapsed-sec payload
-                                                                         expected
-                                                                         (:maxTime current))
+                                                                        expected
+                                                                        (:maxTime current))
                       elapsed-sec (state/number-or observed-elapsed-sec
                                                    (if (:startTime current)
                                                      (/ (- observed-at (:startTime current)) 1000)
@@ -302,8 +317,8 @@
                     (let [target-sec (min (:maxTime current) (max 0 elapsed-sec))
                           corrected-at (state/now-ms)]
                       (swap! state-atom state/record-sync-correction name target-sec corrected-at)
-                      (emit-event {:type "vocalSyncDrift"
-                                   :agency "vocal"
+                      (emit-event {:type "lipSyncSyncDrift"
+                                   :agency "lipSync"
                                    :name name
                                    :word word
                                    :wordIndex word-index
@@ -315,7 +330,7 @@
                       (emit-animation-seek! name target-sec "word-boundary-drift"))))))
 
             (handle-audio-started! [payload]
-              ;; The host owns audio playback. This command tells Vocal when
+              ;; The host owns audio playback. This command tells LipSync when
               ;; that side effect actually started so Animation can align the
               ;; scheduled snippet to the audio clock without LoomLarge calling
               ;; Animation directly.
@@ -324,8 +339,8 @@
                     audio-time-sec (min (:maxTime current) (audio-clock-sec payload))
                     observed-at (state/now-ms)]
                 (swap! state-atom state/record-audio-started audio-time-sec observed-at)
-                (emit-event {:type "vocalAudioStarted"
-                             :agency "vocal"
+                (emit-event {:type "lipSyncAudioStarted"
+                             :agency "lipSync"
                              :name name
                              :audioTimeSec audio-time-sec
                              :observedAt observed-at})
@@ -341,8 +356,8 @@
                     audio-time-sec (min (:maxTime current) (audio-clock-sec payload))
                     observed-at (state/now-ms)]
                 (swap! state-atom state/record-audio-time audio-time-sec observed-at)
-                (emit-event {:type "vocalAudioTime"
-                             :agency "vocal"
+                (emit-event {:type "lipSyncAudioTime"
+                             :agency "lipSync"
                              :name name
                              :audioTimeSec audio-time-sec
                              :observedAt observed-at})
@@ -353,61 +368,69 @@
               (let [updated-at (state/now-ms)
                     timings (:wordTimings payload)]
                 (swap! state-atom state/record-word-timings timings updated-at)
-                (emit-event {:type "vocalWordTimingsUpdated"
-                             :agency "vocal"
+                (emit-event {:type "lipSyncWordTimingsUpdated"
+                             :agency "lipSync"
                              :count (count (state/normalize-word-timings timings))
                              :updatedAt updated-at})))
 
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
-                      type (:type payload)]
+                      type (:type payload)
+                      plan (goap/plan-command payload {:speaking (:speaking @state-atom)})]
                   (emit-input {:type "command"
-                               :agency "vocal"
+                               :agency "lipSync"
                                :command payload})
-                  (case type
-                    "configure"
-                    (do
-                      (swap! state-atom state/configure (:config payload))
-                      (emit-event {:type "vocalConfigChanged"
-                                   :agency "vocal"
-                                   :state @state-atom}))
-
-                    "startText"
-                    (start-text! payload)
-
-                    "startTimeline"
-                    (start-timeline! (:timeline payload))
-
-                    "processAzureVisemes"
-                    (process-azure! payload)
-
-                    "wordBoundary"
-                    (handle-word-boundary! payload)
-
-                    "audioStarted"
-                    (handle-audio-started! payload)
-
-                    "audioTime"
-                    (handle-audio-time! payload)
-
-                    "updateWordTimings"
-                    (update-word-timings! payload)
-
-                    "stop"
-                    (stop-local! "requested" true)
-
-                    "reset"
-                    (do
-                      (stop-local! "reset" true)
-                      (reset! state-atom (state/config->state nil))
-                      (emit-event {:type "vocalConfigChanged"
-                                   :agency "vocal"
-                                   :state @state-atom}))
-
+                  (emit-event {:type "lipSyncPlanCreated"
+                               :agency "lipSync"
+                               :plan plan})
+                  (if-not (:ok plan)
                     (emit-event {:type "error"
-                                 :agency "vocal"
-                                 :message (str "Unknown Vocal command: " type)})))))]
+                                 :agency "lipSync"
+                                 :message (plan-failure-message plan)})
+                    (case type
+                      "configure"
+                      (do
+                        (swap! state-atom state/configure (:config payload))
+                        (emit-event {:type "lipSyncConfigChanged"
+                                     :agency "lipSync"
+                                     :state @state-atom}))
+
+                      "startText"
+                      (start-text! payload)
+
+                      "startTimeline"
+                      (start-timeline! (:timeline payload))
+
+                      "processAzureVisemes"
+                      (process-azure! payload)
+
+                      "wordBoundary"
+                      (handle-word-boundary! payload)
+
+                      "audioStarted"
+                      (handle-audio-started! payload)
+
+                      "audioTime"
+                      (handle-audio-time! payload)
+
+                      "updateWordTimings"
+                      (update-word-timings! payload)
+
+                      "stop"
+                      (stop-local! "requested" true)
+
+                      "reset"
+                      (do
+                        (stop-local! "reset" true)
+                        (reset! state-atom (state/config->state nil))
+                        (emit-event {:type "lipSyncConfigChanged"
+                                     :agency "lipSync"
+                                     :state @state-atom}))
+
+                      (emit-event {:type "error"
+                                   :agency "lipSync"
+                                   :message (str "Unknown LipSync command: " type)}))))))]
       (reset! agency-scheduler (scheduler/create-scheduler {:on-finished finish-local!}))
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))

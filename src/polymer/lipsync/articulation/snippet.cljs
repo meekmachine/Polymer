@@ -1,9 +1,9 @@
-(ns polymer.vocal.snippet
+(ns polymer.lipsync.articulation.snippet
   (:require [clojure.string :as str]
-            [polymer.vocal.jaw :as jaw]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.tongue :as tongue]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.articulation.jaw :as jaw]
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.tongue :as tongue]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
 ;; Snippet construction is pure: it turns a normalized viseme timeline into the
 ;; animation data that Polymer Animation can schedule. It does not know about
@@ -382,7 +382,7 @@
                    (str/join "_")
                    str/lower-case
                    (#(str/replace % #"[^a-z_]" "")))]
-    (next-snippet-name (str "vocal_" (if (pos? (count words)) words "timeline")))))
+    (next-snippet-name (str "lipSync_" (if (pos? (count words)) words "timeline")))))
 
 (defn build-curves [events config]
   (let [raw-curves (reduce (fn [curves event]
@@ -409,8 +409,8 @@
     ;; AU/composite control, not a viseme slot competing for lip-shape budget.
     (merge with-jaw tongue-curves)))
 
-(defn vocal-channel-target [curve-key]
-  ;; Vocal owns its animation namespace explicitly. Numeric keys 0-14 are
+(defn lipsync-channel-target [curve-key]
+  ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
   ;; canonical viseme slots. Numeric keys above that are regular AUs, including
   ;; AU 26 for jaw and AU 37 for tongue-up. Keeping this as data lets Embody
   ;; route viseme 1 and AU 1 at the same time without snippetCategory.
@@ -430,7 +430,7 @@
 (defn curves->channels [curves]
   (->> curves
        (map (fn [[curve-key curve]]
-              {:target (vocal-channel-target curve-key)
+              {:target (lipsync-channel-target curve-key)
                :keyframes curve}))
        vec))
 
@@ -443,12 +443,12 @@
                     (apply max 0 (mapcat (fn [[_ curve]] (map :time curve)) curves)))]
     (max event-max curve-max)))
 
-(defn build-vocal-snippet
-  ([events config] (build-vocal-snippet events config nil))
+(defn build-lipsync-snippet
+  ([events config] (build-lipsync-snippet events config nil))
   ([events config name]
    (let [config (state/sanitize-config config)
          normalized-events (normalize-events events)
-         snippet-name (or name (next-snippet-name "vocal"))
+         snippet-name (or name (next-snippet-name "lipSync"))
          curves (build-curves normalized-events config)
          max-time (max-snippet-time normalized-events curves)]
      {:name snippet-name
@@ -463,9 +463,9 @@
       :maxTime max-time
       :curves curves
       :channels (curves->channels curves)
-      :metadata {:agency "vocal"
+      :metadata {:agency "lipSync"
                  :visemeCount (count normalized-events)
                  :tongueCurveCount (count (select-keys curves [tongue/tongue-up-au]))}})))
 
 (defn build-text-snippet [text events config]
-  (build-vocal-snippet events config (text-snippet-name text)))
+  (build-lipsync-snippet events config (text-snippet-name text)))

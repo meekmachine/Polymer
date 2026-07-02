@@ -1,6 +1,6 @@
-(ns polymer.vocal.visemes
+(ns polymer.lipsync.articulation.visemes
   (:require [clojure.string :as str]
-            [polymer.vocal.state :as state]))
+            [polymer.lipsync.state :as state]))
 
 ;; Polymer keeps the canonical 15-slot CC4/ARKit viseme order beside the CLJS
 ;; lip-sync code so numeric curves line up with Embody/Loom3. This mirrors the

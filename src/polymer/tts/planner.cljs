@@ -1,9 +1,9 @@
-(ns polymer.tts.goap)
+(ns polymer.tts.planner)
 
-;; The TTS GOAP layer is intentionally small: it produces data plans, not a
+;; The TTS provider planning layer is intentionally small: it produces data plans, not a
 ;; planner framework. The agency still executes the plan explicitly.
 ;;
-;; In this package "GOAP" means "turn the requested goal plus available world
+;; In this package "provider plan" means "turn the requested goal plus available world
 ;; facts into an auditable action list." It does not mean hidden control flow.
 ;; The browser/backend calls remain in polymer.tts.agency, and the pure provider
 ;; payload cleanup remains in polymer.tts.transducers.
@@ -81,7 +81,7 @@
   (not= "fail" (:op (first steps))))
 
 (defn plan-speech
-  "Build an auditable GOAP-style plan for a speak command."
+  "Build an auditable provider plan-style plan for a speak command."
   [command config world]
   (let [goal (provider-goal command config world)
         steps (speech-steps goal)]

@@ -1,7 +1,7 @@
-(ns polymer.vocal.jaw
+(ns polymer.lipsync.articulation.jaw
   (:require [clojure.string :as str]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
 ;; The jaw planner is deliberately separate from lip/viseme curve assembly.
 ;; JALI-style lip sync treats mouth shape and jaw drop as related but distinct

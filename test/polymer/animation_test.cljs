@@ -51,44 +51,44 @@
 
 (deftest animation-agency-owns-schedule-and-calls-runtime
   (async done
-    (let [calls (atom [])
-          agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})
-          events (domain-events agency)]
-      (.dispatch ^js agency #js {:type "scheduleSnippet"
-                                 :sourceAgency "test"
-                                 :snippet #js {:name "test:blink"
-                                               :curves #js {"43" #js [#js {:time 0 :intensity 0}
-                                                                      #js {:time 0.05 :intensity 1}
-                                                                      #js {:time 0.1 :intensity 0}]}
-                                               :maxTime 0.05
-                                               :loop false
-                                               :snippetCategory "test"
-                                               :snippetPriority 1}
-                                 :options #js {:autoPlay true}})
-      (is (= "playSnippet" (:method (first @calls))))
-      (is (= "test:blink" (:name (first @calls))))
-      (is (= "animationSnippetScheduled" (:type (first @(:events events)))))
-      (is (= "animationSnippetStarted" (:type (second @(:events events)))))
-      (is (some (fn [entry] (= "test:blink" (:name entry)))
-                (vals (:scheduled (js->clj (.snapshot ^js agency) :keywordize-keys true)))))
-      (js/setTimeout
-       (fn []
-         (try
-           (is (some #(= "animationSnippetRemoved" (:type %)) @(:events events)))
-           (is (some #(= "cleanupSnippet" (:method %)) @calls))
-           ((:unsubscribe events))
-           (.dispose ^js agency)
-           (done)
-           (catch :default error
-             (.dispose ^js agency)
-             (throw error))))
-       130))))
+         (let [calls (atom [])
+               agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})
+               events (domain-events agency)]
+           (.dispatch ^js agency #js {:type "scheduleSnippet"
+                                      :sourceAgency "test"
+                                      :snippet #js {:name "test:blink"
+                                                    :curves #js {"43" #js [#js {:time 0 :intensity 0}
+                                                                           #js {:time 0.05 :intensity 1}
+                                                                           #js {:time 0.1 :intensity 0}]}
+                                                    :maxTime 0.05
+                                                    :loop false
+                                                    :snippetCategory "test"
+                                                    :snippetPriority 1}
+                                      :options #js {:autoPlay true}})
+           (is (= "playSnippet" (:method (first @calls))))
+           (is (= "test:blink" (:name (first @calls))))
+           (is (= "animationSnippetScheduled" (:type (first @(:events events)))))
+           (is (= "animationSnippetStarted" (:type (second @(:events events)))))
+           (is (some (fn [entry] (= "test:blink" (:name entry)))
+                     (vals (:scheduled (js->clj (.snapshot ^js agency) :keywordize-keys true)))))
+           (js/setTimeout
+            (fn []
+              (try
+                (is (some #(= "animationSnippetRemoved" (:type %)) @(:events events)))
+                (is (some #(= "cleanupSnippet" (:method %)) @calls))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            130))))
 
-(deftest animation-routes-vocal-snippets-through-viseme-curves-when-enclosure-data-exists
+(deftest animation-routes-lipsync-snippets-through-viseme-curves-when-enclosure-data-exists
   (let [calls (atom [])
         agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
     (.dispatch ^js agency #js {:type "scheduleSnippet"
-                               :sourceAgency "vocal"
+                               :sourceAgency "lipSync"
                                :snippet #js {:name "voice:webspeech"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
@@ -142,7 +142,7 @@
   (let [calls (atom [])
         agency (polymer/createAnimationAgency #js {:runtime (make-legacy-runtime calls)})]
     (.dispatch ^js agency #js {:type "scheduleSnippet"
-                               :sourceAgency "vocal"
+                               :sourceAgency "lipSync"
                                :snippet #js {:name "voice:legacy"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]

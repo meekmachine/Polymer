@@ -1,6 +1,6 @@
-(ns polymer.vocal.scheduler)
+(ns polymer.lipsync.scheduler)
 
-;; Vocal owns one small timer: marking the agency idle after an utterance-length
+;; LipSync owns one small timer: marking the agency idle after an utterance-length
 ;; snippet should have finished. It does not remove runtime clips; Polymer
 ;; Animation owns snippet cleanup through the active clip handle/timer.
 

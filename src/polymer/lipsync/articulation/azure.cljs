@@ -1,7 +1,7 @@
-(ns polymer.vocal.azure
+(ns polymer.lipsync.articulation.azure
   (:require [clojure.string :as str]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
 ;; Azure Speech emits SAPI-style viseme IDs 0-21. Embody/Loom3 expects the
 ;; canonical 15-slot CC4/ARKit order. This namespace is pure normalization:
@@ -157,7 +157,7 @@
                             canonical-id
                             (= (:canonicalId previous) canonical-id)
                             (< (js/Math.abs (- (* 1000 (:time event))
-                                                (* 1000 (:time previous))))
+                                               (* 1000 (:time previous))))
                                duplicate-window-ms))]
         (recur (rest remaining)
                (if (or (nil? canonical-id) duplicate?)
