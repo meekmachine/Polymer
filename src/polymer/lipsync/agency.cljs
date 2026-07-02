@@ -2,7 +2,7 @@
   (:require [polymer.lipsync.goap :as goap]
             [polymer.lipsync.transducers :as transducers]
             [polymer.stream :as stream]
-            [polymer.lipsync.articulation.azure :as azure]
+            [polymer.tts.azure :as azure]
             [polymer.lipsync.scheduler :as scheduler]
             [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.state :as state]
@@ -285,8 +285,9 @@
 
             (process-azure! [payload]
               ;; Azure/LiveKit can use several field shapes. Normalize those
-              ;; provider facts here, then map them to the same articulated
-              ;; timeline path used by Web Speech/text input.
+              ;; provider facts here, then delegate the Azure-specific provider
+              ;; mapping to TTS before using the same articulated timeline path
+              ;; as Web Speech/text input.
               (let [payload (transducers/normalize-process-azure-command payload)
                     options (merge {:wordTimings (:wordTimings payload)
                                     :visualLeadMs (get-in @state-atom [:config :visualLeadMs])}

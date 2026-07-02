@@ -1,4 +1,4 @@
-(ns polymer.lipsync.articulation.azure
+(ns polymer.tts.azure
   (:require [clojure.string :as str]
             [polymer.lipsync.state :as state]
             [polymer.lipsync.articulation.visemes :as visemes]))
@@ -6,6 +6,11 @@
 ;; Azure Speech emits SAPI-style viseme IDs 0-21. Embody/Loom3 expects the
 ;; canonical 15-slot CC4/ARKit order. This namespace is pure normalization:
 ;; provider event data in, Polymer viseme timeline data out.
+;;
+;; This lives under TTS, not LipSync articulation, because Azure IDs are provider
+;; facts. The namespace imports LipSync's canonical viseme definitions only to
+;; output the provider-neutral timeline that LipSync can articulate like any
+;; other text/timeline source.
 
 (def azure->canonical
   {0 (:B_M_P visemes/canonical-visemes)

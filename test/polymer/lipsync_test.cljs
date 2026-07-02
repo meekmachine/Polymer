@@ -1,10 +1,10 @@
 (ns polymer.lipsync-test
   (:require [cljs.test :refer [deftest is testing]]
             [polymer.core :as polymer]
-            [polymer.lipsync.articulation.azure :as azure]
             [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.articulation.tongue :as tongue]
-            [polymer.lipsync.articulation.visemes :as visemes]))
+            [polymer.lipsync.articulation.visemes :as visemes]
+            [polymer.tts.azure :as azure]))
 
 (defn collect [target subscribe-fn]
   (let [events (atom [])]
