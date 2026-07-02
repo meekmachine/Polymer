@@ -84,7 +84,7 @@
              (throw error))))
        130))))
 
-(deftest animation-routes-vocal-snippets-through-typed-channels
+(deftest animation-routes-vocal-snippets-through-viseme-curves-when-enclosure-data-exists
   (let [calls (atom [])
         agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
     (.dispatch ^js agency #js {:type "scheduleSnippet"
@@ -108,16 +108,34 @@
                                :options #js {:autoPlay true}})
     (let [call (first @calls)
           options (:options call)]
-      (is (= "playTypedSnippet" (:method call)))
-      (is (= "viseme" (get-in call [:channels 0 :target :type])))
-      (is (= 1 (get-in call [:channels 0 :target :id])))
-      (is (= "au" (get-in call [:channels 1 :target :type])))
-      (is (= 26 (get-in call [:channels 1 :target :id])))
-      (is (not (contains? options :snippetCategory)))
+      (is (= "playSnippet" (:method call)))
+      (is (seq (get-in call [:curves :1])))
+      (is (seq (get-in call [:curves :26])))
+      (is (= "visemeSnippet" (:snippetCategory options)))
       (is (= 0.8 (:intensityScale options)))
       (is (= 0.8 (:weight options)))
       (is (= 1.25 (:jawScale options)))
       (is (false? (:autoVisemeJaw options))))
+    (.dispose ^js agency)))
+
+(deftest animation-routes-pure-typed-snippets-through-typed-runtime
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "typed-test"
+                               :snippet #js {:name "typed:only"
+                                             :channels #js [#js {:target #js {:type "au" :id 45}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 1}]}]
+                                             :maxTime 0.08
+                                             :loop false}
+                               :options #js {:autoPlay true}})
+    (let [call (first @calls)
+          options (:options call)]
+      (is (= "playTypedSnippet" (:method call)))
+      (is (= "au" (get-in call [:channels 0 :target :type])))
+      (is (= 45 (get-in call [:channels 0 :target :id])))
+      (is (not (contains? options :snippetCategory))))
     (.dispose ^js agency)))
 
 (deftest animation-synthesizes-viseme-category-only-for-legacy-runtime

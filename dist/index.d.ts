@@ -1,5 +1,4 @@
 import type { LoomLargeThree } from '@lovelace_lol/loom3';
-import type { EmbodyAnimationRuntime } from '@lovelace_lol/loom3/cljs';
 
 export interface BlinkState {
   agency: 'blink';
@@ -115,16 +114,41 @@ export interface PolymerSnippetChannel {
   intensityScale?: number;
 }
 
-export interface PolymerAnimationRuntime extends EmbodyAnimationRuntime {
+export interface PolymerAnimationHandle {
+  play?: () => unknown;
+  stop?: () => unknown;
+  setTime?: (offsetSec: number) => unknown;
+  seek?: (offsetSec: number) => unknown;
+  finished?: Promise<unknown> | { then: (onFulfilled?: () => unknown, onRejected?: (error: unknown) => unknown) => unknown };
+}
+
+export interface PolymerAnimationRuntime {
+  buildClip?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
+  playSnippet?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
   playTypedSnippet?: (
     snippet: { name: string; channels: PolymerSnippetChannel[] },
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
   buildTypedClip?: (
     name: string,
     channels: PolymerSnippetChannel[],
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
+  updateClipParams?: (name: string, params: Record<string, unknown>) => unknown;
+  setSnippetTime?: (name: string, offsetSec: number) => unknown;
+  seekSnippet?: (name: string, offsetSec: number) => unknown;
+  seek?: (name: string, offsetSec: number) => unknown;
+  cleanupSnippet?: (name: string) => unknown;
+  stopAnimation?: (name: string) => unknown;
+  getAnimationState?: (name: string) => unknown;
 }
 
 export interface PolymerAnimationSnippet {
@@ -146,6 +170,8 @@ export interface VocalConfig {
   intensity?: number;
   speechRate?: number;
   jawScale?: number;
+  /** Scale for independently planned tongue AU curves. Set 0 to disable tongue motion. */
+  tongueScale?: number;
   rampMs?: number;
   holdMs?: number;
   priority?: number;
@@ -155,6 +181,23 @@ export interface VocalConfig {
 
 export interface VocalVisemeEvent {
   visemeId: number;
+  /**
+   * Optional independent jaw-axis activation for this event. When omitted,
+   * Polymer derives a default from the canonical viseme slot. Set to 0 for a
+   * lip-only viseme, or scale with VocalConfig.jawScale for JALI-style control.
+   */
+  jawActivation?: number;
+  phoneme?: string;
+  /**
+   * Primary visual-speech class for planner rules, e.g. vowel, bilabial,
+   * labiodental, sibilant, obstruent, nasal, tongue, liquid, glide, or pause.
+   */
+  phonemeClass?: string;
+  /**
+   * Full class set for phonemes that need multiple JALI-style rules, such as
+   * M being both bilabial and nasal or F being labiodental and fricative.
+   */
+  phonemeClasses?: string[];
   offsetMs: number;
   durationMs: number;
 }
@@ -196,6 +239,8 @@ export interface VocalState {
   source: string | null;
   text: string | null;
   startTime: number | null;
+  audioStartedAt: number | null;
+  audioTimeSec: number | null;
   maxTime: number;
   wordIndex: number;
   wordTimings: Array<{ word: string; startSec: number; endSec: number }>;
@@ -208,7 +253,15 @@ export interface VocalState {
 
 export type VocalDispatch =
   | { type: 'configure'; config: VocalConfig }
-  | { type: 'startText'; text: string; name?: string; source?: string; wordTimings?: VocalWordTiming[] }
+  | {
+      type: 'startText';
+      text: string;
+      name?: string;
+      source?: string;
+      wordTimings?: VocalWordTiming[];
+      durationSec?: number;
+      totalDurationMs?: number;
+    }
   | { type: 'startTimeline'; timeline: VocalTimeline }
   | {
       type: 'processAzureVisemes';
@@ -220,7 +273,9 @@ export type VocalDispatch =
       wordTimings?: VocalWordTiming[];
       options?: { wordTimings?: VocalWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
     }
-  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number }
+  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number; hostElapsedSec?: number }
+  | { type: 'audioStarted'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
+  | { type: 'audioTime'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
   | { type: 'updateWordTimings'; wordTimings: VocalWordTiming[] }
   | { type: 'stop' }
   | { type: 'reset' };
@@ -318,6 +373,8 @@ export type PolymerDomainEvent =
   | { type: 'vocalTimelineStopped'; agency: 'vocal'; reason: string; stoppedAt: number }
   | { type: 'vocalWordBoundary'; agency: 'vocal'; word: string; wordIndex: number; observedAt: number }
   | { type: 'vocalWordTimingsUpdated'; agency: 'vocal'; count: number; updatedAt: number }
+  | { type: 'vocalAudioStarted'; agency: 'vocal'; name?: string; audioTimeSec: number; observedAt: number }
+  | { type: 'vocalAudioTime'; agency: 'vocal'; name?: string; audioTimeSec: number; observedAt: number }
   | {
       type: 'vocalSyncDrift';
       agency: 'vocal';
@@ -407,7 +464,9 @@ export interface VocalAgency {
   startText(text: string): void;
   startTimeline(timeline: VocalTimeline): void;
   processAzureVisemes(visemes: AzureVisemeEvent[], totalDurationMs?: number): void;
-  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number): void;
+  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number, hostElapsedSec?: number): void;
+  audioStarted(audioTimeSec?: number): void;
+  audioTime(audioTimeSec: number): void;
   updateWordTimings(wordTimings: VocalWordTiming[]): void;
   stop(): void;
   reset(): void;

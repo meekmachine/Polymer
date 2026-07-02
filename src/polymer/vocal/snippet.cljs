@@ -1,6 +1,8 @@
 (ns polymer.vocal.snippet
   (:require [clojure.string :as str]
+            [polymer.vocal.jaw :as jaw]
             [polymer.vocal.state :as state]
+            [polymer.vocal.tongue :as tongue]
             [polymer.vocal.visemes :as visemes]))
 
 ;; Snippet construction is pure: it turns a normalized viseme timeline into the
@@ -12,10 +14,12 @@
 (def coarticulation-strength 0.52)
 (def envelope-shoulder-ratio 0.55)
 (def envelope-shoulder-intensity 0.62)
-(def jaw-attack-sec 0.04)
-(def jaw-release-sec 0.065)
-(def jaw-transition-lead-sec 0.024)
-(def jaw-long-gap-sec 0.09)
+(def lip-total-activation-cap 1.05)
+(def lip-dominant-cap 1)
+(def lip-secondary-ratio 0.30)
+(def lip-secondary-cap 0.22)
+(def closure-dominance-threshold 0.55)
+(def closure-secondary-cap 0.035)
 
 (def vowel-visemes
   #{(:AE visemes/canonical-visemes)
@@ -31,14 +35,28 @@
 (defn normalize-event [event]
   (let [viseme-id (or (:visemeId event) (:viseme_id event) (:id event))
         offset-ms (or (:offsetMs event) (:offset_ms event) (:offset event) 0)
-        duration-ms (or (:durationMs event) (:duration_ms event) (:duration event) 0)]
+        duration-ms (or (:durationMs event) (:duration_ms event) (:duration event) 0)
+        jaw-activation (or (:jawActivation event)
+                           (:jaw_activation event)
+                           (:jaw event)
+                           (:jawAmount event))]
     (when (and (finite-number? viseme-id)
                (finite-number? offset-ms)
                (finite-number? duration-ms)
                (pos? duration-ms))
-      {:visemeId (int (state/clamp 0 14 viseme-id))
-       :offsetMs (max 0 offset-ms)
-       :durationMs (max 1 duration-ms)})))
+      (let [canonical-id (int (state/clamp 0 14 viseme-id))]
+        (cond->
+         {:visemeId canonical-id
+          :offsetMs (max 0 offset-ms)
+          :durationMs (max 1 duration-ms)
+          :jawActivation (if (finite-number? jaw-activation)
+                           (state/clamp 0 2 jaw-activation)
+                           (visemes/jaw-activation-for-viseme canonical-id))}
+          (:phoneme event) (assoc :phoneme (:phoneme event))
+          (or (:phonemeClass event) (:phoneme_class event))
+          (assoc :phonemeClass (or (:phonemeClass event) (:phoneme_class event)))
+          (or (:phonemeClasses event) (:phoneme_classes event))
+          (assoc :phonemeClasses (or (:phonemeClasses event) (:phoneme_classes event))))))))
 
 (defn normalize-events [events]
   (->> (or events [])
@@ -104,7 +122,7 @@
             (recur (rest remaining) (if keep? (conj result curr) result))))))))
 
 (defn scale-lip-intensity [value intensity]
-  (let [normalized (state/clamp 0 1 value)
+  (let [normalized (state/clamp 0 lip-dominant-cap value)
         scale (max 0 (state/number-or intensity 1))]
     (cond
       (<= (js/Math.abs (- scale 1)) intensity-eps) normalized
@@ -201,49 +219,157 @@
                  (update next-key update-first-frame-time
                          #(max 0 (- % (* 0.016 coarticulation-strength))))))))))
 
-(defn push-jaw-frame [curve time intensity]
-  (if (or (not (finite-number? time)) (not (finite-number? intensity)))
-    curve
-    (let [frame {:time (max 0 time)
-                 :intensity (state/clamp 0 2 intensity)}
-          previous (last curve)]
-      (if (and previous (< (js/Math.abs (- (:time previous) (:time frame))) 0.001))
-        (assoc-in curve [(dec (count curve)) :intensity] (:intensity frame))
-        (conj curve frame)))))
+(defn sample-curve-at [curve time]
+  ;; The limiter below works on sampled poses instead of raw keyframes. That is
+  ;; what keeps dense Azure timelines from briefly activating several full lip
+  ;; shapes at once between keyframes.
+  (let [frames (vec curve)]
+    (cond
+      (empty? frames) 0
+      (<= time (:time (first frames))) (:intensity (first frames))
+      (>= time (:time (last frames))) (:intensity (last frames))
+      :else
+      (loop [index 0]
+        (if (>= index (dec (count frames)))
+          0
+          (let [a (get frames index)
+                b (get frames (inc index))]
+            (if (and (>= time (:time a)) (<= time (:time b)))
+              (let [span (max 0.000001 (- (:time b) (:time a)))
+                    progress (/ (- time (:time a)) span)]
+                (+ (:intensity a) (* (- (:intensity b) (:intensity a)) progress)))
+              (recur (inc index)))))))))
+
+(defn rounded-sample-time [time]
+  (/ (js/Math.round (* time 1000)) 1000))
+
+(defn collect-lip-sample-times [curves]
+  (let [times (atom #{})]
+    (doseq [[key curve] curves
+            :when (not= key jaw-au)
+            frame curve]
+      (when (and (finite-number? (:time frame)) (>= (:time frame) 0))
+        (swap! times conj (rounded-sample-time (:time frame)))))
+    (let [sorted (sort @times)]
+      ;; Add midpoints across short spans so overlap is capped between envelope
+      ;; keyframes, where the visual flapping usually appears.
+      (doseq [[start end] (map vector sorted (rest sorted))
+              :when (and (> end start) (<= (- end start) 0.12))]
+        (swap! times conj (rounded-sample-time (/ (+ start end) 2)))))
+    (->> @times sort vec)))
+
+(defn fit-secondary-activation [active adjusted budget]
+  (let [secondary (vec (rest active))
+        secondary-sum (reduce + (map :value secondary))]
+    (if (or (empty? secondary) (<= secondary-sum budget))
+      adjusted
+      (let [scale (/ budget secondary-sum)]
+        (reduce (fn [result entry]
+                  (assoc result (:key entry) (* (:value entry) scale)))
+                adjusted
+                secondary)))))
+
+(defn trim-inactive-padding [curve]
+  (let [frames (vec curve)
+        first-active (first (keep-indexed (fn [idx frame]
+                                            (when (> (:intensity frame) intensity-eps) idx))
+                                          frames))]
+    (if (nil? first-active)
+      []
+      (let [last-active (loop [idx (dec (count frames))]
+                          (cond
+                            (neg? idx) idx
+                            (> (:intensity (get frames idx)) intensity-eps) idx
+                            :else (recur (dec idx))))
+            start (max 0 (dec first-active))
+            end (min (dec (count frames)) (inc last-active))]
+        (subvec frames start (inc end))))))
+
+(defn limit-concurrent-lip-activation [curves]
+  ;; Stable Latticework intentionally does not let every overlapping viseme keep
+  ;; its full value. The strongest active shape leads, secondary shapes get a
+  ;; small budget, and closed-mouth bilabials suppress everything else.
+  (let [lip-keys (->> (keys curves) (remove #(= % jaw-au)) vec)]
+    (if (<= (count lip-keys) 1)
+      curves
+      (let [sample-times (collect-lip-sample-times curves)]
+        (if (empty? sample-times)
+          curves
+          (let [normalized (reduce (fn [result time]
+                                     (let [values (mapv (fn [key]
+                                                          {:key key
+                                                           :visemeId (js/parseInt key 10)
+                                                           :value (state/clamp 0 lip-dominant-cap
+                                                                               (sample-curve-at (get curves key) time))})
+                                                        lip-keys)
+                                           active (->> values
+                                                       (filter #(> (:value %) intensity-eps))
+                                                       (sort-by :value >)
+                                                       vec)
+                                           adjusted-a (into {} (map (fn [entry] [(:key entry) (:value entry)]) values))
+                                           adjusted-b (if (> (count active) 1)
+                                                        (let [dominant (first active)]
+                                                          (if (and (= (:visemeId dominant) (:B_M_P visemes/canonical-visemes))
+                                                                   (>= (:value dominant) closure-dominance-threshold))
+                                                            (fit-secondary-activation active adjusted-a closure-secondary-cap)
+                                                            (let [total (reduce + (map :value active))]
+                                                              (if (> total lip-total-activation-cap)
+                                                                (let [budget (max 0
+                                                                                  (min (- lip-total-activation-cap (:value dominant))
+                                                                                       (* (:value dominant) lip-secondary-ratio)
+                                                                                       lip-secondary-cap))]
+                                                                  (fit-secondary-activation active adjusted-a budget))
+                                                                adjusted-a))))
+                                                        adjusted-a)]
+                                       (reduce (fn [acc key]
+                                                 (update acc key conj {:time time
+                                                                       :intensity (get adjusted-b key 0)}))
+                                               result
+                                               lip-keys)))
+                                   (into {} (map (fn [key] [key []]) lip-keys))
+                                   sample-times)]
+            (into {} (map (fn [key]
+                            [key (-> normalized
+                                     (get key)
+                                     deduplicate-curve
+                                     trim-inactive-padding
+                                     vec)])
+                          lip-keys))))))))
+
+(defn reduce-curve-keys [viseme-id curve]
+  (let [frames (vec curve)]
+    (if (<= (count frames) 3)
+      frames
+      (let [profile (envelope-profile viseme-id)
+            reduced (loop [index 1
+                           result [(first frames)]]
+                      (if (>= index (dec (count frames)))
+                        result
+                        (let [prev (last result)
+                              curr (get frames index)
+                              next-frame (get frames (inc index))
+                              preserves-peak? (>= (:intensity curr) (- (:peak profile) 0.02))
+                              preserves-closure? (and (= viseme-id (:B_M_P visemes/canonical-visemes))
+                                                      (>= (:intensity curr) 0.98))
+                              near-flat? (and (< (js/Math.abs (- (:intensity curr) (:intensity prev))) 0.015)
+                                              (< (js/Math.abs (- (:intensity next-frame) (:intensity curr))) 0.015))]
+                          (recur (inc index)
+                                 (if (or (not near-flat?) preserves-peak? preserves-closure?)
+                                   (conj result curr)
+                                   result)))))]
+        (conj reduced (last frames))))))
+
+(defn reduce-lip-keys [curves]
+  (into {}
+        (map (fn [[key curve]]
+               (let [ordered (->> curve (sort-by :time) deduplicate-curve vec)]
+                 [key (if (= key jaw-au)
+                        ordered
+                        (reduce-curve-keys (js/parseInt key 10) ordered))])))
+        curves))
 
 (defn build-jaw-curve [events jaw-scale]
-  (let [sorted-events (vec (sort-by :offsetMs events))]
-    (loop [index 0
-           curve []]
-      (if (>= index (count sorted-events))
-        (->> curve (sort-by :time) deduplicate-curve vec)
-        (let [event (get sorted-events index)
-              previous (get sorted-events (dec index))
-              next-event (get sorted-events (inc index))
-              start-sec (/ (:offsetMs event) 1000)
-              duration-sec (/ (:durationMs event) 1000)
-              end-sec (+ start-sec duration-sec)
-              jaw-amount (min 2 (* (visemes/jaw-amount-for-viseme (:visemeId event)) jaw-scale))
-              attack-sec (min jaw-attack-sec (max 0.006 (* duration-sec 0.35)))
-              release-sec (min jaw-release-sec (max 0.010 (* duration-sec 0.45)))
-              previous-end-sec (if previous (/ (+ (:offsetMs previous) (:durationMs previous)) 1000) 0)
-              starts-after-gap? (or (nil? previous) (> (- start-sec previous-end-sec) jaw-long-gap-sec))
-              curve-a (if starts-after-gap? (push-jaw-frame curve start-sec 0) curve)
-              curve-b (push-jaw-frame curve-a (+ start-sec attack-sec) jaw-amount)]
-          (recur (inc index)
-                 (if next-event
-                   (let [next-start-sec (/ (:offsetMs next-event) 1000)
-                         gap-sec (- next-start-sec end-sec)]
-                     (if (> gap-sec jaw-long-gap-sec)
-                       (-> curve-b
-                           (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-amount)
-                           (push-jaw-frame end-sec 0))
-                       (push-jaw-frame curve-b
-                                       (max (+ start-sec attack-sec) (- next-start-sec jaw-transition-lead-sec))
-                                       jaw-amount)))
-                   (-> curve-b
-                       (push-jaw-frame (max (+ start-sec attack-sec) (- end-sec release-sec)) jaw-amount)
-                       (push-jaw-frame end-sec 0)))))))))
+  (jaw/build-jaw-curve events jaw-scale))
 
 (def snippet-counter (atom 0))
 
@@ -270,22 +396,36 @@
                                  (update curves key #(if % (merge-curves % curve) curve)))))
                            {}
                            events)
-        articulated (apply-coarticulation raw-curves events)
-        reduced (into {} (map (fn [[key curve]]
-                                [key (->> curve (sort-by :time) deduplicate-curve vec)])
-                              articulated))
-        jaw-curve (build-jaw-curve events (:jawScale config))]
-    (if (empty? jaw-curve)
-      reduced
-      (assoc reduced jaw-au jaw-curve))))
+        articulated (-> raw-curves
+                        (apply-coarticulation events)
+                        limit-concurrent-lip-activation
+                        reduce-lip-keys)
+        jaw-curve (build-jaw-curve events (:jawScale config))
+        tongue-curves (tongue/build-tongue-curves events (:tongueScale config))
+        with-jaw (if (empty? jaw-curve)
+                   articulated
+                   (assoc articulated jaw-au jaw-curve))]
+    ;; Tongue curves are added after lip limiting because AU 37 is an ordinary
+    ;; AU/composite control, not a viseme slot competing for lip-shape budget.
+    (merge with-jaw tongue-curves)))
 
 (defn vocal-channel-target [curve-key]
   ;; Vocal owns its animation namespace explicitly. Numeric keys 0-14 are
-  ;; canonical viseme slots; the jaw curve is AU 26. Keeping this as data lets
-  ;; Embody route viseme 1 and AU 1 at the same time without snippetCategory.
-  (if (= jaw-au (str curve-key))
-    {:type "au" :id 26}
-    {:type "viseme" :id (js/parseInt (str curve-key) 10)}))
+  ;; canonical viseme slots. Numeric keys above that are regular AUs, including
+  ;; AU 26 for jaw and AU 37 for tongue-up. Keeping this as data lets Embody
+  ;; route viseme 1 and AU 1 at the same time without snippetCategory.
+  (let [key (str curve-key)
+        numeric-id (when (re-matches #"^\d+$" key)
+                     (js/parseInt key 10))]
+    (cond
+      (and (some? numeric-id) (<= 0 numeric-id 14))
+      {:type "viseme" :id numeric-id}
+
+      (some? numeric-id)
+      {:type "au" :id numeric-id}
+
+      :else
+      {:type "morph" :id key})))
 
 (defn curves->channels [curves]
   (->> curves
@@ -324,7 +464,8 @@
       :curves curves
       :channels (curves->channels curves)
       :metadata {:agency "vocal"
-                 :visemeCount (count normalized-events)}})))
+                 :visemeCount (count normalized-events)
+                 :tongueCurveCount (count (select-keys curves [tongue/tongue-up-au]))}})))
 
 (defn build-text-snippet [text events config]
   (build-vocal-snippet events config (text-snippet-name text)))

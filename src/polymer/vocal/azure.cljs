@@ -188,12 +188,20 @@
             max-ms (min (max-duration-ms class-name) (+ raw-span-ms overlap-ms))]
         (clamp-duration desired-ms 1 max-ms remaining-ms)))))
 
-(defn push-event [timeline viseme-id offset-ms duration-ms]
-  (if (<= duration-ms 0)
-    timeline
-    (conj timeline {:visemeId viseme-id
-                    :offsetMs (max 0 (js/Math.round offset-ms))
-                    :durationMs (max 1 (js/Math.round duration-ms))})))
+(defn push-event
+  ([timeline viseme-id offset-ms duration-ms]
+   (push-event timeline viseme-id offset-ms duration-ms nil))
+  ([timeline viseme-id offset-ms duration-ms extra-classes]
+   (if (<= duration-ms 0)
+     timeline
+     (let [classes (vec (distinct (concat (visemes/viseme-classes viseme-id)
+                                          (or extra-classes []))))]
+       (conj timeline {:visemeId viseme-id
+                       :phonemeClass (visemes/primary-class classes)
+                       :phonemeClasses classes
+                       :jawActivation (visemes/jaw-activation-for-viseme viseme-id)
+                       :offsetMs (max 0 (js/Math.round offset-ms))
+                       :durationMs (max 1 (js/Math.round duration-ms))})))))
 
 (defn diphthong-targets [provider-id]
   (case provider-id
@@ -215,9 +223,12 @@
                                                        (* duration-ms 0.25))))
             second-duration-ms (max diphthong-secondary-min-ms
                                     (- (+ offset-ms duration-ms) second-offset-ms))]
+        ;; Azure provider IDs 8-11 represent diphthong motion. Preserve that
+        ;; fact after expansion so the jaw planner keeps one vocalic jaw arc
+        ;; while the lips travel through the two canonical targets.
         (-> timeline
-            (push-event first-viseme offset-ms first-duration-ms)
-            (push-event second-viseme second-offset-ms second-duration-ms))))))
+            (push-event first-viseme offset-ms first-duration-ms ["diphthong"])
+            (push-event second-viseme second-offset-ms second-duration-ms ["diphthong"]))))))
 
 (defn azure-visemes->timeline
   ([visemes] (azure-visemes->timeline visemes nil nil))

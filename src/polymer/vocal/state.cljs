@@ -10,6 +10,7 @@
   {:intensity 1
    :speechRate 1
    :jawScale 1
+   :tongueScale 1
    :rampMs 15
    :holdMs 40
    :priority 50
@@ -25,6 +26,8 @@
    :source nil
    :text nil
    :startTime nil
+   :audioStartedAt nil
+   :audioTimeSec nil
    :maxTime 0
    :wordIndex 0
    :wordTimings []
@@ -54,6 +57,7 @@
     {:intensity (clamp 0 2 (number-or (:intensity merged) (:intensity default-config)))
      :speechRate (clamp 0.2 3 (number-or (:speechRate merged) (:speechRate default-config)))
      :jawScale (clamp 0 2 (number-or (:jawScale merged) (:jawScale default-config)))
+     :tongueScale (clamp 0 2 (number-or (:tongueScale merged) (:tongueScale default-config)))
      :rampMs (clamp 0 200 (number-or (:rampMs merged) (:rampMs default-config)))
      :holdMs (clamp 0 500 (number-or (:holdMs merged) (:holdMs default-config)))
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
@@ -119,6 +123,8 @@
                :source (or (:source timeline) "unknown")
                :text (:text timeline)
                :startTime started-at
+               :audioStartedAt nil
+               :audioTimeSec nil
                :maxTime max-time
                :wordIndex 0
                :wordTimings (normalize-word-timings (:wordTimings timeline)))
@@ -137,6 +143,8 @@
              :source nil
              :text nil
              :startTime nil
+             :audioStartedAt nil
+             :audioTimeSec nil
              :maxTime 0
              :wordIndex 0
              :wordTimings [])
@@ -172,6 +180,23 @@
                          :name name
                          :offsetSec offset-sec
                          :at corrected-at})))
+
+(defn record-audio-started [state audio-time-sec observed-at]
+  ;; Audio remains a host side effect; Vocal only records the host clock value
+  ;; that should drive the already-scheduled animation timeline.
+  (-> state
+      (assoc :audioStartedAt observed-at
+             :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "vocalAudioStarted"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
+
+(defn record-audio-time [state audio-time-sec observed-at]
+  (-> state
+      (assoc :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "vocalAudioTime"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
 
 (defn visible-state [state]
   (clj->js state))

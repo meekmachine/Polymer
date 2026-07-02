@@ -93,6 +93,10 @@
 (defn typed-viseme-snippet? [snippet]
   (boolean (some typed-viseme-channel? (typed-channels snippet))))
 
+(defn typed-viseme-curves-snippet? [snippet]
+  (and (typed-viseme-snippet? snippet)
+       (seq (:curves snippet))))
+
 (defn typed-jaw-snippet? [snippet]
   (boolean (some typed-jaw-au-channel? (typed-channels snippet))))
 
@@ -177,7 +181,15 @@
         (call-js runtime "playSnippet" name curves-js clip-options)))))
 
 (defn play-runtime-snippet! [runtime snippet options]
-  (or (when (typed-channels snippet)
+  ;; Vocal snippets keep typed channels as the canonical Polymer data surface,
+  ;; but today Embody can legitimately return a typed clip handle after only
+  ;; resolving AU26. That makes Web Speech look like jaw-only flapping. When
+  ;; Vocal also provides the enclosure curves, prefer the mature visemeSnippet
+  ;; curve route so numeric viseme keys resolve through the same profile-aware
+  ;; morph-target path that the stable Latticework implementation used.
+  (or (when (typed-viseme-curves-snippet? snippet)
+        (play-runtime-legacy-snippet! runtime snippet options))
+      (when (typed-channels snippet)
         (play-runtime-typed-snippet! runtime snippet options))
       (play-runtime-legacy-snippet! runtime snippet options)))
 
