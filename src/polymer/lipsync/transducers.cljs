@@ -30,6 +30,9 @@
    :time (max 0 (finite (provider-time event) 0))})
 
 (def azure-viseme-xf
+  ;; Provider viseme timing cleanup is a good fit for a transducer because each
+  ;; input row is independent: normalize the field names, discard malformed rows,
+  ;; then let the caller decide whether to sort/materialize.
   (comp
    (map normalize-azure-viseme)
    (filter #(and (state/finite-number? (:id %))
@@ -53,6 +56,8 @@
                           0))})
 
 (def word-boundary-xf
+  ;; Word timings follow the same pattern. This does not infer mouth shapes; it
+  ;; only produces the canonical timing facts used later for drift correction.
   (comp
    (map normalize-word-boundary)
    (filter #(and (pos? (count (:word %)))
@@ -66,6 +71,9 @@
 (defn normalize-process-azure-command
   "Normalize the provider-facing fields of a processAzureVisemes command."
   [command]
+  ;; This is the handoff point between provider facts and articulation. After
+  ;; this call, azure.cljs can assume stable :id/:time visemes and
+  ;; :word/:startSec/:endSec word timings.
   (assoc command
          :visemes (normalize-azure-visemes (:visemes command))
          :wordTimings (normalize-word-boundaries (or (:wordTimings command)

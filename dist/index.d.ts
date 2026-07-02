@@ -357,6 +357,14 @@ export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'com
   write(command: TCommand): void;
 }
 
+/**
+ * Reserved compatibility stream.
+ *
+ * Polymer agencies route animation and speech coordination through domain
+ * events inside the character network. No host-effect events are emitted today,
+ * so consumers should subscribe to events unless a future agency explicitly
+ * documents an effect event.
+ */
 export type PolymerEffectEvent = never;
 
 export type PolymerCommandEvent = PolymerEffectEvent;

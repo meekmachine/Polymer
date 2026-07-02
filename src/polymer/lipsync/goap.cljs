@@ -6,6 +6,8 @@
 ;; changing state/scheduling animation?
 
 (def supported-command-types
+  ;; Keep the accepted command vocabulary in one place so a command can be
+  ;; rejected before state mutation, scheduling, or drift correction starts.
   #{"configure"
     "startText"
     "startTimeline"
@@ -28,6 +30,9 @@
 (defn command-goal
   "Normalize an incoming LipSync command into a planner goal."
   [command world]
+  ;; The goal is intentionally just facts. It should stay cheap to inspect in
+  ;; tests/devtools and should never close over JS handles, timers, audio, or
+  ;; engine objects.
   (let [type (:type command)
         timeline (:timeline command)]
     {:type type
@@ -62,6 +67,10 @@
 (defn command-steps
   "Return ordered pure/domain steps for a LipSync command."
   [goal]
+  ;; These steps are an audit trail and validation boundary, not a hidden
+  ;; interpreter. The agency still executes explicit functions for each command.
+  ;; Future inter-agency constraints can extend this data without moving runtime
+  ;; side effects into the planner.
   (if-let [failure (failure-step goal)]
     [failure]
     (case (:type goal)

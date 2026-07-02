@@ -175,6 +175,11 @@
         emit-input (:emit input-stream)
         emit-event (:emit event-stream)
         agency-scheduler (atom nil)]
+    ;; Stream contract for this agency:
+    ;; - input records accepted commands for tests/workers/debugging.
+    ;; - events carry domain facts and cross-agency requests.
+    ;; - effects is intentionally empty today; Animation, not LoomLarge, owns
+    ;;   runtime side effects once the character network routes event data.
     (letfn [(active-name []
               (:snippetName @state-atom))
 
@@ -247,6 +252,10 @@
                                   (snippet/build-lipsync-snippet (:visemes normalized)
                                                                  config
                                                                  name))
+                          ;; Keep one snippet as the atomic animation unit for
+                          ;; an utterance. Individual visemes, jaw, and tongue
+                          ;; gestures are channels inside the snippet rather
+                          ;; than separately scheduled clips.
                           snippet-data (cond-> (assoc built :name (or (:name normalized) (:name built)))
                                          (state/finite-number? (:durationSec normalized))
                                          (assoc :maxTime (max (:maxTime built) (:durationSec normalized))))
@@ -275,6 +284,9 @@
                                :message "lipSync startText command requires text"}))))
 
             (process-azure! [payload]
+              ;; Azure/LiveKit can use several field shapes. Normalize those
+              ;; provider facts here, then map them to the same articulated
+              ;; timeline path used by Web Speech/text input.
               (let [payload (transducers/normalize-process-azure-command payload)
                     options (merge {:wordTimings (:wordTimings payload)
                                     :visualLeadMs (get-in @state-atom [:config :visualLeadMs])}
@@ -378,6 +390,9 @@
                 (let [payload (js->clj command :keywordize-keys true)
                       type (:type payload)
                       plan (goap/plan-command payload {:speaking (:speaking @state-atom)})]
+                  ;; Every command produces an input echo and a plan event before
+                  ;; any mutation. That makes failed/ignored commands observable
+                  ;; without asking React to subscribe to mutable state.
                   (emit-input {:type "command"
                                :agency "lipSync"
                                :command payload})
@@ -436,6 +451,9 @@
            :snapshot (fn [] (state/visible-state @state-atom))
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
+           ;; Empty compatibility stream. Cross-agency animation requests are
+           ;; domain events so the Polymer character network can route them to
+           ;; Animation without LoomLarge becoming the interpreter.
            :effects (stream/readable-port effect-stream)
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
