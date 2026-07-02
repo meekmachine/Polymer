@@ -239,6 +239,8 @@ export interface VocalState {
   source: string | null;
   text: string | null;
   startTime: number | null;
+  audioStartedAt: number | null;
+  audioTimeSec: number | null;
   maxTime: number;
   wordIndex: number;
   wordTimings: Array<{ word: string; startSec: number; endSec: number }>;
@@ -272,6 +274,8 @@ export type VocalDispatch =
       options?: { wordTimings?: VocalWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
     }
   | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number; hostElapsedSec?: number }
+  | { type: 'audioStarted'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
+  | { type: 'audioTime'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
   | { type: 'updateWordTimings'; wordTimings: VocalWordTiming[] }
   | { type: 'stop' }
   | { type: 'reset' };
@@ -369,6 +373,8 @@ export type PolymerDomainEvent =
   | { type: 'vocalTimelineStopped'; agency: 'vocal'; reason: string; stoppedAt: number }
   | { type: 'vocalWordBoundary'; agency: 'vocal'; word: string; wordIndex: number; observedAt: number }
   | { type: 'vocalWordTimingsUpdated'; agency: 'vocal'; count: number; updatedAt: number }
+  | { type: 'vocalAudioStarted'; agency: 'vocal'; name?: string; audioTimeSec: number; observedAt: number }
+  | { type: 'vocalAudioTime'; agency: 'vocal'; name?: string; audioTimeSec: number; observedAt: number }
   | {
       type: 'vocalSyncDrift';
       agency: 'vocal';
@@ -458,7 +464,9 @@ export interface VocalAgency {
   startText(text: string): void;
   startTimeline(timeline: VocalTimeline): void;
   processAzureVisemes(visemes: AzureVisemeEvent[], totalDurationMs?: number): void;
-  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number): void;
+  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number, hostElapsedSec?: number): void;
+  audioStarted(audioTimeSec?: number): void;
+  audioTime(audioTimeSec: number): void;
   updateWordTimings(wordTimings: VocalWordTiming[]): void;
   stop(): void;
   reset(): void;
