@@ -280,6 +280,75 @@ export type VocalDispatch =
   | { type: 'stop' }
   | { type: 'reset' };
 
+export interface TTSVoice {
+  id: string;
+  name: string;
+  language?: string;
+  lang?: string;
+  gender?: string;
+  styles?: string[];
+  provider?: 'webSpeech' | 'azure' | string;
+}
+
+export interface TTSConfig {
+  engine?: 'webSpeech' | 'azure' | 'livekit' | string;
+  backendUrl?: string;
+  voiceName?: string;
+  azureVoiceName?: string;
+  azureStyle?: string;
+  azureStyleDegree?: string | number | null;
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+  visualLeadMs?: number;
+  lipsyncIntensity?: number;
+  jawScale?: number;
+  webSpeechDriftThresholdSec?: number;
+  azureDriftThresholdSec?: number;
+  azureCacheLimit?: number;
+  debug?: boolean;
+  providers?: Record<string, unknown>;
+}
+
+export interface TTSState {
+  agency: 'tts';
+  status: 'idle' | 'loading' | 'speaking' | 'error' | string;
+  engine: string;
+  speaking: boolean;
+  currentText: string | null;
+  snippetName: string | null;
+  sessionId: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  wordIndex: number;
+  webSpeechVoices: TTSVoice[];
+  azureVoices: TTSVoice[];
+  azureStatus: 'checking' | 'ready' | 'error' | string;
+  azureStatusMessage: string;
+  lastPlan: Record<string, unknown> | null;
+  lastError: string | null;
+  config: Required<Omit<TTSConfig, 'providers'>> & { providers?: never };
+}
+
+export type TTSDispatch =
+  | { type: 'configure'; config: TTSConfig }
+  | { type: 'loadVoices'; engine?: 'webSpeech' | 'azure' | string }
+  | {
+      type: 'speak';
+      text: string;
+      engine?: 'webSpeech' | 'azure' | 'livekit' | string;
+      name?: string;
+      backendUrl?: string;
+      voiceName?: string;
+      style?: string;
+      rate?: number;
+      pitch?: number;
+      volume?: number;
+      visualLeadMs?: number;
+    }
+  | { type: 'stop' }
+  | { type: 'reset' };
+
 export interface PolymerStream<TEvent> {
   subscribe(listener: (event: TEvent) => void): () => void;
 }
@@ -387,7 +456,29 @@ export type PolymerDomainEvent =
       targetSec: number;
       correctedAt: number;
     }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'vocal' }
+  | { type: 'ttsStatusChanged'; agency: 'tts'; state: TTSState }
+  | { type: 'ttsPlanCreated'; agency: 'tts'; plan: Record<string, unknown> }
+  | {
+      type: 'ttsVoicesLoaded';
+      agency: 'tts';
+      engine: 'webSpeech' | 'azure' | string;
+      voices: TTSVoice[];
+      status?: 'checking' | 'ready' | 'error' | string;
+      message?: string;
+    }
+  | { type: 'ttsSpeechStarted'; agency: 'tts'; engine: string; name: string; startedAt: number }
+  | { type: 'ttsSpeechStopped'; agency: 'tts'; reason: string; stoppedAt: number }
+  | { type: 'ttsSpeechEnded'; agency: 'tts'; endedAt: number }
+  | {
+      type: 'ttsWordBoundary';
+      agency: 'tts';
+      word: string;
+      wordIndex: number;
+      observedElapsedSec?: number;
+      hostElapsedSec?: number;
+    }
+  | { type: 'lipSync.command'; agency: 'tts'; command: VocalDispatch }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'vocal' | 'tts' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -473,14 +564,39 @@ export interface VocalAgency {
   dispose(): void;
 }
 
+export interface TTSAgency {
+  input: PolymerInputStream<TTSDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: TTSDispatch): void;
+  snapshot(): TTSState;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'tts'; command: TTSDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: TTSConfig): void;
+  loadVoices(engine?: 'webSpeech' | 'azure' | string): void;
+  speak(text: string): void;
+  stop(): void;
+  reset(): void;
+  dispose(): void;
+}
+
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
+  tts: TTSState;
   vocal: VocalState;
   animation: AnimationState;
 }
 
 export type CharacterAgencyDispatch =
   | { agency: 'blink'; command: BlinkDispatch }
+  | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'vocal'; command: VocalDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
@@ -492,6 +608,7 @@ export interface CharacterAgencies {
   snapshot(): CharacterAgencySnapshot;
   agency(name: 'animation'): AnimationAgency;
   agency(name: 'blink'): BlinkAgency;
+  agency(name: 'tts'): TTSAgency;
   agency(name: 'vocal'): VocalAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
@@ -509,8 +626,10 @@ export interface CharacterAgencies {
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
 export function createVocalAgency(config?: VocalConfig): VocalAgency;
+export function createTTSAgency(config?: TTSConfig): TTSAgency;
 export function createCharacterAgencies(config?: {
   blink?: BlinkAgencyConfig;
+  tts?: TTSConfig;
   vocal?: VocalConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;

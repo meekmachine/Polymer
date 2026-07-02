@@ -2,6 +2,7 @@
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
             [polymer.character :as character]
+            [polymer.tts.agency :as tts]
             [polymer.vocal.agency :as vocal]))
 
 ;; Public JavaScript entry points.
@@ -28,6 +29,12 @@
   Vocal should route viseme animation intent to Polymer Animation."
   ([] (vocal/create-vocal-agency nil))
   ([config] (vocal/create-vocal-agency config)))
+
+(defn createTTSAgency
+  "Create the TTS agency directly. Use createCharacterAgencies when TTS should
+  route speech timing facts into Polymer Vocal/LipSync."
+  ([] (tts/create-tts-agency nil))
+  ([config] (tts/create-tts-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency network."
