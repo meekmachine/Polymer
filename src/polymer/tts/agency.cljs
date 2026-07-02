@@ -67,6 +67,20 @@
     event
     (js->clj event :keywordize-keys true)))
 
+(defn plan-failure-message
+  "Turn the first failed GOAP step into a user/debug friendly error string."
+  [plan]
+  (let [step (first (:steps plan))
+        reason (:reason step)
+        engine (:engine step)]
+    (case reason
+      "missing-text" "TTS plan failed: missing text"
+      "provider-not-ready" (str "TTS plan failed: provider not ready"
+                                (when engine (str " (" engine ")")))
+      "unsupported-engine" (str "TTS plan failed: unsupported engine"
+                                (when engine (str " (" engine ")")))
+      (str "TTS plan failed: " reason))))
+
 (defn scalar->azure-percent
   "Convert UI scalar rate/pitch into Azure SSML percent strings."
   [value]
@@ -411,12 +425,17 @@
         azure-cache (atom {})
         disposed? (atom false)]
     (letfn [(session-id []
+                ;; Every provider callback captures the session id active when
+                ;; it was registered. Replacements/stops increment the token so
+                ;; late callbacks cannot mutate state or emit stale LipSync data.
               (:sessionId @state-atom))
 
             (active-session? [id]
               (and (not @disposed?) (= id (session-id))))
 
             (emit-status! []
+                ;; Status events are coarse UI facts, not animation ticks. The
+                ;; agency never asks React to render for each viseme/word frame.
               (emit-event {:type "ttsStatusChanged"
                            :agency "tts"
                            :state (state/visible-state @state-atom)}))
@@ -427,11 +446,16 @@
               (emit-status!))
 
             (emit-lipsync! [command]
+                ;; This is an event-stream bridge inside Polymer. The character
+                ;; network routes this command to Vocal/LipSync, which then emits
+                ;; animation intent for the Animation agency.
               (emit-event {:type "lipSync.command"
                            :agency "tts"
                            :command command}))
 
             (configure-lipsync! [engine command]
+                ;; TTS knows provider timing and user speech controls; Vocal knows
+                ;; how those controls become mouth/jaw/tongue animation.
               (let [config (:config @state-atom)]
                 (emit-lipsync! {:type "configure"
                                 :config {:intensity (:lipsyncIntensity config)
@@ -533,13 +557,18 @@
                     synth-promise (if cached
                                     (js/Promise.resolve (clj->js cached))
                                     (synthesize-azure! config (assoc command
-                                                                    :voiceName voice-name
-                                                                    :style style
-                                                                    :rate rate
-                                                                    :pitch pitch)))]
+                                                                     :voiceName voice-name
+                                                                     :style style
+                                                                     :rate rate
+                                                                     :pitch pitch)))]
+                  ;; Prime synchronously while the click/user gesture is still
+                  ;; available. Synthesis may finish later, but the element is
+                  ;; already allowed to play in stricter browsers.
                 (prime-audio! resources volume)
                 (-> synth-promise
                     (.then (fn [raw]
+                               ;; Provider/backend shapes are normalized before
+                               ;; any playback or LipSync command is emitted.
                              (let [payload (transducers/normalize-azure-synthesis (js->clj raw :keywordize-keys true))]
                                (when-not cached
                                  (swap! azure-cache remember-cache cache-key payload (:azureCacheLimit config)))
@@ -557,14 +586,11 @@
                                      duration-sec (or (:durationSec payload) (aget playback "durationSec") 0)
                                      word-timings (:wordTimings payload)]
                                  (configure-lipsync! "azure" command)
-                                 (emit-lipsync! {:type "processAzureVisemes"
-                                                 :name snippet-name
-                                                 :text text
-                                                 :source "azure"
-                                                 :visemes (:visemes payload)
-                                                 :wordTimings word-timings
-                                                 :totalDurationMs (js/Math.round (* duration-sec 1000))
-                                                 :options {:visualLeadMs (:visualLeadMs config)}})
+                                 (emit-lipsync! (transducers/azure-synthesis->lipsync-command
+                                                 snippet-name
+                                                 text
+                                                 (assoc payload :durationSec duration-sec)
+                                                 config))
                                  (emit-lipsync! {:type "audioStarted"
                                                  :name snippet-name
                                                  :audioTimeSec 0})
@@ -579,11 +605,11 @@
                                                       (when (aget playback "clock")
                                                         (js->clj (aget playback "clock") :keywordize-keys true)))]
                                    (schedule-boundaries! resources id active-session? clock word-timings
-                                                       (fn [event]
-                                                         (word-boundary! id
-                                                                         (:word event)
-                                                                         (:observedElapsedSec event)
-                                                                         nil))))
+                                                         (fn [event]
+                                                           (word-boundary! id
+                                                                           (:word event)
+                                                                           (:observedElapsedSec event)
+                                                                           nil))))
                                  (when-let [audio (or (:audio playback) (aget playback "audio"))]
                                    (set! (.-onended audio) #(finish-session! id)))))))
                     (.catch (fn [error]
@@ -595,9 +621,12 @@
                     engine (or (:engine command) (:engine config))
                     text (:text command)
                     snippet-name (or (:name command) (str "tts_" engine "_" (.now js/Date)))
+                      ;; GOAP sees only capability facts. It does not receive JS
+                      ;; handles or secrets, and it never performs side effects.
                     world {:backendUrl (backend-url config command)
+                           :hasAzureSynthesize (boolean (custom-provider config :azureSynthesize))
                            :hasWebSpeech (boolean (or (custom-provider config :webSpeechSpeak)
-                                                       (speech-synthesis*)))}
+                                                      (speech-synthesis*)))}
                     plan (goap/plan-speech (assoc command :engine engine) config world)]
                 (swap! state-atom (fn [state]
                                     (-> state
@@ -609,7 +638,7 @@
                              :plan plan})
                 (emit-status!)
                 (if-not (:ok plan)
-                  (emit-error! (str "TTS plan failed: " (get-in plan [:steps 0 :reason])))
+                  (emit-error! (plan-failure-message plan))
                   (case engine
                     "azure" (start-azure! (session-id) command snippet-name)
                     "webSpeech" (start-web-speech! (session-id) command snippet-name)
@@ -617,51 +646,63 @@
 
             (load-voices! [engine]
               (let [config (:config @state-atom)
+                      ;; Voice loading has its own plan so missing backend/browser
+                      ;; support is visible before any provider request is made.
                     world {:backendUrl (:backendUrl config)
+                           :hasAzureVoices (boolean (custom-provider config :azureVoices))
                            :hasWebSpeech (boolean (or (custom-provider config :webSpeechVoices)
-                                                       (speech-synthesis*)))}
+                                                      (speech-synthesis*)))}
                     plan (goap/plan-voice-load engine world)]
                 (emit-event {:type "ttsPlanCreated"
                              :agency "tts"
                              :plan plan})
-                (case engine
-                  "webSpeech"
-                  (-> (load-web-speech-voices! config)
-                      (.then (fn [voices]
-                               (let [normalized (transducers/normalize-voices
-                                                 (js->clj voices :keywordize-keys true)
-                                                 "webSpeech")]
-                                 (swap! state-atom state/record-web-speech-voices normalized)
-                                 (emit-event {:type "ttsVoicesLoaded"
-                                              :agency "tts"
-                                              :engine "webSpeech"
-                                              :voices normalized})
-                                 (emit-status!))))
-                      (.catch (fn [error] (emit-error! (.-message error)))))
+                (if-not (:ok plan)
+                  (do
+                    (when (= "azure" engine)
+                      (swap! state-atom
+                             state/record-azure-status
+                             "error"
+                             (plan-failure-message plan)
+                             []))
+                    (emit-error! (plan-failure-message plan)))
+                  (case engine
+                    "webSpeech"
+                    (-> (load-web-speech-voices! config)
+                        (.then (fn [voices]
+                                 (let [normalized (transducers/normalize-voices
+                                                   (js->clj voices :keywordize-keys true)
+                                                   "webSpeech")]
+                                   (swap! state-atom state/record-web-speech-voices normalized)
+                                   (emit-event {:type "ttsVoicesLoaded"
+                                                :agency "tts"
+                                                :engine "webSpeech"
+                                                :voices normalized})
+                                   (emit-status!))))
+                        (.catch (fn [error] (emit-error! (.-message error)))))
 
-                  "azure"
-                  (-> (load-azure-voices! config)
-                      (.then (fn [response]
-                               (let [data (js->clj response :keywordize-keys true)
-                                     voices (transducers/normalize-voices (:voices data) "azure")
-                                     ready? (and (:valid data) (seq voices))
-                                     status (if ready? "ready" "error")
-                                     message (if ready?
-                                               (str "Connected via backend environment (" (count voices) " voices).")
-                                               (or (:message data) "Backend Azure credentials are not configured."))]
-                                 (swap! state-atom state/record-azure-status status message voices)
-                                 (emit-event {:type "ttsVoicesLoaded"
-                                              :agency "tts"
-                                              :engine "azure"
-                                              :voices voices
-                                              :status status
-                                              :message message})
-                                 (emit-status!))))
-                      (.catch (fn [error]
-                                (swap! state-atom state/record-azure-status "error" (.-message error) [])
-                                (emit-error! (.-message error)))))
+                    "azure"
+                    (-> (load-azure-voices! config)
+                        (.then (fn [response]
+                                 (let [data (js->clj response :keywordize-keys true)
+                                       voices (transducers/normalize-voices (:voices data) "azure")
+                                       ready? (and (:valid data) (seq voices))
+                                       status (if ready? "ready" "error")
+                                       message (if ready?
+                                                 (str "Connected via backend environment (" (count voices) " voices).")
+                                                 (or (:message data) "Backend Azure credentials are not configured."))]
+                                   (swap! state-atom state/record-azure-status status message voices)
+                                   (emit-event {:type "ttsVoicesLoaded"
+                                                :agency "tts"
+                                                :engine "azure"
+                                                :voices voices
+                                                :status status
+                                                :message message})
+                                   (emit-status!))))
+                        (.catch (fn [error]
+                                  (swap! state-atom state/record-azure-status "error" (.-message error) [])
+                                  (emit-error! (.-message error)))))
 
-                  (emit-error! (str "Unsupported voice provider: " engine)))))
+                    (emit-error! (str "Unsupported voice provider: " engine))))))
 
             (dispatch! [command]
               (when-not @disposed?

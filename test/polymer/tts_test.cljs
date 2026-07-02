@@ -63,17 +63,64 @@
                                  {:backendUrl "http://backend"})]
       (is (:ok plan))
       (is (= ["configure-lipsync" "synthesize-azure" "play-azure-audio" "emit-word-boundaries"]
-             (map :op (:steps plan)))))))
+             (map :op (:steps plan))))))
+  (testing "voice loading fails before side effects when the provider is missing"
+    (let [plan (goap/plan-voice-load "azure" {})]
+      (is (false? (:ok plan)))
+      (is (= [{:op "fail" :reason "provider-not-ready" :engine "azure"}]
+             (:steps plan)))))
+  (testing "injected Azure providers satisfy GOAP without exposing keys to the browser"
+    (let [plan (goap/plan-speech {:type "speak"
+                                  :engine "azure"
+                                  :text "hello"}
+                                 {:engine "azure"}
+                                 {:hasAzureSynthesize true})]
+      (is (:ok plan)))))
 
 (deftest transducers-normalize-provider-payloads
   (let [visemes (transducers/normalize-azure-visemes [{:viseme_id 3 :audio_offset 0.2}
                                                       {:visemeId 1 :audioOffset 0.1}
                                                       {:id 2 :time 0.15}])
         words (transducers/normalize-word-boundaries [{:word "hi" :start_time 0 :end_time 0.2}
-                                                      {:word "" :start_time 0.3 :end_time 0.4}])]
+                                                      {:word "" :start_time 0.3 :end_time 0.4}])
+        synthesis (transducers/normalize-azure-synthesis {:audioBase64 "ZmFrZQ=="
+                                                          :audioFormat "audio/mpeg"
+                                                          :durationSec 0.42
+                                                          :visemes [{:viseme_id 2 :audio_offset 0.1}]
+                                                          :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})]
     (is (= [1 2 3] (map :id visemes)))
     (is (= [0.1 0.15 0.2] (map :time visemes)))
-    (is (= [{:word "hi" :startSec 0 :endSec 0.2}] words))))
+    (is (= [{:word "hi" :startSec 0 :endSec 0.2}] words))
+    (is (= 0.42 (:durationSec synthesis)))
+    (is (= {:type "processAzureVisemes"
+            :name "tts:test"
+            :text "there"
+            :source "azure"
+            :visemes [{:id 2 :time 0.1}]
+            :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]
+            :totalDurationMs 420
+            :options {:visualLeadMs 35}}
+           (transducers/azure-synthesis->lipsync-command
+            "tts:test"
+            "there"
+            synthesis
+            {:visualLeadMs 35})))))
+
+(deftest tts-agency-gates-provider-side-effects-with-goap
+  (let [agency (polymer/createTTSAgency)
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "loadVoices" :engine "azure"})
+    (let [plan-event (some #(when (= "ttsPlanCreated" (:type %)) %) @(:events events))
+          error-event (some #(when (= "error" (:type %)) %) @(:events events))
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is plan-event)
+      (is (false? (get-in plan-event [:plan :ok])))
+      (is (= "provider-not-ready" (get-in plan-event [:plan :steps 0 :reason])))
+      (is (= "error" (:status snapshot)))
+      (is (= "error" (:azureStatus snapshot)))
+      (is (= "TTS plan failed: provider not ready (azure)" (:message error-event))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
 
 (deftest tts-agency-owns-web-speech-session-and-emits-lipsync-facts
   (let [agency (polymer/createTTSAgency #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}})
@@ -115,41 +162,40 @@
 
 (deftest tts-agency-normalizes-azure-before-lipsync
   (async done
-    (let [agency (polymer/createTTSAgency
-                  #js {:backendUrl "http://backend"
-                       :providers #js {:azureSynthesize
-                                       (fn [_command]
-                                         (js/Promise.resolve
-                                          #js {:audio_base64 "ZmFrZQ=="
-                                               :audio_format "audio/mpeg"
-                                               :duration 0.4
-                                               :visemes #js [#js {:viseme_id 2 :audio_offset 0.1}]
-                                               :word_boundaries #js [#js {:word "hello"
-                                                                          :start_time 0
-                                                                          :end_time 0.3}]}))
-                                       :azurePlayAudio
-                                       (fn [_plan]
-                                         (js/Promise.resolve
-                                          #js {:durationSec 0.4
-                                               :clock #js {:currentTime (fn [] 0)
-                                                           :shouldContinue (fn [] false)}}))}})
-          events (domain-events agency)]
-      (.dispatch ^js agency #js {:type "speak"
-                                 :engine "azure"
-                                 :text "hello"
-                                 :name "tts:test:azure"})
-      (js/setTimeout
-       (fn []
-         (try
-           (let [commands (keep #(when (= "lipSync.command" (:type %)) (:command %)) @(:events events))
-                 process-command (some #(when (= "processAzureVisemes" (:type %)) %) commands)]
-             (is process-command)
-             (is (= [{:id 2 :time 0.1}] (:visemes process-command)))
-             (is (= [{:word "hello" :startSec 0 :endSec 0.3}] (:wordTimings process-command))))
-           ((:unsubscribe events))
-           (.dispose ^js agency)
-           (done)
-           (catch :default error
-             (.dispose ^js agency)
-             (throw error))))
-       20))))
+         (let [agency (polymer/createTTSAgency
+                       #js {:providers #js {:azureSynthesize
+                                            (fn [_command]
+                                              (js/Promise.resolve
+                                               #js {:audio_base64 "ZmFrZQ=="
+                                                    :audio_format "audio/mpeg"
+                                                    :duration 0.4
+                                                    :visemes #js [#js {:viseme_id 2 :audio_offset 0.1}]
+                                                    :word_boundaries #js [#js {:word "hello"
+                                                                               :start_time 0
+                                                                               :end_time 0.3}]}))
+                                            :azurePlayAudio
+                                            (fn [_plan]
+                                              (js/Promise.resolve
+                                               #js {:durationSec 0.4
+                                                    :clock #js {:currentTime (fn [] 0)
+                                                                :shouldContinue (fn [] false)}}))}})
+               events (domain-events agency)]
+           (.dispatch ^js agency #js {:type "speak"
+                                      :engine "azure"
+                                      :text "hello"
+                                      :name "tts:test:azure"})
+           (js/setTimeout
+            (fn []
+              (try
+                (let [commands (keep #(when (= "lipSync.command" (:type %)) (:command %)) @(:events events))
+                      process-command (some #(when (= "processAzureVisemes" (:type %)) %) commands)]
+                  (is process-command)
+                  (is (= [{:id 2 :time 0.1}] (:visemes process-command)))
+                  (is (= [{:word "hello" :startSec 0 :endSec 0.3}] (:wordTimings process-command))))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            20))))

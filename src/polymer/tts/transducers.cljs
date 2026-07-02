@@ -3,6 +3,11 @@
 
 ;; Transducers keep provider payload cleanup as pure data transformation.
 ;; The agency calls these before any playback or LipSync events are emitted.
+;;
+;; This file is intentionally side-effect free. It does not fetch audio, start
+;; playback, touch DOM APIs, or dispatch to another agency. It accepts raw data
+;; from browser/backend providers and returns the normalized facts that TTS,
+;; Vocal/LipSync, and tests can reason about deterministically.
 
 (defn finite
   "Coerce a provider number while preserving a clean fallback."
@@ -78,22 +83,41 @@
    :styles (vec (or (:styles voice) []))
    :provider provider})
 
-(def voice-xf
-  ;; A voice is useful to the UI only when it has a stable id.
+(defn voice-xf
+  "Build the provider-specific voice normalization transducer."
+  [provider]
+  ;; A voice is useful to the UI only when it has a stable id. Keeping this as a
+  ;; real transducer means large provider lists can be mapped/filtered in one pass.
   (comp
+   (map #(normalize-voice % provider))
    (filter #(pos? (count (:id %))))))
 
 (defn normalize-voices
   "Normalize voice choices and drop empty placeholder rows."
   [voices provider]
-  (into [] voice-xf (map #(normalize-voice % provider) (or voices []))))
+  (into [] (voice-xf provider) (or voices [])))
 
 (defn normalize-azure-synthesis
   "Return the exact pure data packet the TTS agency uses after Azure synthesis."
   [payload]
   {:audioBase64 (or (:audio_base64 payload) (:audioBase64 payload))
    :audioFormat (or (:audio_format payload) (:audioFormat payload))
-   :durationSec (finite (:duration payload) 0)
+   :durationSec (finite (or (:durationSec payload) (:duration_sec payload) (:duration payload)) 0)
    :visemes (normalize-azure-visemes (:visemes payload))
    :wordTimings (normalize-word-boundaries (or (:word_boundaries payload)
                                                (:wordTimings payload)))})
+
+(defn azure-synthesis->lipsync-command
+  "Build the Vocal/LipSync command from an already-normalized Azure packet."
+  [snippet-name text payload config]
+  ;; TTS owns provider timing facts, but Vocal owns mouth animation construction.
+  ;; This helper keeps the bridge as plain data so the agency does not hide any
+  ;; morph/jaw logic while it is also dealing with playback side effects.
+  {:type "processAzureVisemes"
+   :name snippet-name
+   :text text
+   :source "azure"
+   :visemes (:visemes payload)
+   :wordTimings (:wordTimings payload)
+   :totalDurationMs (js/Math.round (* (:durationSec payload) 1000))
+   :options {:visualLeadMs (:visualLeadMs config)}})
