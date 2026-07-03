@@ -1,6 +1,5 @@
 (ns polymer.lipsync.agency
   (:require [polymer.lipsync.goap :as goap]
-            [polymer.lipsync.transducers :as transducers]
             [polymer.stream :as stream]
             [polymer.tts.azure :as azure]
             [polymer.lipsync.scheduler :as scheduler]
@@ -284,14 +283,17 @@
                                :message "lipSync startText command requires text"}))))
 
             (process-azure! [payload]
-              ;; Azure/LiveKit can use several field shapes. Normalize those
-              ;; provider facts here, then delegate the Azure-specific provider
-              ;; mapping to TTS before using the same articulated timeline path
-              ;; as Web Speech/text input.
-              (let [payload (transducers/normalize-process-azure-command payload)
-                    options (merge {:wordTimings (:wordTimings payload)
-                                    :visualLeadMs (get-in @state-atom [:config :visualLeadMs])}
-                                   (:options payload))
+              ;; Compatibility command for Azure/LiveKit provider facts. The
+              ;; Azure-specific viseme-id mapping lives in TTS; LipSync only
+              ;; normalizes word timing metadata and then uses the shared
+              ;; articulated timeline path.
+              (let [raw-options (or (:options payload) {})
+                    word-timings (state/normalize-word-timings
+                                  (or (:wordTimings payload)
+                                      (:wordTimings raw-options)))
+                    options (assoc (merge {:visualLeadMs (get-in @state-atom [:config :visualLeadMs])}
+                                          raw-options)
+                                   :wordTimings word-timings)
                     timeline (azure/azure-visemes->timeline (:visemes payload)
                                                             (:totalDurationMs payload)
                                                             options)]

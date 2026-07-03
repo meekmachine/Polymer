@@ -1,7 +1,7 @@
 (ns polymer.tts.agency
   (:require [clojure.string :as str]
-            [polymer.lipsync.transducers :as lipsync-transducers]
             [polymer.stream :as stream]
+            [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]
             [polymer.tts.state :as state]
             [polymer.tts.transducers :as transducers]))
@@ -587,7 +587,7 @@
                                      duration-sec (or (:durationSec payload) (aget playback "durationSec") 0)
                                      word-timings (:wordTimings payload)]
                                  (configure-lipsync! "azure" command)
-                                 (emit-lipsync! (lipsync-transducers/azure-synthesis->lipsync-command
+                                 (emit-lipsync! (azure/azure-synthesis->lipsync-command
                                                  snippet-name
                                                  text
                                                  (assoc payload :durationSec duration-sec)

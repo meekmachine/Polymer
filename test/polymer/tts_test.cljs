@@ -1,7 +1,8 @@
 (ns polymer.tts-test
   (:require [cljs.test :refer [async deftest is testing]]
             [polymer.core :as polymer]
-            [polymer.lipsync.transducers :as lipsync-transducers]
+            [polymer.lipsync.state :as lipsync-state]
+            [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]
             [polymer.tts.transducers :as transducers]))
 
@@ -78,24 +79,23 @@
                                     {:hasAzureSynthesize true})]
       (is (:ok plan)))))
 
-(deftest transducers-keep-tts-provider-fields-and-let-lipsync-normalize-timing
-  (let [visemes (lipsync-transducers/normalize-azure-visemes [{:viseme_id 3 :audio_offset 0.2}
-                                                              {:visemeId 1 :audioOffset 0.1}
-                                                              {:id 2 :time 0.15}])
-        words (lipsync-transducers/normalize-word-boundaries [{:word "hi" :start_time 0 :end_time 0.2}
-                                                              {:word "" :start_time 0.3 :end_time 0.4}])
+(deftest azure-provider-helpers-keep-provider-fields-and-build-lipsync-command
+  (let [visemes (azure/normalize-provider-visemes [{:viseme_id 3 :audio_offset 0.2}
+                                                   {:visemeId 1 :audioOffset 0.1}
+                                                   {:id 2 :time 0.15}])
+        words (lipsync-state/normalize-word-timings [{:word "hi" :start_time 0 :end_time 0.2}
+                                                     {:word "" :start_time 0.3 :end_time 0.4}])
         synthesis (transducers/normalize-azure-synthesis {:audioBase64 "ZmFrZQ=="
                                                           :audioFormat "audio/mpeg"
                                                           :durationSec 0.42
                                                           :visemes [{:viseme_id 2 :audio_offset 0.1}]
                                                           :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})
-        command (lipsync-transducers/azure-synthesis->lipsync-command
+        command (azure/azure-synthesis->lipsync-command
                  "tts:test"
                  "there"
                  synthesis
-                 {:visualLeadMs 35})
-        normalized-command (lipsync-transducers/normalize-process-azure-command command)]
-    (is (= [1 2 3] (map :id visemes)))
+                 {:visualLeadMs 35})]
+    (is (= [1 2 3] (map :visemeId visemes)))
     (is (= [0.1 0.15 0.2] (map :time visemes)))
     (is (= [{:word "hi" :startSec 0 :endSec 0.2}] words))
     (is (= 0.42 (:durationSec synthesis)))
@@ -109,8 +109,10 @@
             :totalDurationMs 420
             :options {:visualLeadMs 35}}
            command))
-    (is (= [{:id 2 :time 0.1}] (:visemes normalized-command)))
-    (is (= [{:word "there" :startSec 0.1 :endSec 0.4}] (:wordTimings normalized-command)))))
+    (is (= [{:visemeId 2 :time 0.1}]
+           (azure/normalize-provider-visemes (:visemes command))))
+    (is (= [{:word "there" :startSec 0.1 :endSec 0.4}]
+           (lipsync-state/normalize-word-timings (:wordTimings command))))))
 
 (deftest tts-agency-gates-provider-side-effects-with-provider-plan
   (let [agency (polymer/createTTSAgency)

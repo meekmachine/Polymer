@@ -3,7 +3,7 @@
 
 ;; TTS provider transforms are side-effect free, but they stay limited to the
 ;; provider/session concerns TTS owns: audio fields and voice lists. Provider
-;; viseme/word timing cleanup belongs to polymer.lipsync.transducers.
+;; viseme mapping lives beside the Azure provider mapper in polymer.tts.azure.
 
 (defn finite
   "Coerce a provider number while preserving a clean fallback."

@@ -83,11 +83,26 @@
        :time time})))
 
 (defn normalize-provider-visemes [events]
-  (->> (or events [])
-       (map normalize-provider-viseme)
-       (remove nil?)
+  ;; This is the one place a local transducer is useful: normalize each provider
+  ;; row and drop malformed rows in one pass. Sorting is intentionally outside
+  ;; the transducer because ordering is a whole-collection operation.
+  (->> (into [] (keep normalize-provider-viseme) (or events []))
        (sort-by :time)
        vec))
+
+(defn azure-synthesis->lipsync-command
+  "Build the LipSync command from a normalized Azure synthesis packet."
+  [snippet-name text payload config]
+  {:type "processAzureVisemes"
+   :name snippet-name
+   :text text
+   :source "azure"
+   :visemes (:visemes payload)
+   :wordTimings (or (:wordTimings payload)
+                    (:word_timings payload)
+                    (:word_boundaries payload))
+   :totalDurationMs (js/Math.round (* (state/number-or (:durationSec payload) 0) 1000))
+   :options {:visualLeadMs (:visualLeadMs config)}})
 
 (defn word-start-sec [word]
   (state/number-or (or (:startSec word) (:start word) (:start_time word)) 0))
