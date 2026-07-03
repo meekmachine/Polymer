@@ -104,10 +104,10 @@
        :endSec end-sec})))
 
 (defn normalize-word-timings [word-timings]
-  (->> (or word-timings [])
-       (map normalize-word-timing)
-       (remove nil?)
-       vec))
+  ;; This is a pure row-normalization pass: normalize every provider timing row
+  ;; and drop malformed/empty words. A local transducer keeps that one pass
+  ;; explicit without creating a separate namespace for a tiny transformation.
+  (into [] (keep normalize-word-timing) (or word-timings [])))
 
 (defn record-start [state timeline snippet-name started-at max-time]
   ;; A timeline starts as one utterance-level animation snippet. Word timings are

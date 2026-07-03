@@ -59,9 +59,9 @@
           (assoc :phonemeClasses (or (:phonemeClasses event) (:phoneme_classes event))))))))
 
 (defn normalize-events [events]
-  (->> (or events [])
-       (map normalize-event)
-       (remove nil?)
+  ;; Normalize/drop is element-local and transducer-friendly. Sorting is kept as
+  ;; the next explicit step because ordering is a whole-collection decision.
+  (->> (into [] (keep normalize-event) (or events []))
        (sort-by :offsetMs)
        vec))
 
@@ -260,7 +260,7 @@
 
 (defn fit-secondary-activation [active adjusted budget]
   (let [secondary (vec (rest active))
-        secondary-sum (reduce + (map :value secondary))]
+        secondary-sum (transduce (map :value) + 0 secondary)]
     (if (or (empty? secondary) (<= secondary-sum budget))
       adjusted
       (let [scale (/ budget secondary-sum)]
@@ -289,7 +289,7 @@
   ;; Stable Latticework intentionally does not let every overlapping viseme keep
   ;; its full value. The strongest active shape leads, secondary shapes get a
   ;; small budget, and closed-mouth bilabials suppress everything else.
-  (let [lip-keys (->> (keys curves) (remove #(= % jaw-au)) vec)]
+  (let [lip-keys (into [] (remove #(= % jaw-au)) (keys curves))]
     (if (<= (count lip-keys) 1)
       curves
       (let [sample-times (collect-lip-sample-times curves)]
@@ -302,8 +302,7 @@
                                                            :value (state/clamp 0 lip-dominant-cap
                                                                                (sample-curve-at (get curves key) time))})
                                                         lip-keys)
-                                           active (->> values
-                                                       (filter #(> (:value %) intensity-eps))
+                                           active (->> (into [] (filter #(> (:value %) intensity-eps)) values)
                                                        (sort-by :value >)
                                                        vec)
                                            adjusted-a (into {} (map (fn [entry] [(:key entry) (:value entry)]) values))
@@ -312,7 +311,7 @@
                                                           (if (and (= (:visemeId dominant) (:B_M_P visemes/canonical-visemes))
                                                                    (>= (:value dominant) closure-dominance-threshold))
                                                             (fit-secondary-activation active adjusted-a closure-secondary-cap)
-                                                            (let [total (reduce + (map :value active))]
+                                                            (let [total (transduce (map :value) + 0 active)]
                                                               (if (> total lip-total-activation-cap)
                                                                 (let [budget (max 0
                                                                                   (min (- lip-total-activation-cap (:value dominant))
@@ -428,19 +427,21 @@
       {:type "morph" :id key})))
 
 (defn curves->channels [curves]
-  (->> curves
-       (map (fn [[curve-key curve]]
-              {:target (lipsync-channel-target curve-key)
-               :keyframes curve}))
-       vec))
+  (into []
+        (map (fn [[curve-key curve]]
+               {:target (lipsync-channel-target curve-key)
+                :keyframes curve}))
+        curves))
 
 (defn max-snippet-time [events curves]
-  (let [event-max (if (empty? events)
-                    0
-                    (apply max (map #(/ (+ (:offsetMs %) (:durationMs %)) 1000) events)))
-        curve-max (if (empty? curves)
-                    0
-                    (apply max 0 (mapcat (fn [[_ curve]] (map :time curve)) curves)))]
+  (let [event-max (transduce (map #(/ (+ (:offsetMs %) (:durationMs %)) 1000))
+                             max
+                             0
+                             events)
+        curve-max (transduce (mapcat (fn [[_ curve]] (map :time curve)))
+                             max
+                             0
+                             curves)]
     (max event-max curve-max)))
 
 (defn build-lipsync-snippet

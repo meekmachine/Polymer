@@ -28,10 +28,10 @@
         gap (:burst-gap plan)
         intensity (:intensity plan)
         max-time (+ (* blink-count duration) (* (max 0 (dec blink-count)) gap))
-        points (->> (range blink-count)
-                    (mapcat (fn [index]
-                              (pulse-points (* index (+ duration gap)) duration intensity)))
-                    vec)]
+        points (into []
+                     (mapcat (fn [index]
+                               (pulse-points (* index (+ duration gap)) duration intensity)))
+                     (range blink-count))]
     {:name (:name plan)
      :curves {"43" points}
      :channels [{:target {:type "au" :id 43}

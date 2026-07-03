@@ -3,8 +3,7 @@
             [polymer.core :as polymer]
             [polymer.lipsync.state :as lipsync-state]
             [polymer.tts.azure :as azure]
-            [polymer.tts.planner :as planner]
-            [polymer.tts.transducers :as transducers]))
+            [polymer.tts.planner :as planner]))
 
 ;; These tests keep the TTS provider boundary honest.
 ;; Provider side effects are injected here; production defaults live in Polymer.
@@ -85,11 +84,11 @@
                                                    {:id 2 :time 0.15}])
         words (lipsync-state/normalize-word-timings [{:word "hi" :start_time 0 :end_time 0.2}
                                                      {:word "" :start_time 0.3 :end_time 0.4}])
-        synthesis (transducers/normalize-azure-synthesis {:audioBase64 "ZmFrZQ=="
-                                                          :audioFormat "audio/mpeg"
-                                                          :durationSec 0.42
-                                                          :visemes [{:viseme_id 2 :audio_offset 0.1}]
-                                                          :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})
+        synthesis (azure/normalize-azure-synthesis {:audioBase64 "ZmFrZQ=="
+                                                    :audioFormat "audio/mpeg"
+                                                    :durationSec 0.42
+                                                    :visemes [{:viseme_id 2 :audio_offset 0.1}]
+                                                    :wordTimings [{:word "there" :startSec 0.1 :endSec 0.4}]})
         command (azure/azure-synthesis->lipsync-command
                  "tts:test"
                  "there"

@@ -5,8 +5,8 @@
 ;;
 ;; In this package "provider plan" means "turn the requested goal plus available world
 ;; facts into an auditable action list." It does not mean hidden control flow.
-;; The browser/backend calls remain in polymer.tts.agency, and the pure provider
-;; payload cleanup remains in polymer.tts.transducers.
+;; The browser/backend calls remain in polymer.tts.agency, and pure provider
+;; payload cleanup stays beside the provider boundary in the TTS/Azure agencies.
 
 (def supported-engines
   ;; Keep supported provider names in one set so speech and voice-load planning

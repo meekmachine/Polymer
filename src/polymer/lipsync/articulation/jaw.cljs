@@ -36,10 +36,11 @@
   ;; Provider timelines can be lossy, so the event may carry both a primary
   ;; phoneme class and a full class set. If either is absent, fall back to the
   ;; canonical viseme slot class so planner rules still behave conservatively.
-  (let [from-event (remove nil?
-                           (concat (map class-name (or (:phonemeClasses event) []))
-                                   [(class-name (:phonemeClass event))]))
-        fallback (map class-name (visemes/viseme-classes (:visemeId event)))]
+  (let [from-event (into []
+                         (keep class-name)
+                         (concat (or (:phonemeClasses event) [])
+                                 [(:phonemeClass event)]))
+        fallback (into [] (keep class-name) (visemes/viseme-classes (:visemeId event)))]
     (set (if (seq from-event) from-event fallback))))
 
 (defn has-class? [event class]

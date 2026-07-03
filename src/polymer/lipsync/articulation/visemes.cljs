@@ -282,13 +282,13 @@
   (re-seq #"[A-Za-z]+|[,.;:!?]|\s+" (or text "")))
 
 (defn text->phonemes [text]
-  (->> (tokenize text)
-       (mapcat (fn [token]
-                 (if (or (re-matches #"\s+" token)
-                         (re-matches #"[,.;:!?]" token))
-                   [(pause-token token)]
-                   (word->phonemes token))))
-       vec))
+  (into []
+        (mapcat (fn [token]
+                  (if (or (re-matches #"\s+" token)
+                          (re-matches #"[,.;:!?]" token))
+                    [(pause-token token)]
+                    (word->phonemes token))))
+        (tokenize text)))
 
 (defn normalize-phoneme [phoneme]
   (-> (or phoneme "") str/upper-case (str/replace #"[0-9]" "")))
@@ -382,8 +382,8 @@
            (recur (rest remaining)
                   (+ current-ms scaled-duration)
                   (into events
-                        (map #(phoneme-event phoneme current-ms %)
-                             (diphthong-segments phoneme viseme scaled-duration))))))))))
+                        (map #(phoneme-event phoneme current-ms %))
+                        (diphthong-segments phoneme viseme scaled-duration)))))))))
 
 (defn word->visemes
   ([word] (word->visemes word 0 1))
@@ -396,23 +396,21 @@
    (phonemes->visemes (text->phonemes text) 0 speech-rate)))
 
 (defn phonemes-duration-ms [phonemes speech-rate]
-  (reduce
+  (transduce
+   (map (fn [phoneme]
+          (adjust-duration (:duration (phoneme->viseme-duration phoneme)) speech-rate)))
    +
    0
-   (map (fn [phoneme]
-          (adjust-duration (:duration (phoneme->viseme-duration phoneme)) speech-rate))
-        phonemes)))
+   phonemes))
 
 (defn word-tokens [text]
   (vec (re-seq #"[A-Za-z]+" (or text ""))))
 
 (defn word-char-count [words]
-  (reduce + 0 (map count words)))
+  (transduce (map count) + 0 words))
 
 (defn timeline-duration-ms [events]
-  (if (empty? events)
-    0
-    (apply max (map #(+ (:offsetMs %) (:durationMs %)) events))))
+  (transduce (map #(+ (:offsetMs %) (:durationMs %))) max 0 events))
 
 (defn scale-event [scale event]
   (-> event
@@ -420,13 +418,14 @@
       (update :durationMs #(max 1 (js/Math.round (* scale %))))))
 
 (defn scale-events [events scale]
-  (mapv #(scale-event scale %) events))
+  (into [] (map #(scale-event scale %)) events))
 
 (defn scale-word-timings [word-timings scale]
-  (mapv (fn [timing]
-          (-> timing
-              (update :startSec #(* scale %))
-              (update :endSec #(* scale %))))
+  (into []
+        (map (fn [timing]
+               (-> timing
+                   (update :startSec #(* scale %))
+                   (update :endSec #(* scale %)))))
         word-timings))
 
 (defn web-speech-duration-ms

@@ -3,8 +3,7 @@
             [polymer.stream :as stream]
             [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]
-            [polymer.tts.state :as state]
-            [polymer.tts.transducers :as transducers]))
+            [polymer.tts.state :as state]))
 
 ;; TTS owns speech-provider side effects and emits plain data facts for LipSync.
 ;; Web Speech and Azure connection logic belongs here, not in LoomLarge React.
@@ -202,6 +201,31 @@
            :gender ""
            :styles []})
         (array-seq voices)))
+
+(defn normalize-voice
+  "Normalize Web Speech/Azure voice objects into one UI-friendly shape."
+  [voice provider]
+  {:id (or (:id voice) (:name voice) (:shortName voice) "")
+   :name (or (:name voice) (:localName voice) (:id voice) "")
+   :language (or (:language voice) (:lang voice) (:locale voice) "")
+   :gender (or (:gender voice) "")
+   :styles (vec (or (:styles voice) []))
+   :provider provider})
+
+(defn voice-xf
+  "Build the provider-specific voice normalization transducer."
+  [provider]
+  ;; Voice loading is a pure provider-boundary cleanup step. Keeping the map/filter
+  ;; as a local transducer gives one pass over provider lists without hiding any
+  ;; HTTP, browser, or runtime side effects inside the transform.
+  (comp
+   (map #(normalize-voice % provider))
+   (filter #(pos? (count (:id %))))))
+
+(defn normalize-voices
+  "Normalize voice choices and drop empty placeholder rows."
+  [voices provider]
+  (into [] (voice-xf provider) (or voices [])))
 
 (defn azure-cache-key
   "Build a stable Azure synthesis cache key from actual synthesis inputs."
@@ -570,7 +594,7 @@
                     (.then (fn [raw]
                                ;; Provider/backend shapes are normalized before
                                ;; any playback or LipSync command is emitted.
-                             (let [payload (transducers/normalize-azure-synthesis (js->clj raw :keywordize-keys true))]
+                             (let [payload (azure/normalize-azure-synthesis (js->clj raw :keywordize-keys true))]
                                (when-not cached
                                  (swap! azure-cache remember-cache cache-key payload (:azureCacheLimit config)))
                                (if (and (:audioBase64 payload) (seq (:visemes payload)))
@@ -671,7 +695,7 @@
                     "webSpeech"
                     (-> (load-web-speech-voices! config)
                         (.then (fn [voices]
-                                 (let [normalized (transducers/normalize-voices
+                                 (let [normalized (normalize-voices
                                                    (js->clj voices :keywordize-keys true)
                                                    "webSpeech")]
                                    (swap! state-atom state/record-web-speech-voices normalized)
@@ -686,7 +710,7 @@
                     (-> (load-azure-voices! config)
                         (.then (fn [response]
                                  (let [data (js->clj response :keywordize-keys true)
-                                       voices (transducers/normalize-voices (:voices data) "azure")
+                                       voices (normalize-voices (:voices data) "azure")
                                        ready? (and (:valid data) (seq voices))
                                        status (if ready? "ready" "error")
                                        message (if ready?

@@ -90,6 +90,23 @@
        (sort-by :time)
        vec))
 
+(defn normalize-azure-synthesis
+  "Return the pure provider packet TTS uses after Azure synthesis.
+
+  Audio fields are normalized here for playback. Visemes and word timings stay
+  raw until the Azure provider mapper and LipSync agency normalize them into a
+  provider-neutral animation timeline."
+  [payload]
+  {:audioBase64 (or (:audio_base64 payload) (:audioBase64 payload))
+   :audioFormat (or (:audio_format payload) (:audioFormat payload))
+   :durationSec (state/number-or (or (:durationSec payload)
+                                     (:duration_sec payload)
+                                     (:duration payload))
+                                 0)
+   :visemes (:visemes payload)
+   :wordTimings (or (:word_boundaries payload)
+                    (:wordTimings payload))})
+
 (defn azure-synthesis->lipsync-command
   "Build the LipSync command from a normalized Azure synthesis packet."
   [snippet-name text payload config]

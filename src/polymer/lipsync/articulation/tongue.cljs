@@ -39,10 +39,11 @@
   ;; Provider events sometimes arrive with only a viseme id. Fall back to the
   ;; canonical viseme class so Azure-style timelines and Web Speech fallback
   ;; timelines go through the same tongue rules.
-  (let [from-event (remove nil?
-                           (concat (map class-name (or (:phonemeClasses event) []))
-                                   [(class-name (:phonemeClass event))]))
-        fallback (map class-name (visemes/viseme-classes (:visemeId event)))]
+  (let [from-event (into []
+                         (keep class-name)
+                         (concat (or (:phonemeClasses event) [])
+                                 [(:phonemeClass event)]))
+        fallback (into [] (keep class-name) (visemes/viseme-classes (:visemeId event)))]
     (set (if (seq from-event) from-event fallback))))
 
 (defn has-class? [event class]
@@ -109,8 +110,7 @@
   ;; The grouping step is what makes the planner depend on a sequence of
   ;; visemes instead of individual events. "texts" and "strengths" should become
   ;; one coda tongue gesture rather than K, T, TH, and S all firing separately.
-  (let [ordered (->> events
-                     (keep tongue-event)
+  (let [ordered (->> (into [] (keep tongue-event) events)
                      (sort-by :offsetMs)
                      vec)]
     (loop [remaining ordered
