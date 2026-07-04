@@ -41,13 +41,13 @@ state inside pure transforms.
 
 ## Streams
 
-Every agency can expose three stream surfaces:
+Every agency can expose three stream ports:
 
 - `input`: commands accepted by the agency. This is useful for tests, workers,
   and debugging.
 - `events`: domain facts and cross-agency messages. This is the normal way
   agencies communicate.
-- `effects`: compatibility surface for host-owned effects. Polymer should avoid
+- `effects`: compatibility API for host-owned effects. Polymer should avoid
   using this as the primary animation path once a Polymer agency owns the
   relevant runtime side effect.
 
