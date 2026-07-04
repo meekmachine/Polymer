@@ -6,6 +6,9 @@ Polymer is intentionally separate from Latticework and Polyester. It starts with
 small, data-driven CLJS agencies that exchange plain events and keep runtime
 side effects inside the agencies that own them.
 
+See [docs/agency-architecture.md](docs/agency-architecture.md) for the agency
+boundary, scheduler, side-effect, and stream architecture rules.
+
 ## Agency Boundary
 
 Polymer agencies own agency-local state and timing. Domain agencies do not call
