@@ -9,6 +9,23 @@
 
 (def cleanup-buffer-ms 50)
 
+(defn debug-flag-enabled? [name]
+  (try
+    (let [search (when (exists? js/window)
+                   (.. js/window -location -search))
+          params (when search (js/URLSearchParams. search))
+          value (when params (.get params name))]
+      (or (= value "1") (= value "true")))
+    (catch :default _ false)))
+
+(defn animation-debug-enabled? []
+  (or (debug-flag-enabled? "polymerVocalDebug")
+      (debug-flag-enabled? "polymerLipSyncDebug")))
+
+(defn debug-log! [label payload]
+  (when (animation-debug-enabled?)
+    (.info js/console (str label " " (.stringify js/JSON (clj->js payload))))))
+
 (defn js-callable? [value]
   (= "function" (goog/typeOf value)))
 
@@ -108,6 +125,18 @@
 
 (defn typed-jaw-snippet? [snippet]
   (boolean (some typed-jaw-au-channel? (typed-channels snippet))))
+
+(defn typed-channel-summary [snippet]
+  (into []
+        (map (fn [channel]
+               (let [keyframes (:keyframes channel)
+                     peak (transduce (map :intensity) max 0 keyframes)]
+                 {:target (:target channel)
+                  :frames (count keyframes)
+                  :firstSec (:time (first keyframes))
+                  :lastSec (:time (last keyframes))
+                  :peak peak})))
+        (or (typed-channels snippet) [])))
 
 (defn explicit-auto-viseme-jaw [snippet]
   (when (contains? snippet :autoVisemeJaw)
@@ -293,6 +322,14 @@
                     snippet (assoc (:snippet payload) :name (state/snippet-name (:snippet payload) fallback-name))
                     options (assoc (or (:options payload) {}) :sourceAgency source-agency)
                     name (:name snippet)]
+                (debug-log! "[Polymer Animation CLJS] scheduleSnippet"
+                            {:name name
+                             :sourceAgency source-agency
+                             :typed (boolean (typed-channels snippet))
+                             :channelCount (count (typed-channels snippet))
+                             :channels (typed-channel-summary snippet)
+                             :curveKeys (vec (keys (or (:curves snippet) {})))
+                             :options options})
                 (swap! state-atom state/record-schedule snippet options source-agency requested-at)
                 (emit-event {:type "animationSnippetScheduled"
                              :agency "animation"

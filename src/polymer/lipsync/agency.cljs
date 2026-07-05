@@ -13,6 +13,49 @@
 ;; Inside Polymer, the agency system routes LipSync animation requests to the
 ;; Animation agency.
 
+(defn debug-flag-enabled? [name]
+  (try
+    (let [search (when (exists? js/window)
+                   (.. js/window -location -search))
+          params (when search (js/URLSearchParams. search))
+          value (when params (.get params name))]
+      (or (= value "1") (= value "true")))
+    (catch :default _ false)))
+
+(defn lipsync-debug-enabled? []
+  (or (debug-flag-enabled? "polymerVocalDebug")
+      (debug-flag-enabled? "polymerLipSyncDebug")))
+
+(defn debug-log! [label payload]
+  (when (lipsync-debug-enabled?)
+    (.info js/console (str label " " (.stringify js/JSON (clj->js payload))))))
+
+(defn viseme-event-summary [events]
+  (into []
+        (comp
+         (take 120)
+         (map (fn [event]
+                {:visemeId (:visemeId event)
+                 :phoneme (:phoneme event)
+                 :phonemeClass (:phonemeClass event)
+                 :offsetMs (:offsetMs event)
+                 :durationMs (:durationMs event)
+                 :intensity (:intensity event)
+                 :jawActivation (:jawActivation event)})))
+        events))
+
+(defn channel-summary [snippet-data]
+  (into []
+        (map (fn [channel]
+               (let [keyframes (:keyframes channel)
+                     peak (transduce (map :intensity) max 0 keyframes)]
+                 {:target (:target channel)
+                  :frames (count keyframes)
+                  :firstSec (:time (first keyframes))
+                  :lastSec (:time (last keyframes))
+                  :peak peak})))
+        (:channels snippet-data)))
+
 (defn js-command [type value]
   #js {:type type :value value})
 
@@ -235,6 +278,22 @@
                                          (state/finite-number? (:durationSec normalized))
                                          (assoc :maxTime (max (:maxTime built) (:durationSec normalized))))
                           started-at (state/now-ms)]
+                      (debug-log! "[Polymer LipSync CLJS] normalized timeline"
+                                  {:name (:name snippet-data)
+                                   :source (:source normalized)
+                                   :visemeCount (count (:visemes normalized))
+                                   :uniqueVisemeIds (->> (:visemes normalized)
+                                                         (map :visemeId)
+                                                         set
+                                                         sort
+                                                         vec)
+                                   :visualLeadMs (:visualLeadMs normalized)
+                                   :maxTime (:maxTime snippet-data)
+                                   :visemes (viseme-event-summary (:visemes normalized))})
+                      (debug-log! "[Polymer LipSync CLJS] snippet channels"
+                                  {:name (:name snippet-data)
+                                   :channelCount (count (:channels snippet-data))
+                                   :channels (channel-summary snippet-data)})
                       (swap! state-atom state/record-start normalized (:name snippet-data) started-at (:maxTime snippet-data))
                       (emit-event {:type "lipSyncTimelineStarted"
                                    :agency "lipSync"
