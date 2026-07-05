@@ -46,6 +46,32 @@
          (swap! calls conj {:method "cleanupSnippet" :name name})
          true)})
 
+(defn fake-engine
+  "Create an Embody-shaped engine spy for production-shaped routing tests."
+  [calls]
+  #js {:playSnippet
+       (fn [snippet options]
+         (swap! calls conj {:method "engine.playSnippet"
+                            :name (aget snippet "name")
+                            :curves (js->clj (aget snippet "curves") :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName (aget snippet "name")
+              :stop (fn [] true)
+              :finished (js/Promise.resolve nil)})
+       :playTypedSnippet
+       (fn [snippet options]
+         (swap! calls conj {:method "engine.playTypedSnippet"
+                            :name (aget snippet "name")
+                            :channels (js->clj (aget snippet "channels") :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName (aget snippet "name")
+              :stop (fn [] true)
+              :finished (js/Promise.resolve nil)})
+       :cleanupSnippet
+       (fn [name]
+         (swap! calls conj {:method "engine.cleanupSnippet" :name name})
+         true)})
+
 (deftest provider-planner-plans-provider-specific-speech
   (testing "web speech gets a speech plan with no Azure synthesis step"
     (let [plan (planner/plan-speech {:type "speak"
@@ -164,6 +190,34 @@
       (is (some #{"lipSyncTimelineStarted"} event-types))
       (is (some #{"animationSnippetScheduled"} event-types))
       (is (= "playSnippet" (:method (first @calls)))))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest character-network-routes-web-speech-lipsync-through-embody-typed-engine
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies
+                #js {:tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}
+                     :animation #js {:engine (fake-engine calls)}})
+        events (domain-events system)]
+    (.dispatch ^js system #js {:agency "tts"
+                               :command #js {:type "speak"
+                                             :engine "webSpeech"
+                                             :text "hello world"
+                                             :name "tts:test:typed-webspeech"}})
+    (let [event-types (map :type @(:events events))
+          first-call (first @calls)]
+      (is (some #{"ttsSpeechStarted"} event-types))
+      (is (some #{"lipSyncTimelineStarted"} event-types))
+      (is (some #{"animationSnippetScheduled"} event-types))
+      (is (= "engine.playTypedSnippet" (:method first-call)))
+      (is (some #(and (= "viseme" (get-in % [:target :type]))
+                      (= 1 (get-in % [:target :id])))
+                (:channels first-call)))
+      (is (some #(and (= "au" (get-in % [:target :type]))
+                      (= 26 (get-in % [:target :id])))
+                (:channels first-call)))
+      (is (not (contains? (:options first-call) :snippetCategory)))
+      (is (false? (get-in first-call [:options :autoVisemeJaw]))))
     ((:unsubscribe events))
     (.dispose ^js system)))
 

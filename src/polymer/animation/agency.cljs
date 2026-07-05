@@ -31,33 +31,42 @@
   ;; Loom3 already exposes the dynamic clip/snippet methods the scheduler needs.
   ;; Polymer adapts the current engine once here and keeps all later playback,
   ;; parameter, and cleanup calls inside the Animation agency.
-  #js {:buildClip (fn [clip-name curves options]
-                    (call-js engine "buildClip" clip-name curves options))
-       :buildTypedClip (fn [clip-name channels options]
-                         (call-js engine "buildTypedClip" clip-name channels options))
-       :playSnippet (fn [clip-name curves options]
-                      (or
-                       (call-js engine "playSnippet" #js {:name clip-name :curves curves} options)
-                       (let [handle (call-js engine "buildClip" clip-name curves options)]
-                         (play-built-handle! handle))))
-       :playTypedSnippet (fn [snippet options]
-                           (let [clip-name (aget snippet "name")
-                                 channels (aget snippet "channels")]
-                             (or
-                              (call-js engine "playTypedSnippet" snippet options)
-                              (play-built-handle!
-                               (call-js engine "buildTypedClip" clip-name channels options)))))
-       :updateClipParams (fn [clip-name params]
-                           (call-js engine "updateClipParams" clip-name params))
-       :setSnippetTime (fn [clip-name offset-sec]
-                         (or (call-js engine "setSnippetTime" clip-name offset-sec)
-                             (call-js engine "seekSnippet" clip-name offset-sec)
-                             (call-js engine "seek" clip-name offset-sec)))
-       :cleanupSnippet (fn [clip-name]
-                         (or (call-js engine "cleanupSnippet" clip-name)
-                             (call-js engine "stopAnimation" clip-name)))
-       :getAnimationState (fn [clip-name]
-                            (call-js engine "getAnimationState" clip-name))})
+  (let [runtime #js {:buildClip (fn [clip-name curves options]
+                                  (call-js engine "buildClip" clip-name curves options))
+                     :playSnippet (fn [clip-name curves options]
+                                    (or
+                                     (call-js engine "playSnippet" #js {:name clip-name :curves curves} options)
+                                     (let [handle (call-js engine "buildClip" clip-name curves options)]
+                                       (play-built-handle! handle))))
+                     :updateClipParams (fn [clip-name params]
+                                         (call-js engine "updateClipParams" clip-name params))
+                     :setSnippetTime (fn [clip-name offset-sec]
+                                       (or (call-js engine "setSnippetTime" clip-name offset-sec)
+                                           (call-js engine "seekSnippet" clip-name offset-sec)
+                                           (call-js engine "seek" clip-name offset-sec)))
+                     :cleanupSnippet (fn [clip-name]
+                                       (or (call-js engine "cleanupSnippet" clip-name)
+                                           (call-js engine "stopAnimation" clip-name)))
+                     :getAnimationState (fn [clip-name]
+                                          (call-js engine "getAnimationState" clip-name))}]
+    ;; Only expose typed playback if the underlying engine really has a typed
+    ;; build/play entry point. Otherwise play-runtime-snippet! must use the legacy
+    ;; curve fallback and add the viseme category hint instead of dropping the clip.
+    (when (js-method engine "buildTypedClip")
+      (aset runtime "buildTypedClip"
+            (fn [clip-name channels options]
+              (call-js engine "buildTypedClip" clip-name channels options))))
+    (when (or (js-method engine "playTypedSnippet")
+              (js-method engine "buildTypedClip"))
+      (aset runtime "playTypedSnippet"
+            (fn [snippet options]
+              (let [clip-name (aget snippet "name")
+                    channels (aget snippet "channels")]
+                (or
+                 (call-js engine "playTypedSnippet" snippet options)
+                 (play-built-handle!
+                  (call-js engine "buildTypedClip" clip-name channels options)))))))
+    runtime))
 
 (defn config->runtime [config]
   (let [runtime (aget config "runtime")

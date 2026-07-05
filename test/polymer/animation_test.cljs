@@ -73,6 +73,21 @@
          (swap! calls conj {:method "engine.cleanupSnippet" :name name})
          true)})
 
+(defn make-legacy-engine [calls]
+  #js {:playSnippet
+       (fn [snippet options]
+         (swap! calls conj {:method "engine.playSnippet"
+                            :name (aget snippet "name")
+                            :curves (js->clj (aget snippet "curves") :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName (aget snippet "name")
+              :stop (fn [] true)
+              :finished (js/Promise.resolve nil)})
+       :cleanupSnippet
+       (fn [name]
+         (swap! calls conj {:method "engine.cleanupSnippet" :name name})
+         true)})
+
 (deftest animation-agency-owns-schedule-and-calls-runtime
   (async done
          (let [calls (atom [])
@@ -170,6 +185,33 @@
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
       (is (= "au" (get-in call [:channels 1 :target :type])))
       (is (not (contains? options :snippetCategory)))
+      (is (false? (:autoVisemeJaw options))))
+    (.dispose ^js agency)))
+
+(deftest animation-engine-wrapper-falls-back-to-legacy-only-when-engine-has-no-typed-api
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:engine (make-legacy-engine calls)})]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "lipSync"
+                               :snippet #js {:name "voice:legacy-engine"
+                                             :curves #js {"1" #js [#js {:time 0 :intensity 0}
+                                                                   #js {:time 0.08 :intensity 1}]
+                                                          "26" #js [#js {:time 0 :intensity 0}
+                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                             :channels #js [#js {:target #js {:type "viseme" :id 1}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 1}]}
+                                                            #js {:target #js {:type "au" :id 26}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 0.35}]}]
+                                             :maxTime 0.08
+                                             :loop false
+                                             :autoVisemeJaw false}
+                               :options #js {:autoPlay true}})
+    (let [call (first @calls)
+          options (:options call)]
+      (is (= "engine.playSnippet" (:method call)))
+      (is (= "visemeSnippet" (:snippetCategory options)))
       (is (false? (:autoVisemeJaw options))))
     (.dispose ^js agency)))
 
