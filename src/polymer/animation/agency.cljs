@@ -181,17 +181,20 @@
         (call-js runtime "playSnippet" name curves-js clip-options)))))
 
 (defn play-runtime-snippet! [runtime snippet options]
-  ;; LipSync snippets keep typed channels as the canonical Polymer data surface,
-  ;; but today Embody can legitimately return a typed clip handle after only
-  ;; resolving AU26. That makes Web Speech look like jaw-only flapping. When
-  ;; LipSync also provides the enclosure curves, prefer the mature visemeSnippet
-  ;; curve route so numeric viseme keys resolve through the same profile-aware
-  ;; morph-target path that the stable Latticework implementation used.
-  (or (when (typed-viseme-curves-snippet? snippet)
-        (play-runtime-legacy-snippet! runtime snippet options))
-      (when (typed-channels snippet)
-        (play-runtime-typed-snippet! runtime snippet options))
-      (play-runtime-legacy-snippet! runtime snippet options)))
+  ;; Typed channels are Polymer's canonical animation contract. They say
+  ;; "viseme 7", "AU26", or "bone HEAD rx" directly, so Embody does not have to
+  ;; guess whether numeric curve keys are viseme slots or AU ids. The legacy
+  ;; curve fallback is kept only for older runtimes that do not expose typed
+  ;; playback yet; once a runtime accepts typed snippets, a failed typed build
+  ;; should surface as an error instead of falling back to a route that can play
+  ;; lip ids as unrelated facial AUs.
+  (if (typed-channels snippet)
+    (if (or (js-method runtime "playTypedSnippet")
+            (js-method runtime "buildTypedClip"))
+      (play-runtime-typed-snippet! runtime snippet options)
+      (when (seq (:curves snippet))
+        (play-runtime-legacy-snippet! runtime snippet options)))
+    (play-runtime-legacy-snippet! runtime snippet options)))
 
 (defn create-animation-agency [config]
   (let [runtime (config->runtime (or config #js {}))
