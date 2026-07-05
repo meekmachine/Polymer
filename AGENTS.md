@@ -5,56 +5,53 @@ These instructions apply to the Polymer repository.
 ## Required Reading
 
 Before changing agency code, read `docs/agency-architecture.md`. Treat that file
-as the source of truth for agency boundaries, stream ownership, scheduler
-responsibilities, and side-effect placement.
+as the source of truth for agency collaboration, local GOAP/planner behavior,
+scheduler responsibilities, stream routing, and side-effect placement.
 
-## Agency Boundaries
+## Agency Architecture
 
-- Keep TTS and LipSync separate. TTS owns speech synthesis and provider/audio
-  facts. LipSync owns lip, jaw, tongue, viseme mapping, and speech animation
-  scheduling.
-- Agencies communicate through command/event streams. Do not make LoomLarge or a
-  React hook translate Polymer events into Polymer agency calls.
-- Do not add a one-off React hook for each agency as routing glue. React may
-  dispatch UI commands and read stable snapshots; it should not become the
-  runtime message bus.
-- Animation is the only agency that calls Embody/Loom3. Other agencies emit
-  animation intent as data.
+- Model Polymer as a Society of Mind agency system. Do not introduce a central
+  planner, central arbitrator, or host-side message bus unless an issue
+  explicitly asks for that change.
+- Every agency should have the standard shape: state, local GOAP/planner,
+  scheduler, incoming/outgoing streams, domain transforms, and effectors where
+  needed.
+- Agencies collaborate by stream messages. Messages may be facts, goals,
+  requests, constraints, priorities, status, or diagnostics.
+- Do not add a public generic side-effect stream as the architecture. A request
+  may lead another agency to perform a side effect, but the side effect belongs
+  inside the responsible agency.
+- Keep host applications out of Polymer agency routing. Hosts may dispatch
+  external commands and observe outputs, but Polymer agencies should route to
+  each other inside the agency system.
 
 ## Side Effects
 
-- Treat timers, animation frames, browser APIs, audio, HTTP, storage, DOM,
-  LiveKit, and Embody runtime calls as side effects.
-- Timed or ordered side effects should go through the owning agency scheduler.
-  Do not scatter `setTimeout`, `requestAnimationFrame`, or cleanup timers across
-  domain logic.
-- Pure state, planner, and articulation namespaces must not close over JS
-  handles, browser globals, runtime objects, or React state.
-
-## LipSync Rules
-
-- LipSync should produce one utterance-level snippet for speech. Lip visemes,
-  jaw AU 26, and tongue controls are channels in that snippet.
-- The articulator namespaces may be separate for clarity, but their output must
-  converge through the LipSync scheduler before Animation sees it.
-- TTS should trigger LipSync by emitting `lipSync.command` events, not by
-  constructing mouth animation itself.
-- Preserve provider-specific facts at the TTS boundary, then normalize them into
-  LipSync's canonical timeline inside the LipSync path.
+- Treat browser APIs, audio/video I/O, storage, network requests, DOM access,
+  worker messages, runtime engines, robotics interfaces, and animation runtimes
+  as side effects.
+- Side effects should happen only inside the agency responsible for that
+  external system, after planned work passes through that agency's scheduler.
+- Pure state, planner, scheduler decision logic, and domain transforms must not
+  close over external handles, browser globals, runtime objects, or host
+  application state.
+- Keep runtime targets replaceable. Do not make core agency architecture depend
+  on one rendering, game, animation, or robotics library.
 
 ## ClojureScript Style
 
-- Prefer pure functions for state, planning, provider normalization, and
-  articulation transforms.
+- Prefer pure functions for state, planning, provider normalization, and domain
+  transforms.
 - Use transducers only for pure map/filter/keep/mapcat/reduce style data
   transformations. Do not use them to hide side effects or control flow.
-- Keep comments useful and concrete. Explain boundaries and non-obvious timing
-  decisions; do not comment every obvious line.
+- Keep comments useful and concrete. Explain boundaries and non-obvious
+  scheduler or planning decisions; do not comment every obvious line.
 
 ## Pull Requests
 
 - Keep PRs scoped to the agency or architecture layer being changed.
-- If requirements are unclear, write down the proposed stream events and
-  scheduler ownership before implementing.
-- Include tests that prove stream routing and scheduler ownership, not just
-  generated shape snapshots.
+- If requirements are unclear, write down the proposed incoming/outgoing stream
+  messages, local GOAP/planner behavior, scheduler responsibility, and
+  side-effect boundary before implementing.
+- Include tests that prove stream routing, planner decisions, scheduler
+  behavior, and side-effect boundaries.

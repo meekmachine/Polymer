@@ -2,99 +2,46 @@
 
 Clean ClojureScript character agency package for Character Loom.
 
-Polymer is intentionally separate from Latticework and Polyester. It starts with
-small, data-driven CLJS agencies that exchange plain events and keep runtime
-side effects inside the agencies that own them.
+Polymer is intentionally separate from Latticework and Polyester. It is built as
+a Society of Mind agency system: small CLJS agencies collaborate through streams,
+plan locally, schedule their own work, and keep side effects inside the agencies
+responsible for performing them.
 
 See [docs/agency-architecture.md](docs/agency-architecture.md) for the agency
-boundary, scheduler, side-effect, and stream architecture rules.
+collaboration, scheduler, side-effect, stream, and runtime-target rules.
 
-## Agency Boundary
+## Agency API
 
-Polymer agencies own agency-local state and timing. Domain agencies do not call
-React, LoomLarge, Latticework, the DOM, audio, video, storage, or HTTP.
-Animation is the runtime boundary: it is the only agency that talks directly to
-the Embody/Loom3 animation runtime.
-
-The package exposes one character-level agency system:
+The package exposes an agency system:
 
 ```js
 const agencies = createCharacterAgencies();
 agencies.dispatch({ agency: "blink", command: { type: "enable" } });
 
-agencies.events.subscribe((event) => {});
-agencies.effects.subscribe((effect) => {});
+agencies.events.subscribe((message) => {});
 agencies.snapshot();
 ```
 
-The stream contract is:
+Agencies communicate through incoming and outgoing streams of plain data.
+Messages may be facts, goals, requests, constraints, priorities, status, or
+diagnostics. Requests that imply side effects are handled by the receiving
+agency's local planner, scheduler, and effector path.
 
-- `input`: commands entering the character agency system.
-- `events`: factual agency decisions/signals, such as `blinkPlanned` or
-  `blink-fast`, plus low-frequency config-change events.
-- `effects`: reserved for host-owned side effects. Blink and Vocal currently do
-  not use it for animation playback because the character network routes their
-  animation events directly to Polymer Animation.
-- `snapshot()`: pull-based diagnostic/config reads. Hosts should not wire this
-  to a live React subscription for runtime playback ticks.
+Host applications may dispatch external commands, observe outgoing streams, and
+read snapshots for diagnostics or configuration. Host applications should not
+serve as the normal message bus between Polymer agencies.
 
-LoomLarge can still feed commands into Polymer while other legacy agencies live
-in Latticework. It should not subscribe to Polymer playback events and translate
-them into animation calls; the Polymer character network routes those to
-Animation internally.
+## Current Agencies
 
-## Blink Agency
+Polymer currently includes early Blink, Animation, TTS, and LipSync agencies.
+These are implementation milestones, not the limits of the architecture. Each
+agency should follow the same local GOAP/planner, scheduler, stream, transform,
+and effector pattern as the package grows.
 
-Blink is the first agency. It is split into state, planner, snippet builder, and
-scheduler namespaces so the same pattern can scale to animation and prosodic
-expression without putting lifecycle glue in UI components.
-
-Automatic blink opportunities can become configurable n-blink bursts. The
-default burst is a double blink, controlled by `burstFrequency`, `burstCount`,
-and `burstGap`.
-
-## Animation Agency
-
-Animation is the first coordination agency. Blink and Vocal do not emit host
-animation effects directly. They emit `animation.requestScheduleSnippet`,
-`animation.requestRemoveSnippet`, or `animation.requestSeekSnippet` events; the
-character system routes those events to the Animation agency; Animation records
-the requested snippet in its own state and calls the Embody/Loom3 runtime.
-
-That keeps animation side effects in one agency while Polymer grows toward
-replacing the remaining Latticework runtime services.
-
-## Vocal/LipSync Agency
-
-Vocal is the second migrated domain agency. It accepts provider/text timing data
-as commands and schedules one utterance-level typed animation snippet through
-Polymer Animation. Viseme channels target `{ type: "viseme" }`; jaw motion uses
-an explicit AU 26 channel, so Polymer does not rely on `snippetCategory` for
-normal namespace routing.
-
-The vocal planner treats lip shape, jaw opening, and tongue lift as separate
-controls. Text fallback and Azure timelines can expand diphthongs into two lip
-targets while keeping one jaw arc, stacked consonants collapse to a low jaw
-target instead of reopening AU 26 for every consonant, and tongue-heavy viseme
-series emit a subtle AU 37 tongue-up curve when the active rig exposes a tongue
-bone. `jawScale` and `tongueScale` can independently disable or tune those
-secondary controls without changing the lip visemes.
-
-Supported inputs:
-
-- `startText`: fallback deterministic text-to-viseme planning.
-- `startTimeline`: already-normalized canonical viseme timelines.
-- `processAzureVisemes`: Azure/SAPI 0-21 viseme events, including LiveKit-style
-  `{ id, time }` payloads.
-- `updateWordTimings`: provider word-boundary metadata that arrives after the
-  viseme timeline has already started.
-- `wordBoundary`: drift correction. When provider word timing and observed
-  playback time diverge, Vocal requests an Animation seek instead of reaching
-  through LoomLarge.
-
-Vocal intentionally does not own Azure credentials, audio playback, LiveKit
-connections, browser speech APIs, or backend HTTP. Those systems should feed
-plain command data into the agency.
+Runtime-specific work belongs at the edge. The current animation path can target
+the existing web runtime, but Polymer core should remain able to support other
+runtime targets such as Babylon, Unity, Godot, robotics, or future animation
+libraries through separate runtime-specific boundaries.
 
 ## Git Install Contract
 
