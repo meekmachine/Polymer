@@ -138,7 +138,7 @@
          :lastError nil))
 
 (defn record-word-boundary
-  "Remember the latest provider word boundary without making React poll state."
+  "Remember the latest provider word boundary without making host code poll state."
   [state word-index]
   (assoc state :wordIndex (inc (max 0 (int word-index)))))
 

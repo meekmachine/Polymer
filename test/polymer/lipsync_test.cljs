@@ -142,6 +142,30 @@
     ((:unsubscribe effects))
     (.dispose ^js agency)))
 
+(deftest LipSync-scheduler-queues-animation-work-before-emitting-requests
+  (let [agency (polymer/createLipSyncAgency nil)
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "startText"
+                               :name "voice:scheduler"
+                               :text "hello world"
+                               :source "webSpeech"})
+    (.dispatch ^js agency #js {:type "audioTime"
+                               :audioTimeSec 0.18})
+    (.dispatch ^js agency #js {:type "stop"})
+    (let [queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)
+          event-types (map :type @(:events events))]
+      (is (= ["scheduleAnimation" "seekAnimation" "removeAnimation"]
+             (map :type queue)))
+      (is (= [0 1 2] (map :queueIndex queue)))
+      (is (= "voice:scheduler" (:snippetName (first queue))))
+      (is (contains? (set (:effectors (first queue))) "lip"))
+      (is (contains? (set (:effectors (first queue))) "jaw"))
+      (is (some #{"animation.requestScheduleSnippet"} event-types))
+      (is (some #{"animation.requestSeekSnippet"} event-types))
+      (is (some #{"animation.requestRemoveSnippet"} event-types)))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest web-speech-text-emits-lip-and-independent-jaw-channels
   (let [agency (polymer/createLipSyncAgency #js {:speechRate 1 :jawScale 1})
         events (domain-events agency)]

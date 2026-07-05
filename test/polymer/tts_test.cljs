@@ -195,10 +195,14 @@
             (fn []
               (try
                 (let [commands (keep #(when (= "lipSync.command" (:type %)) (:command %)) @(:events events))
-                      process-command (some #(when (= "processAzureVisemes" (:type %)) %) commands)]
+                      process-command (some #(when (= "processAzureVisemes" (:type %)) %) commands)
+                      queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)]
                   (is process-command)
                   (is (= [{:viseme_id 2 :audio_offset 0.1}] (:visemes process-command)))
-                  (is (= [{:word "hello" :start_time 0 :end_time 0.3}] (:wordTimings process-command))))
+                  (is (= [{:word "hello" :start_time 0 :end_time 0.3}] (:wordTimings process-command)))
+                  (is (= ["audioBoundaryPolling"] (map :type queue)))
+                  (is (= [0] (map :queueIndex queue)))
+                  (is (= 1 (:wordCount (first queue)))))
                 ((:unsubscribe events))
                 (.dispose ^js agency)
                 (done)

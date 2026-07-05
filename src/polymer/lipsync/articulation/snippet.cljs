@@ -7,7 +7,7 @@
 
 ;; Snippet construction is pure: it turns a normalized viseme timeline into the
 ;; animation data that Polymer Animation can schedule. It does not know about
-;; React, audio playback, LiveKit, Azure credentials, or runtime handles.
+;; host UI code, audio playback, LiveKit, Azure credentials, or engine handles.
 
 (def jaw-au "26")
 (def intensity-eps 0.001)

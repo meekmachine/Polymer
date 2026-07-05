@@ -8,10 +8,10 @@
             [polymer.lipsync.articulation.visemes :as visemes]))
 
 ;; LipSync accepts provider/text timing data and produces animation intent.
-;; It does not own audio playback, provider credentials, HTTP, LiveKit, React,
-;; storage, or DOM APIs. Those are host-side side effects that feed commands
-;; into this agency. Inside Polymer, the character network routes LipSync's
-;; animation requests to the Animation agency.
+;; It does not own audio playback, provider credentials, HTTP, LiveKit, storage,
+;; or DOM APIs. Those side-effect agencies feed plain messages into this agency.
+;; Inside Polymer, the agency system routes LipSync animation requests to the
+;; Animation agency.
 
 (defn js-command [type value]
   #js {:type type :value value})
@@ -177,35 +177,10 @@
     ;; Stream contract for this agency:
     ;; - input records accepted commands for tests/workers/debugging.
     ;; - events carry domain facts and cross-agency requests.
-    ;; - effects is intentionally empty today; Animation, not LoomLarge, owns
-    ;;   runtime side effects once the character network routes event data.
+    ;; - effects remains an empty compatibility port; outgoing agency requests
+    ;;   are plain events, not a generic side-effect stream.
     (letfn [(active-name []
               (:snippetName @state-atom))
-
-            (emit-animation-schedule! [snippet-data]
-              ;; This is a domain event, not a host side-effect callback. The
-              ;; Polymer character network consumes it and dispatches directly
-              ;; to Polymer Animation.
-              (emit-event {:type "animation.requestScheduleSnippet"
-                           :agency "lipSync"
-                           :requestId (:name snippet-data)
-                           :snippet snippet-data
-                           :options {:autoPlay true}}))
-
-            (emit-animation-remove! [name reason]
-              (emit-event {:type "animation.requestRemoveSnippet"
-                           :agency "lipSync"
-                           :requestId name
-                           :name name
-                           :reason reason}))
-
-            (emit-animation-seek! [name offset-sec reason]
-              (emit-event {:type "animation.requestSeekSnippet"
-                           :agency "lipSync"
-                           :requestId (str name ":seek:" (.now js/Date))
-                           :name name
-                           :offsetSec offset-sec
-                           :reason reason}))
 
             (audio-clock-sec [payload]
               (max 0
@@ -217,7 +192,8 @@
             (stop-local! [reason remove?]
               (when-let [name (active-name)]
                 (when remove?
-                  (emit-animation-remove! name reason)))
+                  (when-let [s @agency-scheduler]
+                    ((:remove s) name reason))))
               (when-let [s @agency-scheduler]
                 ((:stop s)))
               (let [stopped-at (state/now-ms)]
@@ -268,9 +244,8 @@
                                    :visemeCount (count (:visemes normalized))
                                    :maxTime (:maxTime snippet-data)
                                    :startedAt started-at})
-                      (emit-animation-schedule! snippet-data)
                       (when-let [s @agency-scheduler]
-                        ((:schedule-finished s) (:maxTime snippet-data)))
+                        ((:schedule-timeline s) snippet-data {:autoPlay true}))
                       snippet-data)))))
 
             (start-text! [payload]
@@ -342,7 +317,8 @@
                                    :driftSec drift-sec
                                    :targetSec target-sec
                                    :correctedAt corrected-at})
-                      (emit-animation-seek! name target-sec "word-boundary-drift"))))))
+                      (when-let [s @agency-scheduler]
+                        ((:seek s) name target-sec "word-boundary-drift")))))))
 
             (handle-audio-started! [payload]
               ;; The host owns audio playback. This command tells LipSync when
@@ -360,7 +336,8 @@
                              :audioTimeSec audio-time-sec
                              :observedAt observed-at})
                 (when name
-                  (emit-animation-seek! name audio-time-sec "audio-started"))))
+                  (when-let [s @agency-scheduler]
+                    ((:seek s) name audio-time-sec "audio-started")))))
 
             (handle-audio-time! [payload]
               ;; Optional low-frequency host clock correction. This is not a
@@ -377,7 +354,8 @@
                              :audioTimeSec audio-time-sec
                              :observedAt observed-at})
                 (when name
-                  (emit-animation-seek! name audio-time-sec "audio-time"))))
+                  (when-let [s @agency-scheduler]
+                    ((:seek s) name audio-time-sec "audio-time")))))
 
             (update-word-timings! [payload]
               (let [updated-at (state/now-ms)
@@ -395,7 +373,7 @@
                       plan (goap/plan-command payload {:speaking (:speaking @state-atom)})]
                   ;; Every command produces an input echo and a plan event before
                   ;; any mutation. That makes failed/ignored commands observable
-                  ;; without asking React to subscribe to mutable state.
+                  ;; through the event stream instead of mutable state polling.
                   (emit-input {:type "command"
                                :agency "lipSync"
                                :command payload})
@@ -449,14 +427,19 @@
                       (emit-event {:type "error"
                                    :agency "lipSync"
                                    :message (str "Unknown LipSync command: " type)}))))))]
-      (reset! agency-scheduler (scheduler/create-scheduler {:on-finished finish-local!}))
+      (reset! agency-scheduler (scheduler/create-scheduler {:emit-event emit-event
+                                                            :on-finished finish-local!}))
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))
+           :schedulerQueue (fn []
+                             (clj->js (if-let [s @agency-scheduler]
+                                        ((:queue s))
+                                        [])))
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
            ;; Empty compatibility stream. Cross-agency animation requests are
-           ;; domain events so the Polymer character network can route them to
-           ;; Animation without LoomLarge becoming the interpreter.
+           ;; domain events so the Polymer agency system can route them to
+           ;; Animation without host UI code becoming the interpreter.
            :effects (stream/readable-port effect-stream)
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))

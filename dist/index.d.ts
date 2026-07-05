@@ -349,6 +349,61 @@ export type TTSDispatch =
   | { type: 'stop' }
   | { type: 'reset' };
 
+export type LipSyncSchedulerQueueEntry =
+  | {
+      type: 'scheduleAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      snippetName: string;
+      effectors: string[];
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'seekAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      name: string;
+      offsetSec: number;
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'removeAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      name: string;
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'finishTimeline';
+      agency: 'lipSync';
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    };
+
+export type TTSSchedulerQueueEntry =
+  | {
+      type: 'webSpeechStartFallback';
+      agency: 'tts';
+      sessionId: number;
+      delayMs: number;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'audioBoundaryPolling';
+      agency: 'tts';
+      sessionId: number;
+      wordCount: number;
+      queueIndex: number;
+      queuedAt: number;
+    };
+
 export interface PolymerStream<TEvent> {
   subscribe(listener: (event: TEvent) => void): () => void;
 }
@@ -360,10 +415,9 @@ export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'com
 /**
  * Reserved compatibility stream.
  *
- * Polymer agencies route animation and speech coordination through domain
- * events inside the character network. No host-effect events are emitted today,
- * so consumers should subscribe to events unless a future agency explicitly
- * documents an effect event.
+ * Polymer agencies coordinate through typed domain events. No generic public
+ * effect events are emitted today, so consumers should subscribe to events
+ * unless a future agency explicitly documents a compatibility event here.
  */
 export type PolymerEffectEvent = never;
 
@@ -381,6 +435,9 @@ export type PolymerDomainEvent =
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
+      effectors?: string[];
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animation.requestRemoveSnippet';
@@ -388,6 +445,8 @@ export type PolymerDomainEvent =
       requestId: string;
       name: string;
       reason: string;
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animation.requestSeekSnippet';
@@ -396,6 +455,8 @@ export type PolymerDomainEvent =
       name: string;
       offsetSec: number;
       reason: string;
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animationSnippetScheduled';
@@ -551,6 +612,7 @@ export interface LipSyncAgency {
   effects: PolymerStream<PolymerEffectEvent>;
   dispatch(command: LipSyncDispatch): void;
   snapshot(): LipSyncState;
+  schedulerQueue(): LipSyncSchedulerQueueEntry[];
   subscribeInput(listener: (event: { type: 'command'; agency: 'lipSync'; command: LipSyncDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
   subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
@@ -579,6 +641,7 @@ export interface TTSAgency {
   effects: PolymerStream<PolymerEffectEvent>;
   dispatch(command: TTSDispatch): void;
   snapshot(): TTSState;
+  schedulerQueue(): TTSSchedulerQueueEntry[];
   subscribeInput(listener: (event: { type: 'command'; agency: 'tts'; command: TTSDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
   subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;

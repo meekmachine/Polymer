@@ -9,8 +9,8 @@
 ;; nucleus can keep the jaw open while the lips travel through a diphthong.
 ;;
 ;; Inputs are normalized viseme timeline events. Outputs are plain AU26 keyframes.
-;; There are no host side effects here: no audio, DOM, scheduler, runtime handle,
-;; React state, or provider credential access.
+;; There are no host side effects here: no audio, DOM, scheduler, engine handle,
+;; UI state, or provider credential access.
 
 (def intensity-eps 0.001)
 (def jaw-long-gap-ms 90)

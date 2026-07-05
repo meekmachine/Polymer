@@ -3,10 +3,11 @@
             [polymer.stream :as stream]
             [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]
+            [polymer.tts.scheduler :as scheduler]
             [polymer.tts.state :as state]))
 
 ;; TTS owns speech-provider side effects and emits plain data facts for LipSync.
-;; Web Speech and Azure connection logic belongs here, not in LoomLarge React.
+;; Web Speech and Azure connection logic belongs here, not in host UI code.
 
 (def azure-audio-unlock-data-url
   ;; This silent WAV primes HTMLAudio during a user gesture before real Azure audio.
@@ -256,35 +257,11 @@
       (catch :default _ nil)))
   (when-let [url (:audioUrl @resources)]
     (js/URL.revokeObjectURL url))
-  (when-let [frame (:boundaryFrame @resources)]
-    (when-let [window (window*)]
-      (.cancelAnimationFrame window frame)))
   (swap! resources assoc
          :audio nil
          :audioUrl nil
          :audioSource nil
-         :boundaryFrame nil
          :webSpeechFallbackTimer nil))
-
-(defn schedule-boundaries!
-  "Emit word boundaries against a playback clock without a React render loop."
-  [resources session-id active-session? clock word-timings on-boundary]
-  (let [index (atom 0)
-        tick (atom nil)]
-    (reset! tick
-            (fn []
-              (when (and (active-session? session-id) ((:shouldContinue clock)))
-                (let [current-time ((:currentTime clock))]
-                  (while (and (< @index (count word-timings))
-                              (<= (:startSec (nth word-timings @index)) (+ current-time 0.02)))
-                    (let [boundary (nth word-timings @index)]
-                      (on-boundary {:word (:word boundary)
-                                    :observedElapsedSec current-time})
-                      (swap! index inc))))
-                (when-let [window (window*)]
-                  (swap! resources assoc :boundaryFrame (.requestAnimationFrame window @tick))))))
-    (when-let [window (window*)]
-      (swap! resources assoc :boundaryFrame (.requestAnimationFrame window @tick)))))
 
 (defn play-html-audio!
   "Play Azure audio through HTMLAudio and report a clock once playback begins."
@@ -384,11 +361,9 @@
           matching-voice (some #(when (= voice-name (.-name %)) %) (array-seq voices))
           visuals-started (atom false)
           visual-started-at (atom nil)
-          fallback-timer (atom nil)
           clear-fallback (fn []
-                           (when @fallback-timer
-                             (.clearTimeout window @fallback-timer)
-                             (reset! fallback-timer nil)))
+                           (when-let [cancel (:cancelStartFallback plan)]
+                             (cancel)))
           start-visuals (fn []
                           (when-not @visuals-started
                             (reset! visuals-started true)
@@ -421,12 +396,17 @@
               (clear-fallback)
               ((:onError plan) (js-error (str "Web Speech failed: " (.-error event))))))
       (.speak synthesis utterance)
-      (reset! fallback-timer
-              (.setTimeout window
+      (if-let [schedule-fallback (:scheduleStartFallback plan)]
+        (schedule-fallback 120
                            (fn []
                              (when (.-speaking synthesis)
-                               (start-visuals)))
-                           120))
+                               (start-visuals))))
+        (when window
+          (.setTimeout window
+                       (fn []
+                         (when (.-speaking synthesis)
+                           (start-visuals)))
+                       120)))
       (js/Promise.resolve #js {:stop (fn [] (.cancel synthesis))}))
 
     :else
@@ -445,8 +425,8 @@
         resources (atom {:audio nil
                          :audioUrl nil
                          :audioSource nil
-                         :boundaryFrame nil
                          :webSpeechHandle nil})
+        session-scheduler (scheduler/create-scheduler)
         azure-cache (atom {})
         disposed? (atom false)]
     (letfn [(session-id []
@@ -459,8 +439,9 @@
               (and (not @disposed?) (= id (session-id))))
 
             (emit-status! []
-                ;; Status events are coarse UI facts, not animation ticks. The
-                ;; agency never asks React to render for each viseme/word frame.
+                ;; Status events are coarse facts, not animation ticks. The
+                ;; agency emits word/viseme progress through streams instead of
+                ;; making a host poll mutable state.
               (emit-event {:type "ttsStatusChanged"
                            :agency "tts"
                            :state (state/visible-state @state-atom)}))
@@ -471,8 +452,8 @@
               (emit-status!))
 
             (emit-lipsync! [command]
-                ;; This is an event-stream bridge inside Polymer. The character
-                ;; network routes this command to LipSync, which then emits
+                ;; This is an event-stream bridge inside Polymer. The agency
+                ;; system routes this command to LipSync, which then emits
                 ;; animation intent for the Animation agency.
               (emit-event {:type "lipSync.command"
                            :agency "tts"
@@ -492,6 +473,7 @@
                                                                   (:webSpeechDriftThresholdSec config))}})))
 
             (stop-session! [reason]
+              ((:stop-all session-scheduler))
               (cleanup-audio! resources)
               (when-let [handle (:webSpeechHandle @resources)]
                 (when-let [stop (aget handle "stop")]
@@ -560,7 +542,13 @@
                                                           (:observedElapsedSec payload)
                                                           (:hostElapsedSec payload))))
                           :onEnd (fn [] (finish-session! id))
-                          :onError (fn [error] (emit-error! (.-message error)))}]
+                          :onError (fn [error] (emit-error! (.-message error)))
+                          :scheduleStartFallback
+                          (fn [delay-ms callback]
+                            ((:schedule-start-fallback session-scheduler) id delay-ms callback))
+                          :cancelStartFallback
+                          (fn []
+                            ((:cancel-start-fallback session-scheduler) id))}]
                 (-> (speak-web-speech! config plan)
                     (.then (fn [handle]
                              (when (active-session? id)
@@ -629,12 +617,16 @@
                                  (when-let [clock (or (:clock playback)
                                                       (when (aget playback "clock")
                                                         (js->clj (aget playback "clock") :keywordize-keys true)))]
-                                   (schedule-boundaries! resources id active-session? clock word-timings
-                                                         (fn [event]
-                                                           (word-boundary! id
-                                                                           (:word event)
-                                                                           (:observedElapsedSec event)
-                                                                           nil))))
+                                   ((:schedule-boundaries session-scheduler)
+                                    id
+                                    active-session?
+                                    clock
+                                    word-timings
+                                    (fn [event]
+                                      (word-boundary! id
+                                                      (:word event)
+                                                      (:observedElapsedSec event)
+                                                      nil))))
                                  (when-let [audio (or (:audio playback) (aget playback "audio"))]
                                    (set! (.-onended audio) #(finish-session! id)))))))
                     (.catch (fn [error]
@@ -759,6 +751,7 @@
                     "reset"
                     (do
                       (swap! state-atom state/next-session)
+                      ((:stop-all session-scheduler))
                       (cleanup-audio! resources)
                       (reset! state-atom (state/default-state nil))
                       (emit-status!))
@@ -766,6 +759,7 @@
                     (emit-error! (str "Unknown TTS command: " (:type payload)))))))]
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))
+           :schedulerQueue (fn [] (clj->js ((:queue session-scheduler))))
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
            :effects (stream/readable-port effect-stream)
@@ -785,6 +779,7 @@
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
+                        ((:dispose session-scheduler))
                         (cleanup-audio! resources)
                         ((:dispose input-stream))
                         ((:dispose event-stream))
