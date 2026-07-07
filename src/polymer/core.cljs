@@ -3,7 +3,8 @@
             [polymer.blink.agency :as blink]
             [polymer.character :as character]
             [polymer.tts.agency :as tts]
-            [polymer.lipsync.agency :as lipsync]))
+            [polymer.lipsync.agency :as lipsync]
+            [polymer.prosodic.agency :as prosodic]))
 
 ;; Public JavaScript entry points.
 ;;
@@ -35,6 +36,12 @@
   route speech timing facts into Polymer LipSync."
   ([] (tts/create-tts-agency nil))
   ([config] (tts/create-tts-agency config)))
+
+(defn createProsodicAgency
+  "Create the Prosodic Expression agency directly. Use createCharacterAgencies
+  when speech and blink facts should route to prosody inside Polymer."
+  ([] (prosodic/create-prosodic-agency nil))
+  ([config] (prosodic/create-prosodic-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency network."

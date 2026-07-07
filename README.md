@@ -33,10 +33,10 @@ serve as the normal message bus between Polymer agencies.
 
 ## Current Agencies
 
-Polymer currently includes early Blink, Animation, TTS, and LipSync agencies.
-These are implementation milestones, not the limits of the architecture. Each
-agency should follow the same local GOAP/planner, scheduler, stream, transform,
-and effector pattern as the package grows.
+Polymer currently includes early Blink, Animation, TTS, LipSync, and Prosodic
+Expression agencies. These are implementation milestones, not the limits of the
+architecture. Each agency should follow the same local GOAP/planner, scheduler,
+stream, transform, and effector pattern as the package grows.
 
 Runtime-specific work belongs at the edge. The current animation path can target
 the existing web runtime, but Polymer core should remain able to support other
