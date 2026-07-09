@@ -532,13 +532,19 @@
 
 (defn lipsync-channel-target [curve-key]
   ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
-  ;; canonical viseme slots. Numeric keys above that are regular AUs, including
-  ;; AU26 for jaw and tongue/labiodental articulation AUs. Keeping this as data lets Embody
-  ;; route viseme 1 and AU 1 at the same time without snippetCategory.
+  ;; canonical viseme slots. The jaw curve is stored internally as "26" because
+  ;; the planner is conceptually FACS/JALI jaw activation, but it emits to Embody
+  ;; as a direct JAW bone channel. Emitting AU26 would also drive the CC4
+  ;; Jaw_Open morph, which can visually cover the separate viseme mouth shapes.
+  ;; Numeric keys above 14 that are not the jaw curve remain regular AUs for
+  ;; tongue/labiodental overlays.
   (let [key (str curve-key)
         numeric-id (when (re-matches #"^\d+$" key)
                      (js/parseInt key 10))]
     (cond
+      (= key jaw-au)
+      {:type "bone" :id "JAW" :channel "rz" :maxDegrees 30}
+
       (and (some? numeric-id) (<= 0 numeric-id 14))
       {:type "viseme" :id numeric-id}
 

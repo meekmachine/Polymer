@@ -48,11 +48,11 @@
    tongue-tip-down-au 0.48})
 
 (def intensity-eps 0.001)
-(def tongue-group-gap-ms 78)
-(def tongue-lead-ms 18)
-(def tongue-release-ms 34)
-(def tongue-attack-ms 20)
-(def tongue-min-hold-ms 14)
+(def tongue-group-gap-ms 86)
+(def tongue-lead-ms 30)
+(def tongue-release-ms 68)
+(def tongue-attack-ms 42)
+(def tongue-min-hold-ms 24)
 
 (def tongue-visemes
   #{(:Ch_J visemes/canonical-visemes)

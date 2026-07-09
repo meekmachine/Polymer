@@ -48,8 +48,7 @@ async function main() {
   await waitFor(messages, () => messages.some(
     (message) => message.stream === 'events' && message.event?.type === 'animationSnippetScheduled',
   ));
-
-  assert(messages.some(
+  await waitFor(messages, () => messages.some(
     (message) => message.stream === 'events' && message.event?.signal === 'blink-fast',
   ));
   assert(!messages.some(

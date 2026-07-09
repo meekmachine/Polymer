@@ -19,6 +19,8 @@
 (defn finite-positive? [value]
   (and (number? value) (js/isFinite value) (pos? value)))
 
+(def tongue-au-ids #{37 38 39 40 41 42 73 74 76 77})
+
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
     (js/clearTimeout timer)
@@ -31,8 +33,11 @@
       "viseme" "lip"
       "au" (case (:id target)
              26 "jaw"
-             37 "tongue"
-             "au")
+             (if (contains? tongue-au-ids (:id target)) "tongue" "au"))
+      "bone" (case (:id target)
+               "JAW" "jaw"
+               "TONGUE" "tongue"
+               "bone")
       target-type)))
 
 (defn snippet-effectors [snippet]

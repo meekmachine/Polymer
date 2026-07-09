@@ -50,7 +50,10 @@
         (:channels snippet)))
 
 (defn jaw-channel [snippet]
-  (channel-by-target snippet "au" 26))
+  (channel-by-target snippet "bone" "JAW"))
+
+(defn au-channel [snippet au-id]
+  (channel-by-target snippet "au" au-id))
 
 (defn tongue-channel [snippet]
   (channel-by-target snippet "au" (js/parseInt tongue/tongue-up-au 10)))
@@ -131,9 +134,11 @@
       (is (false? (:autoVisemeJaw snippet)))
       (is (seq (get-in snippet [:curves :26])))
       (is (some #(= "viseme" (get-in % [:target :type])) (:channels snippet)))
-      (is (some #(and (= "au" (get-in % [:target :type]))
-                      (= 26 (get-in % [:target :id])))
+      (is (some #(and (= "bone" (get-in % [:target :type]))
+                      (= "JAW" (get-in % [:target :id]))
+                      (= "rz" (get-in % [:target :channel])))
                 (:channels snippet)))
+      (is (nil? (au-channel snippet 26)))
       (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
       (is (:speaking snapshot))
       (is (= 1 (:scheduledCount snapshot)))
@@ -175,12 +180,13 @@
     (let [snippet (first (scheduled-snippets events))
           channels (:channels snippet)
           lip-channels (filter #(= "viseme" (get-in % [:target :type])) channels)
-          jaw-channel (some #(when (and (= "au" (get-in % [:target :type]))
-                                        (= 26 (get-in % [:target :id])))
+          jaw-channel (some #(when (and (= "bone" (get-in % [:target :type]))
+                                        (= "JAW" (get-in % [:target :id])))
                                %)
                             channels)]
       (is (seq lip-channels))
       (is jaw-channel)
+      (is (nil? (au-channel snippet 26)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (not (contains? snippet :snippetCategory)))
       (is (some :jawActivation (visemes/text->visemes "hello world"))))
@@ -533,8 +539,8 @@
                "voice:jaw-off")]
     (is (seq (get-in built [:curves "1"])))
     (is (nil? (get-in built [:curves "26"])))
-    (is (not (some #(and (= "au" (get-in % [:target :type]))
-                         (= 26 (get-in % [:target :id])))
+    (is (not (some #(and (= "bone" (get-in % [:target :type]))
+                         (= "JAW" (get-in % [:target :id])))
                    (:channels built))))))
 
 (deftest LipSync-source-label-does-not-change-viseme-jaw-mixing
@@ -600,11 +606,13 @@
     (is (some #(and (= "viseme" (get-in % [:target :type]))
                     (= 1 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "au" (get-in % [:target :type]))
-                    (= 26 (get-in % [:target :id])))
+    (is (some #(and (= "bone" (get-in % [:target :type]))
+                    (= "JAW" (get-in % [:target :id]))
+                    (= "rz" (get-in % [:target :channel])))
               (:channels (first @calls))))
-    (is (some #(and (= "au" (get-in % [:target :type]))
-                    (= 26 (get-in % [:target :id])))
+    (is (some #(and (= "bone" (get-in % [:target :type]))
+                    (= "JAW" (get-in % [:target :id]))
+                    (= "rz" (get-in % [:target :channel])))
               (:channels
                (:snippet
                 (some #(when (= "animationSnippetScheduled" (:type %)) %)
