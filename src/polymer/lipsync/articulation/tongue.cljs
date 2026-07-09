@@ -3,14 +3,50 @@
             [polymer.lipsync.state :as state]
             [polymer.lipsync.articulation.visemes :as visemes]))
 
-;; Tongue planning is a third independent lipSync control channel beside lips
-;; and jaw. The input is the same normalized viseme/phoneme sequence used by
-;; those planners; the output is an ordinary AU curve. Embody already maps AU 37
-;; to the CC4 TONGUE pitch composite, so this stays on the same scheduled
-;; snippet path as the rest of lipsync instead of introducing a host-specific
-;; side path.
+;; Tongue planning is an independent LipSync articulator beside lips and jaw.
+;; The input is the same normalized phoneme/viseme timeline as the rest of
+;; LipSync. The output is still ordinary typed AU channels, so Embody receives
+;; the same snippet data shape as lips, jaw, blink, and future agencies.
 
 (def tongue-up-au "37")
+(def tongue-down-au "38")
+(def tongue-left-au "39")
+(def tongue-right-au "40")
+(def tongue-tilt-left-au "41")
+(def tongue-tilt-right-au "42")
+(def tongue-narrow-au "73")
+(def tongue-wide-au "74")
+(def tongue-tip-up-au "76")
+(def tongue-tip-down-au "77")
+
+(def tongue-au-keys
+  ;; Keep the public list near the constants so snippet metadata and tests can
+  ;; count tongue channels without hard-coding the planner internals.
+  [tongue-up-au
+   tongue-down-au
+   tongue-left-au
+   tongue-right-au
+   tongue-tilt-left-au
+   tongue-tilt-right-au
+   tongue-narrow-au
+   tongue-wide-au
+   tongue-tip-up-au
+   tongue-tip-down-au])
+
+(def tongue-au-caps
+  ;; Per-AU caps keep the planner from over-driving optional tongue controls.
+  ;; Tip/up cues can be more visible; width, tilt, and yaw cues stay subtle.
+  {tongue-up-au 0.68
+   tongue-down-au 0.48
+   tongue-left-au 0.16
+   tongue-right-au 0.16
+   tongue-tilt-left-au 0.18
+   tongue-tilt-right-au 0.18
+   tongue-narrow-au 0.50
+   tongue-wide-au 0.34
+   tongue-tip-up-au 0.62
+   tongue-tip-down-au 0.48})
+
 (def intensity-eps 0.001)
 (def tongue-group-gap-ms 78)
 (def tongue-lead-ms 18)
@@ -69,38 +105,125 @@
       (has-class? event "diphthong")
       (has-class? event "glide")))
 
-(defn base-target [event]
-  ;; Target values are intentionally lower than manual AU sliders. Lipsync needs
-  ;; a subtle tongue cue that supports articulation, not a full tongue pose.
+(defn clean-targets [targets]
+  ;; Target maps are easier to reason about than a single scalar. Each phoneme
+  ;; can request a different mix of existing Embody tongue AUs while the snippet
+  ;; channel format stays unchanged.
+  (into {}
+        (keep (fn [[au target]]
+                (let [value (state/clamp 0 1 (state/number-or target 0))]
+                  (when (> value intensity-eps)
+                    [au value]))))
+        targets))
+
+(defn tongue-au-targets [event]
+  ;; These values are performance cues, not phonetic simulation. The goal is to
+  ;; distinguish dental, alveolar, velar, and sibilant gestures with the AU
+  ;; controls Embody already exposes, while staying subtle enough for speech.
   (let [phoneme (normalized-phoneme event)
         viseme-id (:visemeId event)]
-    (cond
-      (excluded-lip-only? event) 0
-      (contains? #{"TH" "DH"} phoneme) 0.58
-      (contains? #{"T" "D"} phoneme) 0.52
-      (= "L" phoneme) 0.50
-      (= "N" phoneme) 0.44
-      (contains? #{"CH" "JH"} phoneme) 0.42
-      (contains? #{"K" "G" "NG"} phoneme) 0.30
-      (contains? #{"S" "Z" "SH" "ZH"} phoneme) 0.22
-      (= "R" phoneme) 0.14
-      (= viseme-id (:Th visemes/canonical-visemes)) 0.52
-      (= viseme-id (:T_L_D_N visemes/canonical-visemes)) 0.46
-      (= viseme-id (:Ch_J visemes/canonical-visemes)) 0.38
-      (= viseme-id (:K_G_H_NG visemes/canonical-visemes)) 0.28
-      (= viseme-id (:S_Z visemes/canonical-visemes)) 0.20
-      (= viseme-id (:R visemes/canonical-visemes)) 0.12
-      (has-class? event "dental") 0.50
-      (has-class? event "tongue") 0.36
-      (has-class? event "sibilant") 0.20
-      (has-class? event "liquid") 0.16
-      (contains? tongue-visemes viseme-id) 0.18
-      :else 0)))
+    (clean-targets
+     (cond
+       (excluded-lip-only? event) {}
+
+       (contains? #{"TH" "DH"} phoneme)
+       {tongue-up-au 0.44
+        tongue-wide-au 0.22
+        tongue-tip-up-au 0.58}
+
+       (contains? #{"T" "D"} phoneme)
+       {tongue-up-au 0.46
+        tongue-tip-up-au 0.50}
+
+       (= "L" phoneme)
+       {tongue-up-au 0.48
+        tongue-tip-up-au 0.54
+        tongue-wide-au 0.10}
+
+       (= "N" phoneme)
+       {tongue-up-au 0.38
+        tongue-tip-up-au 0.36}
+
+       (contains? #{"K" "G" "NG"} phoneme)
+       {tongue-down-au 0.30
+        tongue-narrow-au 0.22
+        tongue-tip-down-au 0.24}
+
+       (contains? #{"S" "Z"} phoneme)
+       {tongue-up-au 0.16
+        tongue-narrow-au 0.42
+        tongue-tip-up-au 0.22}
+
+       (contains? #{"SH" "ZH"} phoneme)
+       {tongue-down-au 0.18
+        tongue-narrow-au 0.44
+        tongue-tip-down-au 0.22
+        tongue-tilt-left-au 0.08}
+
+       (contains? #{"CH" "JH"} phoneme)
+       {tongue-up-au 0.24
+        tongue-narrow-au 0.34
+        tongue-tip-up-au 0.28
+        tongue-tilt-right-au 0.08}
+
+       (= "R" phoneme)
+       {tongue-narrow-au 0.18
+        tongue-tip-down-au 0.12
+        tongue-tilt-left-au 0.08}
+
+       (= viseme-id (:Th visemes/canonical-visemes))
+       {tongue-up-au 0.40
+        tongue-wide-au 0.18
+        tongue-tip-up-au 0.52}
+
+       (= viseme-id (:T_L_D_N visemes/canonical-visemes))
+       {tongue-up-au 0.42
+        tongue-tip-up-au 0.44}
+
+       (= viseme-id (:Ch_J visemes/canonical-visemes))
+       {tongue-up-au 0.22
+        tongue-narrow-au 0.30
+        tongue-tip-up-au 0.24}
+
+       (= viseme-id (:K_G_H_NG visemes/canonical-visemes))
+       {tongue-down-au 0.26
+        tongue-narrow-au 0.20
+        tongue-tip-down-au 0.20}
+
+       (= viseme-id (:S_Z visemes/canonical-visemes))
+       {tongue-up-au 0.12
+        tongue-narrow-au 0.36
+        tongue-tip-up-au 0.18}
+
+       (= viseme-id (:R visemes/canonical-visemes))
+       {tongue-narrow-au 0.16
+        tongue-tip-down-au 0.10}
+
+       (has-class? event "dental")
+       {tongue-up-au 0.40
+        tongue-tip-up-au 0.48}
+
+       (has-class? event "sibilant")
+       {tongue-narrow-au 0.34
+        tongue-tip-up-au 0.16}
+
+       (has-class? event "tongue")
+       {tongue-up-au 0.30
+        tongue-tip-up-au 0.26}
+
+       (has-class? event "liquid")
+       {tongue-narrow-au 0.14
+        tongue-tip-down-au 0.10}
+
+       (contains? tongue-visemes viseme-id)
+       {tongue-up-au 0.16}
+
+       :else {}))))
 
 (defn tongue-event [event]
-  (let [target (state/clamp 0 1 (base-target event))]
-    (when (> target intensity-eps)
-      (assoc event :tongueTarget target))))
+  (let [targets (tongue-au-targets event)]
+    (when (seq targets)
+      (assoc event :tongueTargets targets))))
 
 (defn same-tongue-group? [current next-event]
   (let [gap (- (start-ms next-event) (end-ms current))]
@@ -108,9 +231,9 @@
          (>= gap (- tongue-group-gap-ms)))))
 
 (defn raw-groups [events]
-  ;; The grouping step is what makes the planner depend on a sequence of
-  ;; visemes instead of individual events. "texts" and "strengths" should become
-  ;; one coda tongue gesture rather than K, T, TH, and S all firing separately.
+  ;; The grouping step makes the planner depend on a sequence of visemes rather
+  ;; than individual phonemes. "texts" and "strengths" should become one coda
+  ;; tongue gesture rather than K, T, TH, and S all firing separately.
   (let [ordered (->> (into [] (keep tongue-event) events)
                      (sort-by :offsetMs)
                      vec)]
@@ -130,12 +253,21 @@
         :else
         (recur (rest remaining) [(first remaining)] (conj groups current))))))
 
-(defn group-target [events]
-  ;; Clusters with several tongue consonants get a small boost, but the value is
-  ;; capped so stacked consonants do not create a stiff held tongue pose.
-  (let [raw-max (apply max 0 (map :tongueTarget events))
+(defn boosted-targets [events]
+  ;; Clusters with several tongue consonants get a small boost, but each AU is
+  ;; capped independently so stacked consonants do not create a stiff pose.
+  (let [raw (reduce (fn [merged event]
+                      (merge-with max merged (:tongueTargets event)))
+                    {}
+                    events)
         boost (min 1.12 (+ 1 (* 0.04 (dec (count events)))))]
-    (state/clamp 0 0.68 (* raw-max boost))))
+    (into {}
+          (keep (fn [[au target]]
+                  (let [cap (get tongue-au-caps au 0.68)
+                        value (state/clamp 0 cap (* target boost))]
+                    (when (> value intensity-eps)
+                      [au value]))))
+          raw)))
 
 (defn make-group [events]
   (let [start (apply min (map start-ms events))
@@ -143,7 +275,7 @@
     {:startMs start
      :endMs end
      :durationMs (max 1 (- end start))
-     :target (group-target events)
+     :targets (boosted-targets events)
      :events (vec events)}))
 
 (defn tongue-groups [events]
@@ -177,9 +309,14 @@
                      (conj result curr)
                      result))))))))
 
-(defn build-tongue-curve [events tongue-scale]
+(defn groups-for-au [groups au]
+  (into []
+        (filter #(> (get-in % [:targets au] 0) intensity-eps))
+        groups))
+
+(defn build-tongue-curve-for-au [groups au tongue-scale]
   (let [scale (state/clamp 0 2 (state/number-or tongue-scale 1))
-        groups (tongue-groups events)]
+        groups (groups-for-au groups au)]
     (if (or (<= scale intensity-eps) (empty? groups))
       []
       (loop [index 0
@@ -192,7 +329,7 @@
                 start-sec (/ (max 0 (- (:startMs group) tongue-lead-ms)) 1000)
                 group-start-sec (/ (:startMs group) 1000)
                 end-sec (/ (+ (:endMs group) tongue-release-ms) 1000)
-                target (state/clamp 0 1 (* scale (:target group)))
+                target (state/clamp 0 1 (* scale (get-in group [:targets au] 0)))
                 attack-sec (/ (min tongue-attack-ms (max 8 (* (:durationMs group) 0.35))) 1000)
                 hold-end-sec (/ (max (+ (:startMs group) tongue-min-hold-ms)
                                      (- (:endMs group) (* tongue-release-ms 0.4)))
@@ -213,8 +350,20 @@
                          (push-frame hold-end-sec target)
                          (push-frame end-sec 0))))))))))
 
+(defn build-tongue-curve [events tongue-scale]
+  ;; Backward-compatible helper for tests and callers that only care about the
+  ;; original tongue-up channel.
+  (build-tongue-curve-for-au (tongue-groups events) tongue-up-au tongue-scale))
+
 (defn build-tongue-curves [events tongue-scale]
-  (let [curve (build-tongue-curve events tongue-scale)]
-    (if (empty? curve)
-      {}
-      {tongue-up-au curve})))
+  (let [groups (tongue-groups events)
+        active-aus (->> groups
+                        (mapcat #(keys (:targets %)))
+                        set
+                        (sort-by #(js/parseInt % 10)))]
+    (into {}
+          (keep (fn [au]
+                  (let [curve (build-tongue-curve-for-au groups au tongue-scale)]
+                    (when (seq curve)
+                      [au curve]))))
+          active-aus)))

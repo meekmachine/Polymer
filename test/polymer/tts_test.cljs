@@ -156,7 +156,8 @@
     (.dispose ^js agency)))
 
 (deftest tts-agency-owns-web-speech-session-and-emits-lipsync-facts
-  (let [agency (polymer/createTTSAgency #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}})
+  (let [agency (polymer/createTTSAgency #js {:tongueScale 1.35
+                                             :providers #js {:webSpeechSpeak (fake-web-speech-provider)}})
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "speak"
                                :engine "webSpeech"
@@ -169,6 +170,7 @@
       (is (some #{"ttsSpeechStarted"} event-types))
       (is (= ["configure" "startText" "audioStarted" "wordBoundary"]
              (map :type commands)))
+      (is (= 1.35 (get-in (first commands) [:config :tongueScale])))
       (is (= "speaking" (:status snapshot)))
       (is (:speaking snapshot)))
     ((:unsubscribe events))

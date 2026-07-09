@@ -466,6 +466,7 @@
                 (emit-lipsync! {:type "configure"
                                 :config {:intensity (:lipsyncIntensity config)
                                          :jawScale (:jawScale config)
+                                         :tongueScale (:tongueScale config)
                                          :speechRate (or (:rate command) (:rate config))
                                          :visualLeadMs (or (:visualLeadMs command) (:visualLeadMs config))
                                          :wordDriftThresholdSec (if (= engine "azure")

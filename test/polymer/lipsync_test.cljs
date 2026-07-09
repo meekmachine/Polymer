@@ -227,9 +227,9 @@
         (is (not (contains? snippet :snippetCategory)))
         (is (every? #(= "viseme" (get-in % [:target :type])) lip-channels))
         (is (every? #(seq (:keyframes %)) (:channels snippet)))
-        (is (<= (count (:channels snippet)) 8))
+        (is (<= (count (:channels snippet)) 14))
         (is (<= (apply max (map #(count (:keyframes %)) (:channels snippet))) 48))
-        (is (<= (total-keyframes snippet) 160))))))
+        (is (<= (total-keyframes snippet) 240))))))
 
 (deftest jali-fixtures-jaw-scale-zero-preserves-lips
   (doseq [phrase jali-fixture-phrases]
@@ -249,6 +249,28 @@
     (is (>= (channel-max-intensity bilabial-channel) 0.95))
     (is (jaw-channel snippet))))
 
+(deftest jali-bilabial-plosives-preclose-and-release-before-following-vowel
+  (let [events [{:visemeId (:B_M_P visemes/canonical-visemes)
+                 :phoneme "P"
+                 :phonemeClass "bilabial"
+                 :phonemeClasses ["bilabial" "obstruent"]
+                 :jawActivation 0
+                 :offsetMs 40
+                 :durationMs 50}
+                {:visemeId (:Ah visemes/canonical-visemes)
+                 :phoneme "AA"
+                 :phonemeClass "vowel"
+                 :phonemeClasses ["vowel"]
+                 :jawActivation 0.45
+                 :offsetMs 90
+                 :durationMs 120}]
+        snippet (snippet/build-lipsync-snippet events {:intensity 1 :jawScale 1} "voice:plosive")
+        bilabial (viseme-channel snippet (:B_M_P visemes/canonical-visemes))]
+    (is bilabial)
+    (is (<= (sample-channel bilabial 0.012) 0.001))
+    (is (>= (sample-channel bilabial 0.055) 0.90))
+    (is (<= (sample-channel bilabial 0.092) 0.04))))
+
 (deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
   (let [sibilant-snippet (build-text-fixture "chess")
         open-vowel-snippet (build-text-fixture "duke")
@@ -263,12 +285,17 @@
   (let [five (build-text-fixture "five")
         pop-man (build-text-fixture "pop man")
         labiodental (viseme-channel five (:F_V visemes/canonical-visemes))
+        labiodental-contact (channel-by-target five "au" 32)
+        labiodental-press (channel-by-target five "au" 24)
         bilabial-in-five (viseme-channel five (:B_M_P visemes/canonical-visemes))
         bilabial-in-pop (viseme-channel pop-man (:B_M_P visemes/canonical-visemes))]
     (is labiodental)
+    (is labiodental-contact)
+    (is labiodental-press)
     (is (nil? bilabial-in-five))
     (is bilabial-in-pop)
     (is (>= (channel-max-intensity labiodental) 0.8))
+    (is (>= (channel-max-intensity labiodental-contact) 0.20))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
     (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
 
@@ -359,12 +386,15 @@
 (deftest LipSync-tongue-planner-emits-independent-au-channel
   (let [snippet (build-text-fixture "tiny dog")
         tongue (tongue-channel snippet)
+        tongue-tip (channel-by-target snippet "au" 76)
         jaw (jaw-channel snippet)]
     (is tongue)
+    (is tongue-tip)
     (is jaw)
     (is (= "au" (get-in tongue [:target :type])))
     (is (= 37 (get-in tongue [:target :id])))
     (is (>= (channel-max-intensity tongue) 0.45))
+    (is (>= (channel-max-intensity tongue-tip) 0.45))
     (is (<= (local-peak-count tongue) 2))
     (is (seq (get-in snippet [:curves "37"])))))
 

@@ -10,6 +10,8 @@
 ;; host UI code, audio playback, LiveKit, Azure credentials, or engine handles.
 
 (def jaw-au "26")
+(def labiodental-contact-au "32")
+(def labiodental-press-au "24")
 (def intensity-eps 0.001)
 (def coarticulation-strength 0.52)
 (def envelope-shoulder-ratio 0.55)
@@ -20,6 +22,11 @@
 (def lip-secondary-cap 0.22)
 (def closure-dominance-threshold 0.55)
 (def closure-secondary-cap 0.035)
+(def plosive-preclose-sec 0.028)
+(def plosive-hold-sec 0.022)
+(def plosive-release-sec 0.018)
+(def labiodental-contact-peak 0.24)
+(def labiodental-press-peak 0.12)
 
 (def vowel-visemes
   #{(:AE visemes/canonical-visemes)
@@ -78,6 +85,47 @@
        (:T_L_D_N visemes/canonical-visemes)} viseme-id) :tongue
     (= viseme-id (:R visemes/canonical-visemes)) :liquid
     :else :default))
+
+(defn class-name [value]
+  (cond
+    (keyword? value) (name value)
+    (string? value) (str/lower-case value)
+    (nil? value) nil
+    :else (str/lower-case (str value))))
+
+(defn event-classes [event]
+  (let [from-event (into []
+                         (keep class-name)
+                         (concat (or (:phonemeClasses event) [])
+                                 [(:phonemeClass event)]))
+        fallback (into [] (keep class-name) (visemes/viseme-classes (:visemeId event)))]
+    (set (if (seq from-event) from-event fallback))))
+
+(defn has-class? [event class]
+  (contains? (event-classes event) class))
+
+(defn normalized-phoneme [event]
+  (visemes/normalize-phoneme (:phoneme event)))
+
+(defn vowel-event? [event]
+  (or (has-class? event "vowel")
+      (contains? vowel-visemes (:visemeId event))))
+
+(defn bilabial-plosive? [event]
+  ;; M shares the B_M_P viseme but should not get a hard burst release. Only
+  ;; known P/B phonemes, or class metadata that says bilabial obstruent without
+  ;; nasal, get the plosive closure plan.
+  (let [phoneme (normalized-phoneme event)
+        classes (event-classes event)]
+    (and (= (:visemeId event) (:B_M_P visemes/canonical-visemes))
+         (not (contains? classes "nasal"))
+         (or (contains? #{"P" "B"} phoneme)
+             (and (contains? classes "bilabial")
+                  (contains? classes "obstruent"))))))
+
+(defn labiodental-event? [event]
+  (or (= (:visemeId event) (:F_V visemes/canonical-visemes))
+      (has-class? event "labiodental")))
 
 (defn envelope-profile [viseme-id]
   ;; The profile keeps closure sounds crisp, vowels rounder, and fricatives
@@ -166,11 +214,83 @@
                 {:time end-sec :intensity 0}])))
          intensity)))))
 
+(defn build-plosive-closure-curve [event next-event intensity]
+  ;; P/B need a visible close-hold-release phrase, not just a generic envelope.
+  ;; The close starts slightly early, holds the B_M_P target briefly, then drops
+  ;; sharply at the following vowel boundary when one is present. Jaw motion is
+  ;; still separate and comes only from the jaw planner.
+  (let [start-sec (/ (:offsetMs event) 1000)
+        duration-sec (/ (:durationMs event) 1000)
+        end-sec (+ start-sec duration-sec)
+        next-start-sec (when next-event (/ (:offsetMs next-event) 1000))
+        release-end-sec (if (and next-start-sec (vowel-event? next-event))
+                          (max start-sec next-start-sec)
+                          end-sec)
+        close-start-sec (max 0 (- start-sec plosive-preclose-sec))
+        close-end-sec (min (+ start-sec 0.010) release-end-sec)
+        hold-end-sec (max close-end-sec
+                          (min (- release-end-sec 0.004)
+                               (+ close-end-sec plosive-hold-sec)
+                               (- end-sec plosive-release-sec)))
+        peak (:peak (envelope-profile (:visemeId event)))]
+    (scale-curve-intensity
+     (-> [{:time close-start-sec :intensity 0}
+          {:time close-end-sec :intensity peak}
+          {:time hold-end-sec :intensity peak}
+          {:time release-end-sec :intensity 0}]
+         deduplicate-curve
+         vec)
+     intensity)))
+
+(defn build-event-viseme-curve [event next-event intensity]
+  (if (bilabial-plosive? event)
+    (build-plosive-closure-curve event next-event intensity)
+    (build-viseme-curve (:visemeId event)
+                        (:offsetMs event)
+                        (:durationMs event)
+                        intensity)))
+
 (defn merge-curves [existing incoming]
   (->> (concat existing incoming)
        (sort-by :time)
        deduplicate-curve
        vec))
+
+(defn build-labiodental-au-curve [event peak intensity]
+  ;; F/V already activate the F_V viseme. This small AU overlay gives the lower
+  ;; lip a top-teeth contact cue on rigs that expose AU32/AU24, while rigs that
+  ;; do not expose those AUs can ignore the channels safely.
+  (let [start-sec (/ (:offsetMs event) 1000)
+        duration-sec (/ (:durationMs event) 1000)
+        end-sec (+ start-sec duration-sec)
+        attack-sec (min 0.012 (* duration-sec 0.35))
+        release-sec (min 0.016 (* duration-sec 0.35))
+        hold-end-sec (max (+ start-sec attack-sec)
+                          (- end-sec release-sec))]
+    (scale-curve-intensity
+     [{:time start-sec :intensity 0}
+      {:time (+ start-sec attack-sec) :intensity peak}
+      {:time hold-end-sec :intensity peak}
+      {:time end-sec :intensity 0}]
+     intensity)))
+
+(defn build-labiodental-curves [events intensity]
+  (reduce (fn [curves event]
+            (if (labiodental-event? event)
+              (-> curves
+                  (update labiodental-contact-au
+                          #(merge-curves (or % [])
+                                         (build-labiodental-au-curve event
+                                                                     labiodental-contact-peak
+                                                                     intensity)))
+                  (update labiodental-press-au
+                          #(merge-curves (or % [])
+                                         (build-labiodental-au-curve event
+                                                                     labiodental-press-peak
+                                                                     intensity))))
+              curves))
+          {}
+          events))
 
 (defn update-last-frame-time [curve f]
   (let [frames (vec curve)
@@ -384,34 +504,36 @@
     (next-snippet-name (str "lipSync_" (if (pos? (count words)) words "timeline")))))
 
 (defn build-curves [events config]
-  (let [raw-curves (reduce (fn [curves event]
-                             (let [key (str (:visemeId event))
-                                   curve (build-viseme-curve (:visemeId event)
-                                                             (:offsetMs event)
-                                                             (:durationMs event)
-                                                             (:intensity config))]
+  (let [raw-curves (reduce (fn [curves index]
+                             (let [event (get events index)
+                                   next-event (get events (inc index))
+                                   key (str (:visemeId event))
+                                   curve (build-event-viseme-curve event
+                                                                   next-event
+                                                                   (:intensity config))]
                                (if (empty? curve)
                                  curves
                                  (update curves key #(if % (merge-curves % curve) curve)))))
                            {}
-                           events)
+                           (range (count events)))
         articulated (-> raw-curves
                         (apply-coarticulation events)
                         limit-concurrent-lip-activation
                         reduce-lip-keys)
         jaw-curve (build-jaw-curve events (:jawScale config))
         tongue-curves (tongue/build-tongue-curves events (:tongueScale config))
+        labiodental-curves (build-labiodental-curves events (:intensity config))
         with-jaw (if (empty? jaw-curve)
                    articulated
                    (assoc articulated jaw-au jaw-curve))]
-    ;; Tongue curves are added after lip limiting because AU 37 is an ordinary
-    ;; AU/composite control, not a viseme slot competing for lip-shape budget.
-    (merge with-jaw tongue-curves)))
+    ;; Articulator AU curves are added after lip limiting because they are
+    ;; ordinary AU controls, not viseme slots competing for lip-shape budget.
+    (merge with-jaw labiodental-curves tongue-curves)))
 
 (defn lipsync-channel-target [curve-key]
   ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
   ;; canonical viseme slots. Numeric keys above that are regular AUs, including
-  ;; AU 26 for jaw and AU 37 for tongue-up. Keeping this as data lets Embody
+  ;; AU26 for jaw and tongue/labiodental articulation AUs. Keeping this as data lets Embody
   ;; route viseme 1 and AU 1 at the same time without snippetCategory.
   (let [key (str curve-key)
         numeric-id (when (re-matches #"^\d+$" key)
@@ -466,7 +588,7 @@
       :channels (curves->channels curves)
       :metadata {:agency "lipSync"
                  :visemeCount (count normalized-events)
-                 :tongueCurveCount (count (select-keys curves [tongue/tongue-up-au]))}})))
+                 :tongueCurveCount (count (select-keys curves tongue/tongue-au-keys))}})))
 
 (defn build-text-snippet [text events config]
   (build-lipsync-snippet events config (text-snippet-name text)))

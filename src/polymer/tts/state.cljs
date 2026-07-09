@@ -40,6 +40,7 @@
    :visualLeadMs 35
    :lipsyncIntensity 1
    :jawScale 1
+   :tongueScale 1
    :webSpeechDriftThresholdSec 0.08
    :azureDriftThresholdSec 0.04
    :azureCacheLimit 8
@@ -62,6 +63,7 @@
      :visualLeadMs (clamp 0 250 (:visualLeadMs input) (:visualLeadMs default-config))
      :lipsyncIntensity (clamp 0 2 (:lipsyncIntensity input) (:lipsyncIntensity default-config))
      :jawScale (clamp 0 2 (:jawScale input) (:jawScale default-config))
+     :tongueScale (clamp 0 2 (:tongueScale input) (:tongueScale default-config))
      :webSpeechDriftThresholdSec (clamp 0 1 (:webSpeechDriftThresholdSec input) (:webSpeechDriftThresholdSec default-config))
      :azureDriftThresholdSec (clamp 0 1 (:azureDriftThresholdSec input) (:azureDriftThresholdSec default-config))
      :azureCacheLimit (int (clamp 0 64 (:azureCacheLimit input) (:azureCacheLimit default-config)))

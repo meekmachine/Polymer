@@ -303,6 +303,8 @@ export interface TTSConfig {
   visualLeadMs?: number;
   lipsyncIntensity?: number;
   jawScale?: number;
+  /** Scale for LipSync tongue AU planning forwarded by TTS before each speech session. */
+  tongueScale?: number;
   webSpeechDriftThresholdSec?: number;
   azureDriftThresholdSec?: number;
   azureCacheLimit?: number;
