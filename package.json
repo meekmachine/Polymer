@@ -21,7 +21,7 @@
     "prepublishOnly": "pnpm test && pnpm build && git diff --exit-code -- dist"
   },
   "dependencies": {
-    "@lovelace_lol/embody": "git+https://github.com/meekmachine/embody.git#7fceffa10e5a490742a7b64d5368ec1456f56697"
+    "@lovelace_lol/embody": "git+https://github.com/meekmachine/embody.git#ff0f5a197bc45bb05e7b72ec3c8f06a91be08217"
   },
   "devDependencies": {
     "shadow-cljs": "^2.28.23"
