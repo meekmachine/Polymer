@@ -1,4 +1,4 @@
-import type { LoomLargeThree } from '@lovelace_lol/loom3';
+import type { LoomLargeThree } from '@lovelace_lol/embody';
 
 export interface BlinkState {
   agency: 'blink';

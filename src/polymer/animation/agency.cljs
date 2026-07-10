@@ -3,7 +3,7 @@
             [polymer.stream :as stream]))
 
 ;; The Animation agency is the only Polymer agency that is allowed to touch the
-;; Loom3/Embody animation runtime. Blink, prosody, lipsync, and future agencies
+;; Embody animation runtime. Blink, prosody, lipsync, and future agencies
 ;; should send animation intent to this agency; they should not call the engine
 ;; and LoomLarge should not translate Polymer animation commands.
 
@@ -45,7 +45,7 @@
   handle)
 
 (defn engine->runtime [engine]
-  ;; Loom3 already exposes the dynamic clip/snippet methods the scheduler needs.
+  ;; Embody exposes the dynamic clip/snippet methods the scheduler needs.
   ;; Polymer adapts the current engine once here and keeps all later playback,
   ;; parameter, and cleanup calls inside the Animation agency.
   (let [runtime #js {:buildClip (fn [clip-name curves options]
@@ -90,7 +90,7 @@
         engine (aget config "engine")]
     (cond
       runtime runtime
-      ;; When LoomLarge passes the live Loom3/Embody engine, the Polymer
+      ;; When LoomLarge passes the live Embody engine, the Polymer
       ;; Animation agency owns direct engine calls through this runtime-shaped
       ;; adapter. LoomLarge is only providing the dependency, not interpreting
       ;; animation stream data.
@@ -114,7 +114,7 @@
 (defn typed-jaw-channel? [channel]
   (let [target (typed-channel-target channel)]
     (or (and (= "au" (:type target))
-             (= 26 (:id target)))
+             (= 103 (:id target)))
         (and (= "bone" (:type target))
              (= "JAW" (:id target))))))
 
@@ -155,7 +155,8 @@
         typed-viseme? (typed-viseme-snippet? snippet)
         viseme-category? (or (viseme-snippet-category? category) typed-viseme?)
         curves (or (:curves snippet) {})
-        has-jaw-curve? (or (contains? curves "26") (typed-jaw-snippet? snippet))
+        has-jaw-curve? (or (contains? curves "103")
+                           (typed-jaw-snippet? snippet))
         category-for-options (or category
                                  (when (and legacy-fallback? typed-viseme?)
                                    "visemeSnippet"))
@@ -222,7 +223,7 @@
 
 (defn play-runtime-snippet! [runtime snippet options]
   ;; Typed channels are Polymer's canonical animation contract. They say
-  ;; "viseme 7", "bone JAW rz", or "bone HEAD rx" directly, so Embody does not have to
+  ;; "viseme 7", "AU103 jaw bone open", or "bone HEAD rx" directly, so Embody does not have to
   ;; guess whether numeric curve keys are viseme slots or AU ids. The legacy
   ;; curve fallback is kept only for older runtimes that do not expose typed
   ;; playback yet; once a runtime accepts typed snippets, a failed typed build
@@ -266,7 +267,7 @@
                 (call-js runtime "cleanupSnippet" name)))
 
             (seek-runtime! [name offset-sec]
-              ;; Embody/Loom3 and test doubles may expose seeking at different
+              ;; Embody and test doubles may expose seeking at different
               ;; levels while that API settles. Try the active clip handle first,
               ;; then runtime-level methods, then updateClipParams as the broad
               ;; compatibility path. The command still remains owned by
@@ -300,7 +301,7 @@
                                :removedAt removed-at}))))
 
             (schedule-cleanup! [name snippet source-agency handle]
-              ;; Prefer the Loom3 handle lifecycle when it is available. The
+              ;; Prefer the Embody handle lifecycle when it is available. The
               ;; timer remains as a fallback so non-looping CLJS-authored
               ;; snippets still clean themselves up with simple mock runtimes.
               (clear-cleanup! name)
@@ -352,10 +353,10 @@
                       (schedule-cleanup! name snippet source-agency handle))
                     (emit-event {:type "error"
                                  :agency "animation"
-                                 :message (str "Loom3 runtime did not return a clip handle for " name)}))
+                                 :message (str "Embody runtime did not return a clip handle for " name)}))
                   (emit-event {:type "error"
                                :agency "animation"
-                               :message "Animation agency requires a Loom3 animation runtime or engine"}))
+                               :message "Animation agency requires an Embody animation runtime or engine"}))
                 snippet))
 
             (seek-snippet! [payload]

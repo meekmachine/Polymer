@@ -6,7 +6,7 @@
 ;;
 ;; It still does not call animation engines directly. When a blink should play,
 ;; it emits animation intent. The Polymer character network routes that intent
-;; to Polymer Animation, and only Polymer Animation talks to Loom3/Embody.
+;; to Polymer Animation, and only Polymer Animation talks to Embody.
 
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]

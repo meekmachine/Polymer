@@ -3,7 +3,7 @@
             [polymer.lipsync.state :as state]
             [polymer.lipsync.articulation.visemes :as visemes]))
 
-;; Azure Speech emits SAPI-style viseme IDs 0-21. Embody/Loom3 expects the
+;; Azure Speech emits SAPI-style viseme IDs 0-21. Embody expects the
 ;; canonical 15-slot CC4/ARKit order. This namespace is pure normalization:
 ;; provider event data in, Polymer viseme timeline data out.
 ;;

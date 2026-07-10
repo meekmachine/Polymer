@@ -1,6 +1,7 @@
 (ns polymer.tts-test
   (:require [cljs.test :refer [async deftest is testing]]
             [polymer.core :as polymer]
+            [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.state :as lipsync-state]
             [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]))
@@ -215,9 +216,8 @@
       (is (some #(and (= "viseme" (get-in % [:target :type]))
                       (= 1 (get-in % [:target :id])))
                 (:channels first-call)))
-      (is (some #(and (= "bone" (get-in % [:target :type]))
-                      (= "JAW" (get-in % [:target :id]))
-                      (= "rz" (get-in % [:target :channel])))
+      (is (some #(and (= "au" (get-in % [:target :type]))
+                      (= snippet/jaw-bone-open-au (get-in % [:target :id])))
                 (:channels first-call)))
       (is (not (contains? (:options first-call) :snippetCategory)))
       (is (false? (get-in first-call [:options :autoVisemeJaw]))))

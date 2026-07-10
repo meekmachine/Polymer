@@ -3,7 +3,7 @@
 ;; Animation state is the agency-local schedule ledger.
 ;;
 ;; The Animation agency owns this schedule state and directly talks to the
-;; Loom3/Embody animation runtime. Other agencies can inspect summary state and
+;; Embody animation runtime. Other agencies can inspect summary state and
 ;; subscribe to events, but they do not reach through to runtime handles.
 
 (def default-state

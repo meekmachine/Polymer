@@ -15,7 +15,7 @@
 ;;           interface symmetry/future Blink-specific side effects.
 ;;
 ;; The agency owns only local Blink state and timers. It does not know about
-;; React components, Latticework, Loom3/Embody, DOM APIs, storage, audio, video,
+;; React components, Latticework, Embody, DOM APIs, storage, audio, video,
 ;; or HTTP.
 
 (defn js-command [type value]

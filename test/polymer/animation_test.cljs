@@ -131,12 +131,12 @@
                                :snippet #js {:name "voice:webspeech"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "au" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -151,7 +151,7 @@
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
       (is (= 1 (get-in call [:channels 0 :target :id])))
       (is (= "au" (get-in call [:channels 1 :target :type])))
-      (is (= 26 (get-in call [:channels 1 :target :id])))
+      (is (= 103 (get-in call [:channels 1 :target :id])))
       (is (not (contains? options :snippetCategory)))
       (is (= 0.8 (:intensityScale options)))
       (is (= 0.8 (:weight options)))
@@ -167,12 +167,12 @@
                                :snippet #js {:name "voice:engine"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "au" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -196,12 +196,12 @@
                                :snippet #js {:name "voice:legacy-engine"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "au" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -243,12 +243,12 @@
                                :snippet #js {:name "voice:legacy"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "au" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08

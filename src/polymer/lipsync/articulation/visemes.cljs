@@ -3,7 +3,7 @@
             [polymer.lipsync.state :as state]))
 
 ;; Polymer keeps the canonical 15-slot CC4/ARKit viseme order beside the CLJS
-;; lip-sync code so numeric curves line up with Embody/Loom3. This mirrors the
+;; lip-sync code so numeric curves line up with Embody. This mirrors the
 ;; installed Embody export:
 ;; ["AE" "Ah" "B_M_P" "Ch_J" "EE" "Er" "F_V" "Ih" "K_G_H_NG" "Oh" "R"
 ;;  "S_Z" "T_L_D_N" "Th" "W_OO"].
@@ -197,7 +197,7 @@
 (def diphthong-targets
   {;; Web Speech fallback starts from text, so it does not get provider
    ;; phoneme timing. Treat English diphthongs as internal lip travel inside
-   ;; one vocalic jaw gesture: the lips move through two targets, but AU26
+   ;; one vocalic jaw gesture: the lips move through two targets, but the jaw
    ;; should stay on the same jaw arc instead of flapping twice.
    "EY" [(:AE canonical-visemes) (:EE canonical-visemes)]
    "OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
