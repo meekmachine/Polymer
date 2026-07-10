@@ -113,7 +113,7 @@
 
 (defn typed-jaw-channel? [channel]
   (let [target (typed-channel-target channel)]
-    (or (and (= "au" (:type target))
+    (or (and (= "lipSync" (:type target))
              (= 103 (:id target)))
         (and (= "bone" (:type target))
              (= "JAW" (:id target))))))
@@ -223,7 +223,7 @@
 
 (defn play-runtime-snippet! [runtime snippet options]
   ;; Typed channels are Polymer's canonical animation contract. They say
-  ;; "viseme 7", "AU103 jaw bone open", or "bone HEAD rx" directly, so Embody does not have to
+  ;; "viseme 7", "lipSync 103 jaw bone open", or "bone HEAD rx" directly, so Embody does not have to
   ;; guess whether numeric curve keys are viseme slots or AU ids. The legacy
   ;; curve fallback is kept only for older runtimes that do not expose typed
   ;; playback yet; once a runtime accepts typed snippets, a failed typed build

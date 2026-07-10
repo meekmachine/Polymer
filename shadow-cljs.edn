@@ -18,6 +18,7 @@
              :extractModelData polymer.runtime.embody/extractModelData
              :getPreset polymer.runtime.embody/getPreset
              :validateMappings polymer.runtime.embody/validateMappings
+             :LIP_SYNC_TO_BONES polymer.runtime.embody/LIP_SYNC_TO_BONES
              :extendCharacterConfigWithPreset polymer.runtime.embody/extendCharacterConfigWithPreset
              :extractProfileOverrides polymer.runtime.embody/extractProfileOverrides
              :mergeCharacterRegionsByName polymer.runtime.embody/mergeCharacterRegionsByName

@@ -9,8 +9,7 @@
 ;; animation data that Polymer Animation can schedule. It does not know about
 ;; host UI code, audio playback, LiveKit, Azure credentials, or engine handles.
 
-(def jaw-bone-open-au 103)
-(def jaw-au (str jaw-bone-open-au))
+(def jaw-au "103")
 (def labiodental-contact-au "32")
 (def labiodental-press-au "24")
 (def intensity-eps 0.001)
@@ -533,8 +532,8 @@
 
 (defn lipsync-channel-target [curve-key]
   ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
-  ;; canonical viseme slots. Jaw motion is emitted as Embody's AU103 extension,
-  ;; a bone-only jaw-open AU. That keeps Embody in charge of AU activation while
+  ;; canonical viseme slots. Jaw motion is emitted as Embody's lip-sync control
+  ;; 103, not as a FACS AU. That keeps Embody in charge of bone actuation while
   ;; avoiding AU26, which also drives the CC4 Jaw_Open morph and can cover the
   ;; separate viseme mouth shapes.
   ;; Numeric keys above 14 that are not the jaw curve remain regular AUs for
@@ -544,7 +543,7 @@
                      (js/parseInt key 10))]
     (cond
       (= key jaw-au)
-      {:type "au" :id jaw-bone-open-au}
+      {:type "lipSync" :id 103}
 
       (and (some? numeric-id) (<= 0 numeric-id 14))
       {:type "viseme" :id numeric-id}

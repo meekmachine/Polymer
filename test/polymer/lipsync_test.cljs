@@ -50,7 +50,7 @@
         (:channels snippet)))
 
 (defn jaw-channel [snippet]
-  (channel-by-target snippet "au" snippet/jaw-bone-open-au))
+  (channel-by-target snippet "lipSync" 103))
 
 (defn au-channel [snippet au-id]
   (channel-by-target snippet "au" au-id))
@@ -134,8 +134,8 @@
       (is (false? (:autoVisemeJaw snippet)))
       (is (seq (get-in snippet [:curves :103])))
       (is (some #(= "viseme" (get-in % [:target :type])) (:channels snippet)))
-      (is (some #(and (= "au" (get-in % [:target :type]))
-                      (= snippet/jaw-bone-open-au (get-in % [:target :id])))
+      (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                      (= 103 (get-in % [:target :id])))
                 (:channels snippet)))
       (is (nil? (au-channel snippet 26)))
       (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
@@ -179,8 +179,8 @@
     (let [snippet (first (scheduled-snippets events))
           channels (:channels snippet)
           lip-channels (filter #(= "viseme" (get-in % [:target :type])) channels)
-          jaw-channel (some #(when (and (= "au" (get-in % [:target :type]))
-                                        (= snippet/jaw-bone-open-au (get-in % [:target :id])))
+          jaw-channel (some #(when (and (= "lipSync" (get-in % [:target :type]))
+                                        (= 103 (get-in % [:target :id])))
                                %)
                             channels)]
       (is (seq lip-channels))
@@ -538,8 +538,8 @@
                "voice:jaw-off")]
     (is (seq (get-in built [:curves "1"])))
     (is (nil? (get-in built [:curves "103"])))
-    (is (not (some #(and (= "au" (get-in % [:target :type]))
-                         (= snippet/jaw-bone-open-au (get-in % [:target :id])))
+    (is (not (some #(and (= "lipSync" (get-in % [:target :type]))
+                         (= 103 (get-in % [:target :id])))
                    (:channels built))))))
 
 (deftest LipSync-source-label-does-not-change-viseme-jaw-mixing
@@ -605,11 +605,11 @@
     (is (some #(and (= "viseme" (get-in % [:target :type]))
                     (= 1 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "au" (get-in % [:target :type]))
-                    (= snippet/jaw-bone-open-au (get-in % [:target :id])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "au" (get-in % [:target :type]))
-                    (= snippet/jaw-bone-open-au (get-in % [:target :id])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels
                (:snippet
                 (some #(when (= "animationSnippetScheduled" (:type %)) %)

@@ -9,6 +9,7 @@ export {
   extractModelData,
   getPreset,
   validateMappings,
+  LIP_SYNC_TO_BONES,
   extendCharacterConfigWithPreset,
   extractProfileOverrides,
   mergeCharacterRegionsByName,
@@ -167,6 +168,7 @@ export interface PolymerSnippetKeyframe {
 export type PolymerSnippetChannelTarget =
   | { type: 'au'; id: number; balance?: number }
   | { type: 'viseme'; id: number; meshNames?: string[] }
+  | { type: 'lipSync'; id: number }
   | { type: 'morph'; id: string | number; meshNames?: string[] }
   | {
       type: 'bone';

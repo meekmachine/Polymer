@@ -136,7 +136,7 @@
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 103}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -150,7 +150,7 @@
       (is (= "playTypedSnippet" (:method call)))
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
       (is (= 1 (get-in call [:channels 0 :target :id])))
-      (is (= "au" (get-in call [:channels 1 :target :type])))
+      (is (= "lipSync" (get-in call [:channels 1 :target :type])))
       (is (= 103 (get-in call [:channels 1 :target :id])))
       (is (not (contains? options :snippetCategory)))
       (is (= 0.8 (:intensityScale options)))
@@ -172,7 +172,7 @@
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 103}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -183,7 +183,7 @@
           options (:options call)]
       (is (= "engine.playTypedSnippet" (:method call)))
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
-      (is (= "au" (get-in call [:channels 1 :target :type])))
+      (is (= "lipSync" (get-in call [:channels 1 :target :type])))
       (is (not (contains? options :snippetCategory)))
       (is (false? (:autoVisemeJaw options))))
     (.dispose ^js agency)))
@@ -201,7 +201,7 @@
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 103}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -248,7 +248,7 @@
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 103}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08

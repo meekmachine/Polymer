@@ -20,7 +20,6 @@
   (and (number? value) (js/isFinite value) (pos? value)))
 
 (def tongue-au-ids #{37 38 39 40 41 42 73 74 76 77})
-(def jaw-au-ids #{103})
 
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
@@ -32,8 +31,8 @@
         target-type (:type target)]
     (case target-type
       "viseme" "lip"
+      "lipSync" "jaw"
       "au" (cond
-             (contains? jaw-au-ids (:id target)) "jaw"
              (contains? tongue-au-ids (:id target)) "tongue"
              :else "au")
       "bone" (case (:id target)
