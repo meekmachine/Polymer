@@ -9,7 +9,36 @@
              :createLipSyncAgency polymer.core/createLipSyncAgency
              :createTTSAgency polymer.core/createTTSAgency
              :createProsodicAgency polymer.core/createProsodicAgency
-             :createCharacterAgencies polymer.core/createCharacterAgencies}}
+             :createCharacterAgencies polymer.core/createCharacterAgencies
+             :Embody polymer.runtime.embody/Embody
+             :BLENDING_MODES polymer.runtime.embody/BLENDING_MODES
+             :THREE_BLENDING_MODES polymer.runtime.embody/THREE_BLENDING_MODES
+             :collectMorphMeshes polymer.runtime.embody/collectMorphMeshes
+             :analyzeModel polymer.runtime.embody/analyzeModel
+             :extractModelData polymer.runtime.embody/extractModelData
+             :getPreset polymer.runtime.embody/getPreset
+             :validateMappings polymer.runtime.embody/validateMappings
+             :extendCharacterConfigWithPreset polymer.runtime.embody/extendCharacterConfigWithPreset
+             :extractProfileOverrides polymer.runtime.embody/extractProfileOverrides
+             :mergeCharacterRegionsByName polymer.runtime.embody/mergeCharacterRegionsByName
+             :computeCameraRelativeGazeOffset polymer.runtime.embody/computeCameraRelativeGazeOffset
+             :detectAnnotationLaterality polymer.runtime.embody/detectAnnotationLaterality
+             :fuzzyNameMatch polymer.runtime.embody/fuzzyNameMatch
+             :getDefaultAnnotationLaterality polymer.runtime.embody/getDefaultAnnotationLaterality
+             :getMeshNamesForAUProfile polymer.runtime.embody/getMeshNamesForAUProfile
+             :getModelLocalOrbitAngle polymer.runtime.embody/getModelLocalOrbitAngle
+             :getSemanticHorizontalSign polymer.runtime.embody/getSemanticHorizontalSign
+             :getSemanticHorizontalSignForSide polymer.runtime.embody/getSemanticHorizontalSignForSide
+             :getWorldDirectionForCameraAngle polymer.runtime.embody/getWorldDirectionForCameraAngle
+             :hasLeftRightMorphs polymer.runtime.embody/hasLeftRightMorphs
+             :isMixedAU polymer.runtime.embody/isMixedAU
+             :passesMarkerCameraAngleGate polymer.runtime.embody/passesMarkerCameraAngleGate
+             :resolveBoneNames polymer.runtime.embody/resolveBoneNames
+             :resolveFaceCenter polymer.runtime.embody/resolveFaceCenter
+             :resolveRegionCameraAngle polymer.runtime.embody/resolveRegionCameraAngle
+             :resolveRegionVisibilityCameraAngle polymer.runtime.embody/resolveRegionVisibilityCameraAngle
+             :toWorldDirection polymer.runtime.embody/toWorldDirection
+             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}
 
   :worker
   {:target :browser
