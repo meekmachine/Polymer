@@ -9,7 +9,6 @@ export {
   extractModelData,
   getPreset,
   validateMappings,
-  LIP_SYNC_TO_BONES,
   extendCharacterConfigWithPreset,
   extractProfileOverrides,
   mergeCharacterRegionsByName,

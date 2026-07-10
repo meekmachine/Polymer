@@ -16,8 +16,6 @@
 (def extractModelData (.-extractModelData embody))
 (def getPreset (.-getPreset embody))
 (def validateMappings (.-validateMappings embody))
-(def LIP_SYNC_TO_BONES (.-LIP_SYNC_TO_BONES embody))
-
 (def extendCharacterConfigWithPreset (.-extendCharacterConfigWithPreset embody))
 (def extractProfileOverrides (.-extractProfileOverrides embody))
 (def mergeCharacterRegionsByName (.-mergeCharacterRegionsByName embody))
