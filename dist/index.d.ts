@@ -406,6 +406,117 @@ export type TTSSchedulerQueueEntry =
       queuedAt: number;
     };
 
+export type GestureScope = 'left' | 'right' | 'both' | 'custom' | string;
+
+export type GestureCaptureSource = 'manual' | 'animation-frame' | 'animation-stack' | 'imported' | 'snippet' | 'baked-clip' | string;
+
+export interface GestureTransform {
+  rotation?: [number, number, number, number];
+  position?: [number, number, number];
+  scale?: [number, number, number];
+  source?: string;
+}
+
+export interface GestureKeyframe {
+  timeMs: number;
+  bones: Record<string, GestureTransform>;
+}
+
+export interface GestureAUMapping {
+  auId: string;
+  node: string;
+  boneName?: string;
+  channel?: string;
+  scale?: number;
+  maxDegrees?: number;
+  maxUnits?: number;
+  side?: 'left' | 'right';
+  name?: string;
+}
+
+export interface GestureSnapshot {
+  id: string;
+  version?: number;
+  name: string;
+  description?: string;
+  textRepresentation?: string;
+  sourceText?: string;
+  scope?: GestureScope;
+  emoji?: string;
+  tags?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+  captureSource?: GestureCaptureSource;
+  durationMs?: number;
+  easing?: string;
+  loop?: boolean;
+  priority?: number;
+  returnToBase?: boolean;
+  affectedBones?: string[];
+  affectedAUs?: string[];
+  auMappings?: GestureAUMapping[];
+  bones?: Record<string, GestureTransform>;
+  keyframes?: GestureKeyframe[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface GestureConfig {
+  enabled?: boolean;
+  intensity?: number;
+  priority?: number;
+  defaultDurationMs?: number;
+  cooldownMs?: number;
+  rampRatio?: number;
+  holdRatio?: number;
+  returnToBase?: boolean;
+  replaceActive?: boolean;
+  maxActive?: number;
+  gestures?: Record<string, GestureSnapshot>;
+  characterGestures?: Record<string, GestureSnapshot>;
+  gestureLibrary?: Record<string, GestureSnapshot>;
+  emojiMappings?: Record<string, string>;
+  gestureEmojiMappings?: Record<string, string>;
+}
+
+export interface GestureActiveSnippet {
+  name: string;
+  gestureId: string;
+  gestureName?: string;
+  emoji?: string;
+  scope?: GestureScope;
+  affectedBones?: string[];
+  maxTime: number;
+  scheduledAt: number;
+}
+
+export interface GestureState {
+  agency: 'gesture';
+  gestures: string[];
+  gestureCount: number;
+  emojiCount: number;
+  activeSnippets: Record<string, GestureActiveSnippet>;
+  scheduledCount: number;
+  removedCount: number;
+  config: Required<Omit<GestureConfig, 'gestures' | 'characterGestures' | 'emojiMappings' | 'gestureEmojiMappings'>>;
+  lastEvent: null | Record<string, unknown>;
+}
+
+export type GestureDispatch =
+  | { type: 'configure'; config: GestureConfig }
+  | {
+      type: 'loadGestures';
+      gestures?: Record<string, GestureSnapshot>;
+      characterGestures?: Record<string, GestureSnapshot>;
+      gestureLibrary?: Record<string, GestureSnapshot>;
+      emojiMappings?: Record<string, string>;
+      gestureEmojiMappings?: Record<string, string>;
+    }
+  | { type: 'playGesture'; gestureId: string; name?: string; intensity?: number }
+  | { type: 'playEmoji'; emoji: string; name?: string; intensity?: number }
+  | { type: 'stopGesture'; gestureId: string }
+  | { type: 'stopAll' }
+  | { type: 'reset' };
+
 export interface PolymerStream<TEvent> {
   subscribe(listener: (event: TEvent) => void): () => void;
 }
@@ -433,7 +544,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestScheduleSnippet';
-      agency: 'blink' | 'lipSync';
+      agency: 'blink' | 'lipSync' | 'gesture';
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
@@ -443,7 +554,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestRemoveSnippet';
-      agency: 'lipSync';
+      agency: 'lipSync' | 'gesture';
       requestId: string;
       name: string;
       reason: string;
@@ -550,7 +661,22 @@ export type PolymerDomainEvent =
       hostElapsedSec?: number;
     }
   | { type: 'lipSync.command'; agency: 'tts'; command: LipSyncDispatch }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' }
+  | { type: 'gestureConfigChanged'; agency: 'gesture'; state: GestureState }
+  | { type: 'gestureLibraryUpdated'; agency: 'gesture'; gestureCount: number; emojiCount: number; updatedAt: number }
+  | { type: 'gesturePlanCreated'; agency: 'gesture'; plan: Record<string, unknown> }
+  | {
+      type: 'gestureScheduled';
+      agency: 'gesture';
+      gestureId: string;
+      gestureName: string;
+      emoji?: string;
+      scope?: GestureScope;
+      affectedBones?: string[];
+      name: string;
+      scheduledAt: number;
+    }
+  | { type: 'gestureRemoved'; agency: 'gesture'; name: string; reason: string; removedAt: number }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' | 'gesture' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -661,6 +787,32 @@ export interface TTSAgency {
   dispose(): void;
 }
 
+export interface GestureAgency {
+  input: PolymerInputStream<GestureDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: GestureDispatch): void;
+  snapshot(): GestureState;
+  schedulerQueue(): Array<Record<string, unknown>>;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'gesture'; command: GestureDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: GestureConfig): void;
+  loadGestures(gestures: Record<string, GestureSnapshot>, emojiMappings?: Record<string, string>): void;
+  playGesture(gestureId: string): void;
+  playEmoji(emoji: string): void;
+  stopGesture(gestureId: string): void;
+  stopAll(): void;
+  reset(): void;
+  dispose(): void;
+}
+
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
   tts: TTSState;
@@ -701,6 +853,7 @@ export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
 export function createLipSyncAgency(config?: LipSyncConfig): LipSyncAgency;
 export function createTTSAgency(config?: TTSConfig): TTSAgency;
+export function createGestureAgency(config?: GestureConfig): GestureAgency;
 export function createCharacterAgencies(config?: {
   blink?: BlinkAgencyConfig;
   tts?: TTSConfig;

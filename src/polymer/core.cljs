@@ -2,6 +2,7 @@
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
             [polymer.character :as character]
+            [polymer.gesture.agency :as gesture]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]))
 
@@ -10,7 +11,7 @@
 ;; Polymer is authored in CLJS, but LoomLarge imports the compiled package from
 ;; JavaScript/TypeScript. The exports stay agency-oriented: LoomLarge can create
 ;; a character agency network, but Polymer owns the cross-agency routing and
-;; Animation owns the Loom3/Embody runtime calls.
+;; Animation owns the Embody runtime calls.
 
 (defn createBlinkAgency
   "Create the Blink agency directly. Use createCharacterAgencies when Blink
@@ -19,7 +20,7 @@
   ([config] (blink/create-blink-agency config)))
 
 (defn createAnimationAgency
-  "Create the Animation agency directly. Pass an Embody runtime or Loom3 engine
+  "Create the Animation agency directly. Pass an Embody runtime or engine
   in config when the agency should execute snippets."
   ([] (animation/create-animation-agency nil))
   ([config] (animation/create-animation-agency config)))
@@ -35,6 +36,13 @@
   route speech timing facts into Polymer LipSync."
   ([] (tts/create-tts-agency nil))
   ([config] (tts/create-tts-agency config)))
+
+(defn createGestureAgency
+  "Create the Gesture agency directly. It emits animation request events for
+  arm/hand gesture snippets; callers using individual agencies should route those
+  requests to createAnimationAgency."
+  ([] (gesture/create-gesture-agency nil))
+  ([config] (gesture/create-gesture-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency network."

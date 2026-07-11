@@ -8,6 +8,7 @@
              :createAnimationAgency polymer.core/createAnimationAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency
              :createTTSAgency polymer.core/createTTSAgency
+             :createGestureAgency polymer.core/createGestureAgency
              :createCharacterAgencies polymer.core/createCharacterAgencies}}
 
   :worker
