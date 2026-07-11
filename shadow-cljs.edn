@@ -21,6 +21,34 @@
              :extendCharacterConfigWithPreset polymer.runtime.embody/extendCharacterConfigWithPreset
              :extractProfileOverrides polymer.runtime.embody/extractProfileOverrides
              :mergeCharacterRegionsByName polymer.runtime.embody/mergeCharacterRegionsByName
+             :applyAUBoneBindingUpdate polymer.runtime.embody/applyAUBoneBindingUpdate
+             :applyBilateralAxisBindingUpdate polymer.runtime.embody/applyBilateralAxisBindingUpdate
+             :applyBoneAxisBindingUpdate polymer.runtime.embody/applyBoneAxisBindingUpdate
+             :buildBoneAuOptions polymer.runtime.embody/buildBoneAuOptions
+             :classifyAuAsJointControl polymer.runtime.embody/classifyAuAsJointControl
+             :createBilateralBoneAxisAu polymer.runtime.embody/createBilateralBoneAxisAu
+             :createBoneAxisAu polymer.runtime.embody/createBoneAxisAu
+             :DEFAULT_AXIS_TO_CHANNEL polymer.runtime.embody/DEFAULT_AXIS_TO_CHANNEL
+             :DEFAULT_BONE_MAX_DEGREES polymer.runtime.embody/DEFAULT_BONE_MAX_DEGREES
+             :ensureBilateralBoneNodeKeys polymer.runtime.embody/ensureBilateralBoneNodeKeys
+             :ensureBoneNodeKey polymer.runtime.embody/ensureBoneNodeKey
+             :findNodeKeyForBone polymer.runtime.embody/findNodeKeyForBone
+             :formatAxisDirectionLabel polymer.runtime.embody/formatAxisDirectionLabel
+             :formatAxisLabel polymer.runtime.embody/formatAxisLabel
+             :getAUBoneBindingState polymer.runtime.embody/getAUBoneBindingState
+             :getAxisFromChannel polymer.runtime.embody/getAxisFromChannel
+             :getBilateralAxisBindingState polymer.runtime.embody/getBilateralAxisBindingState
+             :getBoneAxisBindingState polymer.runtime.embody/getBoneAxisBindingState
+             :inferChiralBoneNamePair polymer.runtime.embody/inferChiralBoneNamePair
+             :inferEyeControlFamily polymer.runtime.embody/inferEyeControlFamily
+             :inferEyeControlScope polymer.runtime.embody/inferEyeControlScope
+             :isJointControlAuInfo polymer.runtime.embody/isJointControlAuInfo
+             :isMaxDegreesOnlyAxisBindingUpdate polymer.runtime.embody/isMaxDegreesOnlyAxisBindingUpdate
+             :JOINT_CONTROL_SECTION polymer.runtime.embody/JOINT_CONTROL_SECTION
+             :resolveBoneAxisChannel polymer.runtime.embody/resolveBoneAxisChannel
+             :resolveBoneNameForNodeKey polymer.runtime.embody/resolveBoneNameForNodeKey
+             :resolveContinuumDisplayLabel polymer.runtime.embody/resolveContinuumDisplayLabel
+             :stripConfiguredBoneAffixes polymer.runtime.embody/stripConfiguredBoneAffixes
              :computeCameraRelativeGazeOffset polymer.runtime.embody/computeCameraRelativeGazeOffset
              :detectAnnotationLaterality polymer.runtime.embody/detectAnnotationLaterality
              :fuzzyNameMatch polymer.runtime.embody/fuzzyNameMatch
@@ -38,6 +66,7 @@
              :resolveRegionCameraAngle polymer.runtime.embody/resolveRegionCameraAngle
              :resolveRegionVisibilityCameraAngle polymer.runtime.embody/resolveRegionVisibilityCameraAngle
              :toWorldDirection polymer.runtime.embody/toWorldDirection
+             :CC4_BONES polymer.runtime.embody/CC4_BONES
              :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}
 
   :worker
