@@ -1,4 +1,4 @@
-import type { LoomLargeThree } from '@lovelace_lol/embody';
+import type { Embody, EmbodyRuntime } from '@lovelace_lol/embody';
 
 export {
   Embody,
@@ -93,7 +93,8 @@ export type {
   LineConfig,
   LineCurve,
   LineStyle,
-  LoomLargeThree,
+  Embody,
+  EmbodyRuntime,
   MarkerGroup,
   MarkerStyle,
   MarkerStyleOverrides,
@@ -187,7 +188,7 @@ export interface AnimationState {
 
 export interface AnimationAgencyConfig {
   runtime?: PolymerAnimationRuntime;
-  engine?: LoomLargeThree;
+  engine?: Embody | EmbodyRuntime;
   runtimeConfig?: Record<string, unknown>;
 }
 
