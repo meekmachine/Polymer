@@ -420,6 +420,32 @@
     (is (<= (sample-channel tongue 0.70) 0.50))
     (is (<= (sample-channel tongue 0.82) 0.50))))
 
+(deftest LipSync-tongue-planner-releases-opposing-aus-before-next-gesture
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:T_L_D_N visemes/canonical-visemes)
+                   :phoneme "T"
+                   :phonemeClass "tongue"
+                   :phonemeClasses ["obstruent" "tongue"]
+                   :jawActivation 0.08
+                   :offsetMs 0
+                   :durationMs 70}
+                  {:visemeId (:K_G_H_NG visemes/canonical-visemes)
+                   :phoneme "K"
+                   :phonemeClass "tongue"
+                   :phonemeClasses ["obstruent" "tongue"]
+                   :jawActivation 0.08
+                   :offsetMs 95
+                   :durationMs 80}]
+                 {:intensity 1 :jawScale 1 :tongueScale 1}
+                 "voice:tongue-crossfade")
+        tongue-up (channel-by-target snippet "au" 37)
+        tongue-down (channel-by-target snippet "au" 38)]
+    (is tongue-up)
+    (is tongue-down)
+    (is (>= (sample-channel tongue-up 0.04) 0.30))
+    (is (<= (sample-channel tongue-up 0.095) 0.05))
+    (is (>= (sample-channel tongue-down 0.12) 0.15))))
+
 (deftest LipSync-tongue-scale-zero-preserves-lips-and-jaw
   (let [snippet (build-text-fixture "tiny dog" {:tongueScale 0})]
     (is (seq (channels-of-type snippet "viseme")))

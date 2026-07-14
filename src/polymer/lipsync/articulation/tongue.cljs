@@ -225,10 +225,30 @@
     (when (seq targets)
       (assoc event :tongueTargets targets))))
 
+(defn target-active? [targets au]
+  (> (get targets au 0) intensity-eps))
+
+(defn opposing-targets? [current next-event]
+  ;; Do not collapse coronal and velar tongue gestures into one pose. A T/D/L/N
+  ;; target wants tongue-up/tip-up; K/G/NG wants tongue-down/tip-down. Merging
+  ;; those into one group drives opposing AUs at the same time and reads as a
+  ;; snap. Compatible stacks, such as repeated sibilants, still group.
+  (let [current-targets (:tongueTargets current)
+        next-targets (:tongueTargets next-event)]
+    (or (and (or (target-active? current-targets tongue-up-au)
+                 (target-active? current-targets tongue-tip-up-au))
+             (or (target-active? next-targets tongue-down-au)
+                 (target-active? next-targets tongue-tip-down-au)))
+        (and (or (target-active? current-targets tongue-down-au)
+                 (target-active? current-targets tongue-tip-down-au))
+             (or (target-active? next-targets tongue-up-au)
+                 (target-active? next-targets tongue-tip-up-au))))))
+
 (defn same-tongue-group? [current next-event]
   (let [gap (- (start-ms next-event) (end-ms current))]
     (and (<= gap tongue-group-gap-ms)
-         (>= gap (- tongue-group-gap-ms)))))
+         (>= gap (- tongue-group-gap-ms))
+         (not (opposing-targets? current next-event)))))
 
 (defn raw-groups [events]
   ;; The grouping step makes the planner depend on a sequence of visemes rather
@@ -309,15 +329,23 @@
                      (conj result curr)
                      result))))))))
 
-(defn groups-for-au [groups au]
-  (into []
-        (filter #(> (get-in % [:targets au] 0) intensity-eps))
-        groups))
+(defn scaled-target [group au scale]
+  ;; Keep the per-AU cap after the user scale is applied. A tongueScale above
+  ;; 1 should make tongue motion easier to see, but it should not turn subtle
+  ;; width/tilt/yaw controls into full-strength snapped poses.
+  (let [cap (get tongue-au-caps au 0.68)]
+    (state/clamp 0 cap (* scale (get-in group [:targets au] 0)))))
 
 (defn build-tongue-curve-for-au [groups au tongue-scale]
+  ;; Iterate every tongue group, including groups where this AU's target is 0.
+  ;; That gives the planner enough context to ramp an active AU down before the
+  ;; next opposing tongue gesture begins. Filtering to active groups only made
+  ;; an AU release on its own stale end time, which could leave tongue-up active
+  ;; while the next group was already driving tongue-down/narrow.
   (let [scale (state/clamp 0 2 (state/number-or tongue-scale 1))
-        groups (groups-for-au groups au)]
-    (if (or (<= scale intensity-eps) (empty? groups))
+        groups (vec groups)
+        has-active? (some #(> (scaled-target % au scale) intensity-eps) groups)]
+    (if (or (<= scale intensity-eps) (not has-active?))
       []
       (loop [index 0
              curve []]
@@ -326,29 +354,50 @@
           (let [group (get groups index)
                 previous (get groups (dec index))
                 next-group (get groups (inc index))
+                previous-target (if previous (scaled-target previous au scale) 0)
+                next-target (if next-group (scaled-target next-group au scale) 0)
                 start-sec (/ (max 0 (- (:startMs group) tongue-lead-ms)) 1000)
                 group-start-sec (/ (:startMs group) 1000)
                 end-sec (/ (+ (:endMs group) tongue-release-ms) 1000)
-                target (state/clamp 0 1 (* scale (get-in group [:targets au] 0)))
+                target (scaled-target group au scale)
                 attack-sec (/ (min tongue-attack-ms (max 8 (* (:durationMs group) 0.35))) 1000)
                 hold-end-sec (/ (max (+ (:startMs group) tongue-min-hold-ms)
                                      (- (:endMs group) (* tongue-release-ms 0.4)))
                                 1000)
                 previous-end-sec (if previous (/ (:endMs previous) 1000) 0)
+                next-start-sec (when next-group (/ (:startMs next-group) 1000))
                 starts-after-gap? (or (nil? previous)
-                                      (> (- start-sec previous-end-sec) (/ tongue-group-gap-ms 1000)))
-                curve-a (if starts-after-gap? (push-frame curve start-sec 0) curve)
-                curve-b (push-frame curve-a (+ group-start-sec attack-sec) target)
+                                      (> (- start-sec previous-end-sec) (/ tongue-group-gap-ms 1000))
+                                      (<= previous-target intensity-eps))
+                curve-a (if (and (> target intensity-eps) starts-after-gap?)
+                          (push-frame curve start-sec 0)
+                          curve)
+                curve-b (if (> target intensity-eps)
+                          (push-frame curve-a (+ group-start-sec attack-sec) target)
+                          (if (> previous-target intensity-eps)
+                            (push-frame curve-a group-start-sec 0)
+                            curve-a))
                 connected? (and next-group
-                                (<= (- (:startMs next-group) (:endMs group)) tongue-group-gap-ms))]
+                                (<= (- (:startMs next-group) (:endMs group)) tongue-group-gap-ms))
+                release-end-sec (if (and connected?
+                                         (<= next-target intensity-eps)
+                                         next-start-sec)
+                                  (max hold-end-sec next-start-sec)
+                                  end-sec)]
             (recur (inc index)
-                   (if connected?
+                   (cond
+                     (<= target intensity-eps)
+                     curve-b
+
+                     (and connected? (> next-target intensity-eps))
                      (push-frame curve-b (max hold-end-sec
                                               (/ (- (:startMs next-group) tongue-lead-ms) 1000))
                                  target)
+
+                     :else
                      (-> curve-b
                          (push-frame hold-end-sec target)
-                         (push-frame end-sec 0))))))))))
+                         (push-frame release-end-sec 0))))))))))
 
 (defn build-tongue-curve [events tongue-scale]
   ;; Backward-compatible helper for tests and callers that only care about the
