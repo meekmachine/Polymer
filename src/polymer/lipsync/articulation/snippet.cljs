@@ -130,27 +130,30 @@
 (defn envelope-profile [viseme-id]
   ;; The profile keeps closure sounds crisp, vowels rounder, and fricatives
   ;; lighter. Those differences matter more than raw intensity for readable
-  ;; speech animation.
+  ;; speech animation. The timings are deliberately visual timings, not acoustic
+  ;; timings: anything below roughly one 60fps frame reads as snapping once the
+  ;; snippet reaches Three.js, so non-closure sounds get ramps long enough to
+  ;; interpolate across multiple rendered frames.
   (cond
-    (= viseme-id (:W_OO visemes/canonical-visemes)) {:attackSec 0.018 :releaseSec 0.026 :peak 0.98}
-    (= viseme-id (:Oh visemes/canonical-visemes)) {:attackSec 0.020 :releaseSec 0.026 :peak 0.96}
-    (= viseme-id (:EE visemes/canonical-visemes)) {:attackSec 0.016 :releaseSec 0.020 :peak 0.94}
-    (= viseme-id (:Ih visemes/canonical-visemes)) {:attackSec 0.014 :releaseSec 0.018 :peak 0.88}
-    (= viseme-id (:F_V visemes/canonical-visemes)) {:attackSec 0.010 :releaseSec 0.016 :peak 0.86}
-    (= viseme-id (:Th visemes/canonical-visemes)) {:attackSec 0.010 :releaseSec 0.016 :peak 0.82}
-    (= viseme-id (:Ch_J visemes/canonical-visemes)) {:attackSec 0.012 :releaseSec 0.018 :peak 0.84}
-    (= viseme-id (:S_Z visemes/canonical-visemes)) {:attackSec 0.010 :releaseSec 0.014 :peak 0.78}
-    (= viseme-id (:K_G_H_NG visemes/canonical-visemes)) {:attackSec 0.010 :releaseSec 0.014 :peak 0.68}
-    (= viseme-id (:T_L_D_N visemes/canonical-visemes)) {:attackSec 0.012 :releaseSec 0.016 :peak 0.80}
+    (= viseme-id (:W_OO visemes/canonical-visemes)) {:attackSec 0.034 :releaseSec 0.046 :peak 0.98}
+    (= viseme-id (:Oh visemes/canonical-visemes)) {:attackSec 0.036 :releaseSec 0.046 :peak 0.96}
+    (= viseme-id (:EE visemes/canonical-visemes)) {:attackSec 0.030 :releaseSec 0.038 :peak 0.94}
+    (= viseme-id (:Ih visemes/canonical-visemes)) {:attackSec 0.028 :releaseSec 0.036 :peak 0.88}
+    (= viseme-id (:F_V visemes/canonical-visemes)) {:attackSec 0.024 :releaseSec 0.034 :peak 0.86}
+    (= viseme-id (:Th visemes/canonical-visemes)) {:attackSec 0.024 :releaseSec 0.034 :peak 0.82}
+    (= viseme-id (:Ch_J visemes/canonical-visemes)) {:attackSec 0.026 :releaseSec 0.036 :peak 0.84}
+    (= viseme-id (:S_Z visemes/canonical-visemes)) {:attackSec 0.022 :releaseSec 0.032 :peak 0.78}
+    (= viseme-id (:K_G_H_NG visemes/canonical-visemes)) {:attackSec 0.022 :releaseSec 0.032 :peak 0.68}
+    (= viseme-id (:T_L_D_N visemes/canonical-visemes)) {:attackSec 0.026 :releaseSec 0.036 :peak 0.80}
     :else
     (case (viseme-class viseme-id)
       :bilabial {:attackSec 0.004 :releaseSec 0.006 :peak 1.0}
-      :vowel {:attackSec 0.018 :releaseSec 0.022 :peak 0.92}
-      :fricative {:attackSec 0.010 :releaseSec 0.014 :peak 0.72}
-      :tongue {:attackSec 0.012 :releaseSec 0.016 :peak 0.76}
-      :liquid {:attackSec 0.016 :releaseSec 0.018 :peak 0.82}
-      :glide {:attackSec 0.012 :releaseSec 0.018 :peak 0.84}
-      {:attackSec 0.010 :releaseSec 0.012 :peak 0.86})))
+      :vowel {:attackSec 0.032 :releaseSec 0.042 :peak 0.92}
+      :fricative {:attackSec 0.024 :releaseSec 0.034 :peak 0.72}
+      :tongue {:attackSec 0.026 :releaseSec 0.036 :peak 0.76}
+      :liquid {:attackSec 0.030 :releaseSec 0.038 :peak 0.82}
+      :glide {:attackSec 0.028 :releaseSec 0.038 :peak 0.84}
+      {:attackSec 0.026 :releaseSec 0.034 :peak 0.86})))
 
 (defn deduplicate-curve [curve]
   (let [frames (vec curve)]
@@ -263,8 +266,8 @@
   (let [start-sec (/ (:offsetMs event) 1000)
         duration-sec (/ (:durationMs event) 1000)
         end-sec (+ start-sec duration-sec)
-        attack-sec (min 0.012 (* duration-sec 0.35))
-        release-sec (min 0.016 (* duration-sec 0.35))
+        attack-sec (min 0.024 (* duration-sec 0.35))
+        release-sec (min 0.034 (* duration-sec 0.40))
         hold-end-sec (max (+ start-sec attack-sec)
                           (- end-sec release-sec))]
     (scale-curve-intensity

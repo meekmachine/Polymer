@@ -49,10 +49,10 @@
 
 (def intensity-eps 0.001)
 (def tongue-group-gap-ms 86)
-(def tongue-lead-ms 30)
-(def tongue-release-ms 68)
-(def tongue-attack-ms 42)
-(def tongue-min-hold-ms 24)
+(def tongue-lead-ms 36)
+(def tongue-release-ms 88)
+(def tongue-attack-ms 48)
+(def tongue-min-hold-ms 34)
 
 (def tongue-visemes
   #{(:Ch_J visemes/canonical-visemes)
@@ -360,7 +360,7 @@
                 group-start-sec (/ (:startMs group) 1000)
                 end-sec (/ (+ (:endMs group) tongue-release-ms) 1000)
                 target (scaled-target group au scale)
-                attack-sec (/ (min tongue-attack-ms (max 8 (* (:durationMs group) 0.35))) 1000)
+                attack-sec (/ (min tongue-attack-ms (max 24 (* (:durationMs group) 0.35))) 1000)
                 hold-end-sec (/ (max (+ (:startMs group) tongue-min-hold-ms)
                                      (- (:endMs group) (* tongue-release-ms 0.4)))
                                 1000)

@@ -305,6 +305,24 @@
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
     (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
 
+(deftest LipSync-non-closure-visemes-ramp-across-renderable-time
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:F_V visemes/canonical-visemes)
+                   :phoneme "F"
+                   :phonemeClass "labiodental"
+                   :phonemeClasses ["labiodental" "fricative"]
+                   :jawActivation 0.06
+                   :offsetMs 0
+                   :durationMs 80}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:visible-ramp")
+        labiodental (viseme-channel snippet (:F_V visemes/canonical-visemes))]
+    (is labiodental)
+    ;; The lip should still be moving during the first rendered frame instead
+    ;; of snapping directly to the final viseme pose.
+    (is (< (sample-channel labiodental 0.008) 0.40))
+    (is (>= (sample-channel labiodental 0.024) 0.80))))
+
 (deftest web-speech-diphthongs-expand-lip-travel-without-second-jaw-flap
   (let [events (visemes/text->visemes "choice")
         snippet (snippet/build-text-snippet "choice"
@@ -403,6 +421,24 @@
     (is (>= (channel-max-intensity tongue-tip) 0.45))
     (is (<= (local-peak-count tongue) 2))
     (is (seq (get-in snippet [:curves "37"])))))
+
+(deftest LipSync-tongue-planner-uses-visible-attack-ramp
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:T_L_D_N visemes/canonical-visemes)
+                   :phoneme "T"
+                   :phonemeClass "tongue"
+                   :phonemeClasses ["obstruent" "tongue"]
+                   :jawActivation 0.08
+                   :offsetMs 0
+                   :durationMs 70}]
+                 {:intensity 1 :jawScale 1 :tongueScale 1}
+                 "voice:tongue-ramp")
+        tongue-up (channel-by-target snippet "au" 37)]
+    (is tongue-up)
+    ;; Tongue AUs should ease in over more than one visual frame. Otherwise
+    ;; the tongue reads as a position snap even though the clip interpolates.
+    (is (< (sample-channel tongue-up 0.008) 0.22))
+    (is (>= (sample-channel tongue-up 0.024) 0.35))))
 
 (deftest LipSync-tongue-planner-skips-lip-only-phrases
   (let [snippet (build-text-fixture "five pop")]
