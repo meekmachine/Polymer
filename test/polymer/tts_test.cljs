@@ -171,6 +171,7 @@
       (is (= ["configure" "startText" "audioStarted" "wordBoundary"]
              (map :type commands)))
       (is (= 1.35 (get-in (first commands) [:config :tongueScale])))
+      (is (= 0.35 (get-in (first commands) [:config :wordDriftThresholdSec])))
       (is (= "speaking" (:status snapshot)))
       (is (:speaking snapshot)))
     ((:unsubscribe events))

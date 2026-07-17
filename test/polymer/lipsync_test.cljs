@@ -713,9 +713,13 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
-(deftest web-speech-word-boundary-millisecond-clock-does-not-seek-to-end
+(deftest web-speech-word-boundary-millisecond-clock-does-not-chase-normal-jitter
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.35}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startText"
@@ -732,15 +736,16 @@
                                   :word "world"
                                   :wordIndex 1
                                   :observedElapsedSec 650}})
-    (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
-      (is seek-call)
-      (is (> (:offsetSec seek-call) 0.64))
-      (is (< (:offsetSec seek-call) 0.66)))
+    (is (not-any? #(= "setSnippetTime" (:method %)) @calls))
     (.dispose ^js system)))
 
-(deftest web-speech-word-boundary-zero-clock-uses-host-elapsed-time
+(deftest web-speech-word-boundary-zero-clock-does-not-chase-normal-jitter
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.35}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startText"
@@ -757,10 +762,32 @@
                                   :wordIndex 1
                                   :observedElapsedSec 0
                                   :hostElapsedSec 0.64}})
+    (is (not-any? #(= "setSnippetTime" (:method %)) @calls))
+    (.dispose ^js system)))
+
+(deftest web-speech-word-boundary-material-drift-still-seeks
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.35}}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "startText"
+                                  :name "voice:webspeech-large-drift"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "wordBoundary"
+                                  :word "world"
+                                  :wordIndex 1
+                                  :observedElapsedSec 0.95}})
     (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
       (is seek-call)
-      (is (> (:offsetSec seek-call) 0.63))
-      (is (< (:offsetSec seek-call) 0.65)))
+      (is (> (:offsetSec seek-call) 0.85))
+      (is (< (:offsetSec seek-call) 0.9)))
     (.dispose ^js system)))
 
 (deftest LipSync-can-receive-provider-word-timings-after-start

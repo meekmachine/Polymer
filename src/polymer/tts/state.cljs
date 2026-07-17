@@ -41,7 +41,13 @@
    :lipsyncIntensity 1
    :jawScale 1
    :tongueScale 1
-   :webSpeechDriftThresholdSec 0.08
+   ;; Web Speech does not expose provider viseme timings. Polymer builds an
+   ;; utterance-level fallback timeline from text, then receives coarse browser
+   ;; word-boundary callbacks. A tight correction threshold makes that fallback
+   ;; clip jump at every boundary, which reads as choppy lip sync. Keep Azure
+   ;; tighter because Azure sends real viseme timings; keep Web Speech loose so
+   ;; boundaries correct only material drift.
+   :webSpeechDriftThresholdSec 0.35
    :azureDriftThresholdSec 0.04
    :azureCacheLimit 8
    :debug false
