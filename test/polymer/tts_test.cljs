@@ -30,6 +30,19 @@
                                    :hostElapsedSec 0})
     #js {:stop (fn [] true)}))
 
+(defn deferred
+  "Create a promise plus resolve/reject callbacks for async provider tests."
+  []
+  (let [resolve-ref (atom nil)
+        reject-ref (atom nil)
+        promise (js/Promise.
+                 (fn [resolve reject]
+                   (reset! resolve-ref resolve)
+                   (reset! reject-ref reject)))]
+    {:promise promise
+     :resolve (fn [value] (@resolve-ref value))
+     :reject (fn [error] (@reject-ref error))}))
+
 (defn fake-runtime
   "Create an animation runtime spy for character-network routing tests."
   [calls]
@@ -176,6 +189,84 @@
       (is (:speaking snapshot)))
     ((:unsubscribe events))
     (.dispose ^js agency)))
+
+(deftest tts-agency-stops-late-web-speech-handle-after-session-stop
+  (async done
+         (let [speech (deferred)
+               stop-count (atom 0)
+               agency (polymer/createTTSAgency
+                       #js {:providers #js {:webSpeechSpeak
+                                            (fn [_plan] (:promise speech))}})]
+           (.dispatch ^js agency #js {:type "speak"
+                                      :engine "webSpeech"
+                                      :text "hello"
+                                      :name "tts:test:late-webspeech"})
+           (.stop ^js agency)
+           ((:resolve speech) #js {:stop (fn [] (swap! stop-count inc))})
+           (js/setTimeout
+            (fn []
+              (try
+                (is (= 1 @stop-count))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            20))))
+
+(deftest tts-agency-reset-stops-active-web-speech-handle
+  (async done
+         (let [stop-count (atom 0)
+               agency (polymer/createTTSAgency
+                       #js {:providers #js {:webSpeechSpeak
+                                            (fn [plan]
+                                              ((aget plan "onAudioStarted") #js {:currentTimeSec 0})
+                                              #js {:stop (fn [] (swap! stop-count inc))})}})]
+           (.dispatch ^js agency #js {:type "speak"
+                                      :engine "webSpeech"
+                                      :text "hello"
+                                      :name "tts:test:reset-webspeech"})
+           (js/setTimeout
+            (fn []
+              (.reset ^js agency)
+              (js/setTimeout
+               (fn []
+                 (try
+                   (is (= 1 @stop-count))
+                   (.dispose ^js agency)
+                   (done)
+                   (catch :default error
+                     (.dispose ^js agency)
+                     (throw error))))
+               10))
+            10))))
+
+(deftest tts-agency-ignores-stale-voice-load-results
+  (async done
+         (let [requests (atom [])
+               agency (polymer/createTTSAgency
+                       #js {:providers #js {:webSpeechVoices
+                                            (fn []
+                                              (let [request (deferred)]
+                                                (swap! requests conj request)
+                                                (:promise request)))}})]
+           (.loadVoices ^js agency "webSpeech")
+           (.loadVoices ^js agency "webSpeech")
+           ((:resolve (second @requests)) #js [#js {:name "new voice"
+                                                    :lang "en-US"}])
+           ((:resolve (first @requests)) #js [#js {:name "old voice"
+                                                   :lang "en-US"}])
+           (js/setTimeout
+            (fn []
+              (try
+                (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+                  (is (= ["new voice"] (map :id (:webSpeechVoices snapshot)))))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            20))))
 
 (deftest character-network-routes-tts-to-lipsync-and-animation
   (let [calls (atom [])

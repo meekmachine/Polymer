@@ -49,6 +49,11 @@
   [value]
   (and value (= "function" (goog/typeOf (aget value "then")))))
 
+(defn js-callable?
+  "Return true when a JS interop value can be called."
+  [value]
+  (= "function" (goog/typeOf value)))
+
 (defn promise-resolve
   "Normalize raw values and promises into one async path."
   [value]
@@ -263,6 +268,13 @@
          :audioSource nil
          :webSpeechFallbackTimer nil))
 
+(defn stop-web-speech-handle!
+  "Cancel a Web Speech handle returned by the browser or an injected provider."
+  [handle]
+  (when-let [stop (and handle (aget handle "stop"))]
+    (when (js-callable? stop)
+      (.call stop handle))))
+
 (defn play-html-audio!
   "Play Azure audio through HTMLAudio and report a clock once playback begins."
   [resources audio-base64 audio-format volume]
@@ -428,6 +440,8 @@
                          :webSpeechHandle nil})
         session-scheduler (scheduler/create-scheduler)
         azure-cache (atom {})
+        voice-load-seq (atom 0)
+        voice-load-requests (atom {})
         disposed? (atom false)]
     (letfn [(session-id []
                 ;; Every provider callback captures the session id active when
@@ -459,6 +473,26 @@
                            :agency "tts"
                            :command command}))
 
+            (active-speech? []
+              (contains? #{"loading" "speaking"} (:status @state-atom)))
+
+            (next-voice-load! [engine]
+              (let [request-id (swap! voice-load-seq inc)]
+                (swap! voice-load-requests assoc engine request-id)
+                request-id))
+
+            (active-voice-load? [engine request-id]
+              (and (not @disposed?)
+                   (= request-id (get @voice-load-requests engine))))
+
+            (cancel-voice-loads! []
+              (swap! voice-load-requests empty))
+
+            (stop-web-speech! []
+              (when-let [handle (:webSpeechHandle @resources)]
+                (stop-web-speech-handle! handle))
+              (swap! resources assoc :webSpeechHandle nil))
+
             (configure-lipsync! [engine command]
                 ;; TTS knows provider timing and user speech controls; LipSync knows
                 ;; how those controls become mouth/jaw/tongue animation.
@@ -475,11 +509,8 @@
 
             (stop-session! [reason]
               ((:stop-all session-scheduler))
+              (stop-web-speech!)
               (cleanup-audio! resources)
-              (when-let [handle (:webSpeechHandle @resources)]
-                (when-let [stop (aget handle "stop")]
-                  (stop)))
-              (swap! resources assoc :webSpeechHandle nil)
               (emit-lipsync! {:type "stop" :reason reason})
               (swap! state-atom state/record-stopped (now-ms))
               (emit-event {:type "ttsSpeechStopped"
@@ -552,8 +583,9 @@
                             ((:cancel-start-fallback session-scheduler) id))}]
                 (-> (speak-web-speech! config plan)
                     (.then (fn [handle]
-                             (when (active-session? id)
-                               (swap! resources assoc :webSpeechHandle handle))))
+                             (if (active-session? id)
+                               (swap! resources assoc :webSpeechHandle handle)
+                               (stop-web-speech-handle! handle))))
                     (.catch (fn [error]
                               (when (active-session? id)
                                 (emit-error! (.-message error))))))))
@@ -667,6 +699,7 @@
               (let [config (:config @state-atom)
                       ;; Voice loading has its own plan so missing backend/browser
                       ;; support is visible before any provider request is made.
+                    request-id (next-voice-load! engine)
                     world {:backendUrl (:backendUrl config)
                            :hasAzureVoices (boolean (custom-provider config :azureVoices))
                            :hasWebSpeech (boolean (or (custom-provider config :webSpeechVoices)
@@ -688,38 +721,43 @@
                     "webSpeech"
                     (-> (load-web-speech-voices! config)
                         (.then (fn [voices]
-                                 (let [normalized (normalize-voices
-                                                   (js->clj voices :keywordize-keys true)
-                                                   "webSpeech")]
-                                   (swap! state-atom state/record-web-speech-voices normalized)
-                                   (emit-event {:type "ttsVoicesLoaded"
-                                                :agency "tts"
-                                                :engine "webSpeech"
-                                                :voices normalized})
-                                   (emit-status!))))
-                        (.catch (fn [error] (emit-error! (.-message error)))))
+                                 (when (active-voice-load? engine request-id)
+                                   (let [normalized (normalize-voices
+                                                     (js->clj voices :keywordize-keys true)
+                                                     "webSpeech")]
+                                     (swap! state-atom state/record-web-speech-voices normalized)
+                                     (emit-event {:type "ttsVoicesLoaded"
+                                                  :agency "tts"
+                                                  :engine "webSpeech"
+                                                  :voices normalized})
+                                     (emit-status!)))))
+                        (.catch (fn [error]
+                                  (when (active-voice-load? engine request-id)
+                                    (emit-error! (.-message error))))))
 
                     "azure"
                     (-> (load-azure-voices! config)
                         (.then (fn [response]
-                                 (let [data (js->clj response :keywordize-keys true)
-                                       voices (normalize-voices (:voices data) "azure")
-                                       ready? (and (:valid data) (seq voices))
-                                       status (if ready? "ready" "error")
-                                       message (if ready?
-                                                 (str "Connected via backend environment (" (count voices) " voices).")
-                                                 (or (:message data) "Backend Azure credentials are not configured."))]
-                                   (swap! state-atom state/record-azure-status status message voices)
-                                   (emit-event {:type "ttsVoicesLoaded"
-                                                :agency "tts"
-                                                :engine "azure"
-                                                :voices voices
-                                                :status status
-                                                :message message})
-                                   (emit-status!))))
+                                 (when (active-voice-load? engine request-id)
+                                   (let [data (js->clj response :keywordize-keys true)
+                                         voices (normalize-voices (:voices data) "azure")
+                                         ready? (and (:valid data) (seq voices))
+                                         status (if ready? "ready" "error")
+                                         message (if ready?
+                                                   (str "Connected via backend environment (" (count voices) " voices).")
+                                                   (or (:message data) "Backend Azure credentials are not configured."))]
+                                     (swap! state-atom state/record-azure-status status message voices)
+                                     (emit-event {:type "ttsVoicesLoaded"
+                                                  :agency "tts"
+                                                  :engine "azure"
+                                                  :voices voices
+                                                  :status status
+                                                  :message message})
+                                     (emit-status!)))))
                         (.catch (fn [error]
-                                  (swap! state-atom state/record-azure-status "error" (.-message error) [])
-                                  (emit-error! (.-message error)))))
+                                  (when (active-voice-load? engine request-id)
+                                    (swap! state-atom state/record-azure-status "error" (.-message error) [])
+                                    (emit-error! (.-message error))))))
 
                     (emit-error! (str "Unsupported voice provider: " engine))))))
 
@@ -732,6 +770,7 @@
                   (case (:type payload)
                     "configure"
                     (do
+                      (cancel-voice-loads!)
                       (swap! state-atom state/configure (:config payload))
                       (emit-status!))
 
@@ -740,7 +779,7 @@
 
                     "speak"
                     (do
-                      (when (:speaking @state-atom)
+                      (when (active-speech?)
                         (stop-session! "replaced"))
                       (speak! payload))
 
@@ -752,6 +791,10 @@
                     "reset"
                     (do
                       (swap! state-atom state/next-session)
+                      (cancel-voice-loads!)
+                      (when (active-speech?)
+                        (stop-session! "reset"))
+                      (stop-web-speech!)
                       ((:stop-all session-scheduler))
                       (cleanup-audio! resources)
                       (reset! state-atom (state/default-state nil))
@@ -780,7 +823,9 @@
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
+                        (cancel-voice-loads!)
                         ((:dispose session-scheduler))
+                        (stop-web-speech!)
                         (cleanup-audio! resources)
                         ((:dispose input-stream))
                         ((:dispose event-stream))
