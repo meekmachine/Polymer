@@ -1,0 +1,59 @@
+(ns polymer.hair.planner
+  (:require [polymer.hair.domain :as domain]))
+
+;; Hair planning converts profile/runtime facts into local actions. The result
+;; is still just data; the scheduler decides ordering and coalescing before any
+;; runtime effector sees a request.
+
+(def supported-command-types
+  #{"configure"
+    "registerObjects"
+    "motionFact"
+    "environmentFact"
+    "reset"
+    "setHairColor"
+    "setEyebrowColor"
+    "setOutline"})
+
+(defn failure-step
+  [command]
+  (when-not (contains? supported-command-types (:type command))
+    {:op "fail"
+     :reason "unsupported-command"
+     :commandType (:type command)}))
+
+(defn command-steps
+  [command]
+  (if-let [failure (failure-step command)]
+    [failure]
+    (case (:type command)
+      "configure" [{:op "apply-config"}
+                   {:op "request-apply-state"}]
+      "registerObjects" [{:op "apply-config"
+                          :config {:objects (:objects command)}}
+                         {:op "request-apply-state"}]
+      "setHairColor" [{:op "apply-config"
+                       :config {:hairColor (:color command)}}
+                      {:op "request-apply-state"}]
+      "setEyebrowColor" [{:op "apply-config"
+                          :config {:eyebrowColor (:color command)}}
+                         {:op "request-apply-state"}]
+      "setOutline" [{:op "apply-config"
+                     :config {:showOutline (:show command)
+                              :outlineColor (:color command)
+                              :outlineOpacity (:opacity command)}}
+                    {:op "request-apply-state"}]
+      ("motionFact" "environmentFact") [{:op "record-motion"
+                                         :motion (domain/data-map (or (:motion command) (:facts command) command))}
+                                        {:op "coalesce-motion"}]
+      "reset" [{:op "reset-state"}
+               {:op "request-reset"}])))
+
+(defn plan-command
+  [command state now-ms]
+  (let [steps (command-steps command)]
+    {:agency "hair"
+     :commandType (:type command)
+     :createdAt now-ms
+     :ok (not= "fail" (:op (first steps)))
+     :steps steps}))
