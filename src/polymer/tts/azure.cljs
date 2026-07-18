@@ -1,11 +1,16 @@
-(ns polymer.vocal.azure
+(ns polymer.tts.azure
   (:require [clojure.string :as str]
-            [polymer.vocal.state :as state]
-            [polymer.vocal.visemes :as visemes]))
+            [polymer.lipsync.state :as state]
+            [polymer.lipsync.articulation.visemes :as visemes]))
 
 ;; Azure Speech emits SAPI-style viseme IDs 0-21. Embody/Loom3 expects the
 ;; canonical 15-slot CC4/ARKit order. This namespace is pure normalization:
 ;; provider event data in, Polymer viseme timeline data out.
+;;
+;; This lives under TTS, not LipSync articulation, because Azure IDs are provider
+;; facts. The namespace imports LipSync's canonical viseme definitions only to
+;; output the provider-neutral timeline that LipSync can articulate like any
+;; other text/timeline source.
 
 (def azure->canonical
   {0 (:B_M_P visemes/canonical-visemes)
@@ -78,11 +83,43 @@
        :time time})))
 
 (defn normalize-provider-visemes [events]
-  (->> (or events [])
-       (map normalize-provider-viseme)
-       (remove nil?)
+  ;; This is the one place a local transducer is useful: normalize each provider
+  ;; row and drop malformed rows in one pass. Sorting is intentionally outside
+  ;; the transducer because ordering is a whole-collection operation.
+  (->> (into [] (keep normalize-provider-viseme) (or events []))
        (sort-by :time)
        vec))
+
+(defn normalize-azure-synthesis
+  "Return the pure provider packet TTS uses after Azure synthesis.
+
+  Audio fields are normalized here for playback. Visemes and word timings stay
+  raw until the Azure provider mapper and LipSync agency normalize them into a
+  provider-neutral animation timeline."
+  [payload]
+  {:audioBase64 (or (:audio_base64 payload) (:audioBase64 payload))
+   :audioFormat (or (:audio_format payload) (:audioFormat payload))
+   :durationSec (state/number-or (or (:durationSec payload)
+                                     (:duration_sec payload)
+                                     (:duration payload))
+                                 0)
+   :visemes (:visemes payload)
+   :wordTimings (or (:word_boundaries payload)
+                    (:wordTimings payload))})
+
+(defn azure-synthesis->lipsync-command
+  "Build the LipSync command from a normalized Azure synthesis packet."
+  [snippet-name text payload config]
+  {:type "processAzureVisemes"
+   :name snippet-name
+   :text text
+   :source "azure"
+   :visemes (:visemes payload)
+   :wordTimings (or (:wordTimings payload)
+                    (:word_timings payload)
+                    (:word_boundaries payload))
+   :totalDurationMs (js/Math.round (* (state/number-or (:durationSec payload) 0) 1000))
+   :options {:visualLeadMs (:visualLeadMs config)}})
 
 (defn word-start-sec [word]
   (state/number-or (or (:startSec word) (:start word) (:start_time word)) 0))
@@ -157,7 +194,7 @@
                             canonical-id
                             (= (:canonicalId previous) canonical-id)
                             (< (js/Math.abs (- (* 1000 (:time event))
-                                                (* 1000 (:time previous))))
+                                               (* 1000 (:time previous))))
                                duplicate-window-ms))]
         (recur (rest remaining)
                (if (or (nil? canonical-id) duplicate?)
@@ -188,12 +225,20 @@
             max-ms (min (max-duration-ms class-name) (+ raw-span-ms overlap-ms))]
         (clamp-duration desired-ms 1 max-ms remaining-ms)))))
 
-(defn push-event [timeline viseme-id offset-ms duration-ms]
-  (if (<= duration-ms 0)
-    timeline
-    (conj timeline {:visemeId viseme-id
-                    :offsetMs (max 0 (js/Math.round offset-ms))
-                    :durationMs (max 1 (js/Math.round duration-ms))})))
+(defn push-event
+  ([timeline viseme-id offset-ms duration-ms]
+   (push-event timeline viseme-id offset-ms duration-ms nil))
+  ([timeline viseme-id offset-ms duration-ms extra-classes]
+   (if (<= duration-ms 0)
+     timeline
+     (let [classes (vec (distinct (concat (visemes/viseme-classes viseme-id)
+                                          (or extra-classes []))))]
+       (conj timeline {:visemeId viseme-id
+                       :phonemeClass (visemes/primary-class classes)
+                       :phonemeClasses classes
+                       :jawActivation (visemes/jaw-activation-for-viseme viseme-id)
+                       :offsetMs (max 0 (js/Math.round offset-ms))
+                       :durationMs (max 1 (js/Math.round duration-ms))})))))
 
 (defn diphthong-targets [provider-id]
   (case provider-id
@@ -215,9 +260,12 @@
                                                        (* duration-ms 0.25))))
             second-duration-ms (max diphthong-secondary-min-ms
                                     (- (+ offset-ms duration-ms) second-offset-ms))]
+        ;; Azure provider IDs 8-11 represent diphthong motion. Preserve that
+        ;; fact after expansion so the jaw planner keeps one vocalic jaw arc
+        ;; while the lips travel through the two canonical targets.
         (-> timeline
-            (push-event first-viseme offset-ms first-duration-ms)
-            (push-event second-viseme second-offset-ms second-duration-ms))))))
+            (push-event first-viseme offset-ms first-duration-ms ["diphthong"])
+            (push-event second-viseme second-offset-ms second-duration-ms ["diphthong"]))))))
 
 (defn azure-visemes->timeline
   ([visemes] (azure-visemes->timeline visemes nil nil))

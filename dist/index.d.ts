@@ -1,5 +1,4 @@
 import type { LoomLargeThree } from '@lovelace_lol/loom3';
-import type { EmbodyAnimationRuntime } from '@lovelace_lol/loom3/cljs';
 
 export interface BlinkState {
   agency: 'blink';
@@ -115,16 +114,41 @@ export interface PolymerSnippetChannel {
   intensityScale?: number;
 }
 
-export interface PolymerAnimationRuntime extends EmbodyAnimationRuntime {
+export interface PolymerAnimationHandle {
+  play?: () => unknown;
+  stop?: () => unknown;
+  setTime?: (offsetSec: number) => unknown;
+  seek?: (offsetSec: number) => unknown;
+  finished?: Promise<unknown> | { then: (onFulfilled?: () => unknown, onRejected?: (error: unknown) => unknown) => unknown };
+}
+
+export interface PolymerAnimationRuntime {
+  buildClip?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
+  playSnippet?: (
+    name: string,
+    curves: Record<string, PolymerSnippetKeyframe[]>,
+    options?: Record<string, unknown>
+  ) => PolymerAnimationHandle | unknown;
   playTypedSnippet?: (
     snippet: { name: string; channels: PolymerSnippetChannel[] },
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
   buildTypedClip?: (
     name: string,
     channels: PolymerSnippetChannel[],
     options?: Record<string, unknown>
-  ) => unknown;
+  ) => PolymerAnimationHandle | unknown;
+  updateClipParams?: (name: string, params: Record<string, unknown>) => unknown;
+  setSnippetTime?: (name: string, offsetSec: number) => unknown;
+  seekSnippet?: (name: string, offsetSec: number) => unknown;
+  seek?: (name: string, offsetSec: number) => unknown;
+  cleanupSnippet?: (name: string) => unknown;
+  stopAnimation?: (name: string) => unknown;
+  getAnimationState?: (name: string) => unknown;
 }
 
 export interface PolymerAnimationSnippet {
@@ -142,10 +166,12 @@ export interface PolymerAnimationSnippet {
   metadata?: Record<string, unknown>;
 }
 
-export interface VocalConfig {
+export interface LipSyncConfig {
   intensity?: number;
   speechRate?: number;
   jawScale?: number;
+  /** Scale for independently planned tongue AU curves. Set 0 to disable tongue motion. */
+  tongueScale?: number;
   rampMs?: number;
   holdMs?: number;
   priority?: number;
@@ -153,13 +179,30 @@ export interface VocalConfig {
   wordDriftThresholdSec?: number;
 }
 
-export interface VocalVisemeEvent {
+export interface LipSyncVisemeEvent {
   visemeId: number;
+  /**
+   * Optional independent jaw-axis activation for this event. When omitted,
+   * Polymer derives a default from the canonical viseme slot. Set to 0 for a
+   * lip-only viseme, or scale with LipSyncConfig.jawScale for JALI-style control.
+   */
+  jawActivation?: number;
+  phoneme?: string;
+  /**
+   * Primary visual-speech class for planner rules, e.g. vowel, bilabial,
+   * labiodental, sibilant, obstruent, nasal, tongue, liquid, glide, or pause.
+   */
+  phonemeClass?: string;
+  /**
+   * Full class set for phonemes that need multiple JALI-style rules, such as
+   * M being both bilabial and nasal or F being labiodental and fricative.
+   */
+  phonemeClasses?: string[];
   offsetMs: number;
   durationMs: number;
 }
 
-export interface VocalWordTiming {
+export interface LipSyncWordTiming {
   word: string;
   startSec?: number;
   endSec?: number;
@@ -178,17 +221,17 @@ export interface AzureVisemeEvent {
   audioOffset?: number;
 }
 
-export interface VocalTimeline {
+export interface LipSyncTimeline {
   name?: string;
   text?: string;
   source?: 'text' | 'azure' | 'livekit' | 'webSpeech' | string;
-  visemes: VocalVisemeEvent[];
-  wordTimings?: VocalWordTiming[];
+  visemes: LipSyncVisemeEvent[];
+  wordTimings?: LipSyncWordTiming[];
   durationSec?: number;
 }
 
-export interface VocalState {
-  agency: 'vocal';
+export interface LipSyncState {
+  agency: 'lipSync';
   speaking: boolean;
   currentWord: string | null;
   currentViseme: number | null;
@@ -196,20 +239,30 @@ export interface VocalState {
   source: string | null;
   text: string | null;
   startTime: number | null;
+  audioStartedAt: number | null;
+  audioTimeSec: number | null;
   maxTime: number;
   wordIndex: number;
   wordTimings: Array<{ word: string; startSec: number; endSec: number }>;
   scheduledCount: number;
   stoppedCount: number;
   syncCorrectionCount: number;
-  config: Required<VocalConfig>;
+  config: Required<LipSyncConfig>;
   lastEvent: null | Record<string, unknown>;
 }
 
-export type VocalDispatch =
-  | { type: 'configure'; config: VocalConfig }
-  | { type: 'startText'; text: string; name?: string; source?: string; wordTimings?: VocalWordTiming[] }
-  | { type: 'startTimeline'; timeline: VocalTimeline }
+export type LipSyncDispatch =
+  | { type: 'configure'; config: LipSyncConfig }
+  | {
+      type: 'startText';
+      text: string;
+      name?: string;
+      source?: string;
+      wordTimings?: LipSyncWordTiming[];
+      durationSec?: number;
+      totalDurationMs?: number;
+    }
+  | { type: 'startTimeline'; timeline: LipSyncTimeline }
   | {
       type: 'processAzureVisemes';
       visemes: AzureVisemeEvent[];
@@ -217,13 +270,141 @@ export type VocalDispatch =
       name?: string;
       text?: string;
       source?: string;
-      wordTimings?: VocalWordTiming[];
-      options?: { wordTimings?: VocalWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
+      wordTimings?: LipSyncWordTiming[];
+      options?: { wordTimings?: LipSyncWordTiming[]; visualLeadMs?: number; [key: string]: unknown };
     }
-  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number }
-  | { type: 'updateWordTimings'; wordTimings: VocalWordTiming[] }
+  | { type: 'wordBoundary'; word: string; wordIndex?: number; observedElapsedSec?: number; hostElapsedSec?: number }
+  | { type: 'audioStarted'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
+  | { type: 'audioTime'; name?: string; audioTimeSec?: number; currentTimeSec?: number; offsetSec?: number }
+  | { type: 'updateWordTimings'; wordTimings: LipSyncWordTiming[] }
   | { type: 'stop' }
   | { type: 'reset' };
+
+export interface TTSVoice {
+  id: string;
+  name: string;
+  language?: string;
+  lang?: string;
+  gender?: string;
+  styles?: string[];
+  provider?: 'webSpeech' | 'azure' | string;
+}
+
+export interface TTSConfig {
+  engine?: 'webSpeech' | 'azure' | 'livekit' | string;
+  backendUrl?: string;
+  voiceName?: string;
+  azureVoiceName?: string;
+  azureStyle?: string;
+  azureStyleDegree?: string | number | null;
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+  visualLeadMs?: number;
+  lipsyncIntensity?: number;
+  jawScale?: number;
+  /** Scale for LipSync tongue AU planning forwarded by TTS before each speech session. */
+  tongueScale?: number;
+  webSpeechDriftThresholdSec?: number;
+  azureDriftThresholdSec?: number;
+  azureCacheLimit?: number;
+  debug?: boolean;
+  providers?: Record<string, unknown>;
+}
+
+export interface TTSState {
+  agency: 'tts';
+  status: 'idle' | 'loading' | 'speaking' | 'error' | string;
+  engine: string;
+  speaking: boolean;
+  currentText: string | null;
+  snippetName: string | null;
+  sessionId: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  wordIndex: number;
+  webSpeechVoices: TTSVoice[];
+  azureVoices: TTSVoice[];
+  azureStatus: 'checking' | 'ready' | 'error' | string;
+  azureStatusMessage: string;
+  lastPlan: Record<string, unknown> | null;
+  lastError: string | null;
+  config: Required<Omit<TTSConfig, 'providers'>> & { providers?: never };
+}
+
+export type TTSDispatch =
+  | { type: 'configure'; config: TTSConfig }
+  | { type: 'loadVoices'; engine?: 'webSpeech' | 'azure' | string }
+  | {
+      type: 'speak';
+      text: string;
+      engine?: 'webSpeech' | 'azure' | 'livekit' | string;
+      name?: string;
+      backendUrl?: string;
+      voiceName?: string;
+      style?: string;
+      rate?: number;
+      pitch?: number;
+      volume?: number;
+      visualLeadMs?: number;
+    }
+  | { type: 'stop' }
+  | { type: 'reset' };
+
+export type LipSyncSchedulerQueueEntry =
+  | {
+      type: 'scheduleAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      snippetName: string;
+      effectors: string[];
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'seekAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      name: string;
+      offsetSec: number;
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'removeAnimation';
+      agency: 'lipSync';
+      requestId: string;
+      name: string;
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'finishTimeline';
+      agency: 'lipSync';
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    };
+
+export type TTSSchedulerQueueEntry =
+  | {
+      type: 'webSpeechStartFallback';
+      agency: 'tts';
+      sessionId: number;
+      delayMs: number;
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'audioBoundaryPolling';
+      agency: 'tts';
+      sessionId: number;
+      wordCount: number;
+      queueIndex: number;
+      queuedAt: number;
+    };
 
 export interface PolymerStream<TEvent> {
   subscribe(listener: (event: TEvent) => void): () => void;
@@ -233,6 +414,13 @@ export interface PolymerInputStream<TCommand> extends PolymerStream<{ type: 'com
   write(command: TCommand): void;
 }
 
+/**
+ * Reserved compatibility stream.
+ *
+ * Polymer agencies coordinate through typed domain events. No generic public
+ * effect events are emitted today, so consumers should subscribe to events
+ * unless a future agency explicitly documents a compatibility event here.
+ */
 export type PolymerEffectEvent = never;
 
 export type PolymerCommandEvent = PolymerEffectEvent;
@@ -245,25 +433,32 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestScheduleSnippet';
-      agency: 'blink' | 'vocal';
+      agency: 'blink' | 'lipSync';
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
+      effectors?: string[];
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animation.requestRemoveSnippet';
-      agency: 'vocal';
+      agency: 'lipSync';
       requestId: string;
       name: string;
       reason: string;
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animation.requestSeekSnippet';
-      agency: 'vocal';
+      agency: 'lipSync';
       requestId: string;
       name: string;
       offsetSec: number;
       reason: string;
+      queueIndex?: number;
+      queuedAt?: number;
     }
   | {
       type: 'animationSnippetScheduled';
@@ -304,10 +499,11 @@ export type PolymerDomainEvent =
       nextDelayMs: number | null;
     }
   | { type: 'signal'; agency: 'blink'; signal: 'blink-fast'; plan: Record<string, unknown> }
-  | { type: 'vocalConfigChanged'; agency: 'vocal'; state: VocalState }
+  | { type: 'lipSyncPlanCreated'; agency: 'lipSync'; plan: Record<string, unknown> }
+  | { type: 'lipSyncConfigChanged'; agency: 'lipSync'; state: LipSyncState }
   | {
-      type: 'vocalTimelineStarted';
-      agency: 'vocal';
+      type: 'lipSyncTimelineStarted';
+      agency: 'lipSync';
       name: string;
       source: string;
       text?: string;
@@ -315,12 +511,14 @@ export type PolymerDomainEvent =
       maxTime: number;
       startedAt: number;
     }
-  | { type: 'vocalTimelineStopped'; agency: 'vocal'; reason: string; stoppedAt: number }
-  | { type: 'vocalWordBoundary'; agency: 'vocal'; word: string; wordIndex: number; observedAt: number }
-  | { type: 'vocalWordTimingsUpdated'; agency: 'vocal'; count: number; updatedAt: number }
+  | { type: 'lipSyncTimelineStopped'; agency: 'lipSync'; reason: string; stoppedAt: number }
+  | { type: 'lipSyncWordBoundary'; agency: 'lipSync'; word: string; wordIndex: number; observedAt: number }
+  | { type: 'lipSyncWordTimingsUpdated'; agency: 'lipSync'; count: number; updatedAt: number }
+  | { type: 'lipSyncAudioStarted'; agency: 'lipSync'; name?: string; audioTimeSec: number; observedAt: number }
+  | { type: 'lipSyncAudioTime'; agency: 'lipSync'; name?: string; audioTimeSec: number; observedAt: number }
   | {
-      type: 'vocalSyncDrift';
-      agency: 'vocal';
+      type: 'lipSyncSyncDrift';
+      agency: 'lipSync';
       name: string;
       word: string;
       wordIndex: number;
@@ -330,7 +528,29 @@ export type PolymerDomainEvent =
       targetSec: number;
       correctedAt: number;
     }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'vocal' }
+  | { type: 'ttsStatusChanged'; agency: 'tts'; state: TTSState }
+  | { type: 'ttsPlanCreated'; agency: 'tts'; plan: Record<string, unknown> }
+  | {
+      type: 'ttsVoicesLoaded';
+      agency: 'tts';
+      engine: 'webSpeech' | 'azure' | string;
+      voices: TTSVoice[];
+      status?: 'checking' | 'ready' | 'error' | string;
+      message?: string;
+    }
+  | { type: 'ttsSpeechStarted'; agency: 'tts'; engine: string; name: string; startedAt: number }
+  | { type: 'ttsSpeechStopped'; agency: 'tts'; reason: string; stoppedAt: number }
+  | { type: 'ttsSpeechEnded'; agency: 'tts'; endedAt: number }
+  | {
+      type: 'ttsWordBoundary';
+      agency: 'tts';
+      word: string;
+      wordIndex: number;
+      observedElapsedSec?: number;
+      hostElapsedSec?: number;
+    }
+  | { type: 'lipSync.command'; agency: 'tts'; command: LipSyncDispatch }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -388,13 +608,14 @@ export interface AnimationAgency {
   dispose(): void;
 }
 
-export interface VocalAgency {
-  input: PolymerInputStream<VocalDispatch>;
+export interface LipSyncAgency {
+  input: PolymerInputStream<LipSyncDispatch>;
   events: PolymerStream<PolymerDomainEvent>;
   effects: PolymerStream<PolymerEffectEvent>;
-  dispatch(command: VocalDispatch): void;
-  snapshot(): VocalState;
-  subscribeInput(listener: (event: { type: 'command'; agency: 'vocal'; command: VocalDispatch }) => void): () => void;
+  dispatch(command: LipSyncDispatch): void;
+  snapshot(): LipSyncState;
+  schedulerQueue(): LipSyncSchedulerQueueEntry[];
+  subscribeInput(listener: (event: { type: 'command'; agency: 'lipSync'; command: LipSyncDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
   subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
   /** Compatibility alias for events. Prefer subscribeEvents. */
@@ -403,12 +624,38 @@ export interface VocalAgency {
   subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
   /** Compatibility alias for effects. Prefer subscribeEffects. */
   subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
-  configure(config: VocalConfig): void;
+  configure(config: LipSyncConfig): void;
   startText(text: string): void;
-  startTimeline(timeline: VocalTimeline): void;
+  startTimeline(timeline: LipSyncTimeline): void;
   processAzureVisemes(visemes: AzureVisemeEvent[], totalDurationMs?: number): void;
-  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number): void;
-  updateWordTimings(wordTimings: VocalWordTiming[]): void;
+  wordBoundary(word: string, wordIndex?: number, observedElapsedSec?: number, hostElapsedSec?: number): void;
+  audioStarted(audioTimeSec?: number): void;
+  audioTime(audioTimeSec: number): void;
+  updateWordTimings(wordTimings: LipSyncWordTiming[]): void;
+  stop(): void;
+  reset(): void;
+  dispose(): void;
+}
+
+export interface TTSAgency {
+  input: PolymerInputStream<TTSDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: TTSDispatch): void;
+  snapshot(): TTSState;
+  schedulerQueue(): TTSSchedulerQueueEntry[];
+  subscribeInput(listener: (event: { type: 'command'; agency: 'tts'; command: TTSDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: TTSConfig): void;
+  loadVoices(engine?: 'webSpeech' | 'azure' | string): void;
+  speak(text: string): void;
   stop(): void;
   reset(): void;
   dispose(): void;
@@ -416,13 +663,15 @@ export interface VocalAgency {
 
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
-  vocal: VocalState;
+  tts: TTSState;
+  lipSync: LipSyncState;
   animation: AnimationState;
 }
 
 export type CharacterAgencyDispatch =
   | { agency: 'blink'; command: BlinkDispatch }
-  | { agency: 'vocal'; command: VocalDispatch }
+  | { agency: 'tts'; command: TTSDispatch }
+  | { agency: 'lipSync'; command: LipSyncDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
@@ -433,7 +682,8 @@ export interface CharacterAgencies {
   snapshot(): CharacterAgencySnapshot;
   agency(name: 'animation'): AnimationAgency;
   agency(name: 'blink'): BlinkAgency;
-  agency(name: 'vocal'): VocalAgency;
+  agency(name: 'tts'): TTSAgency;
+  agency(name: 'lipSync'): LipSyncAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
@@ -449,9 +699,11 @@ export interface CharacterAgencies {
 
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
-export function createVocalAgency(config?: VocalConfig): VocalAgency;
+export function createLipSyncAgency(config?: LipSyncConfig): LipSyncAgency;
+export function createTTSAgency(config?: TTSConfig): TTSAgency;
 export function createCharacterAgencies(config?: {
   blink?: BlinkAgencyConfig;
-  vocal?: VocalConfig;
+  tts?: TTSConfig;
+  lipSync?: LipSyncConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;

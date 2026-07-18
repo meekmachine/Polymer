@@ -82,7 +82,7 @@
 
 (defn record-seek [state name source-agency seeked-at offset-sec]
   ;; Seeking is still schedule state: the Animation agency owns the active
-  ;; snippet handles, so drift correction from Vocal/LipSync comes here instead
+  ;; snippet handles, so drift correction from LipSync comes here instead
   ;; of reaching through LoomLarge or bypassing Polymer's agency boundary.
   (-> state
       (assoc-in [:scheduled name :lastSeekAt] seeked-at)

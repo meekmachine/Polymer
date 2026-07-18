@@ -11,8 +11,8 @@
 ;; events  - facts Blink observed or decided, such as a planned blink or a
 ;;           cross-agency signal.
 ;; effects - Blink currently leaves host animation effects to the Animation
-;;           agency. The stream still exists for interface symmetry and future
-;;           Blink-specific side effects.
+;;           agency. The stream is intentionally empty today and exists for
+;;           interface symmetry/future Blink-specific side effects.
 ;;
 ;; The agency owns only local Blink state and timers. It does not know about
 ;; React components, Latticework, Loom3/Embody, DOM APIs, storage, audio, video,
@@ -60,9 +60,9 @@
                       ((:trigger agency-scheduler) (:options payload)))
 
                     ("enable" "disable" "setFrequency" "setDuration" "setIntensity"
-                     "setRandomness" "setLeftEyeIntensity" "setRightEyeIntensity"
-                     "setBurstEnabled" "setBurstFrequency" "setBurstCount" "setBurstGap"
-                     "configure" "reset")
+                              "setRandomness" "setLeftEyeIntensity" "setRightEyeIntensity"
+                              "setBurstEnabled" "setBurstFrequency" "setBurstCount" "setBurstGap"
+                              "configure" "reset")
                     (do
                       (swap! state-atom state/apply-command payload)
                       (emit-event {:type "blinkConfigChanged"
@@ -87,8 +87,8 @@
              :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
              :subscribeEffects (fn [listener] ((:subscribe effect-stream) listener))
              ;; Compatibility aliases while LoomLarge and tests are still being
-             ;; migrated. "status" is now just the event stream; "commands" is
-             ;; the host-effect stream.
+             ;; migrated. "status" is now just the event stream; "commands"
+             ;; points at the currently-empty compatibility effect stream.
              :subscribe (fn [listener] ((:subscribe event-stream) listener))
              :subscribeStatus (fn [listener] ((:subscribe event-stream) listener))
              :subscribeCommands (fn [listener] ((:subscribe effect-stream) listener))

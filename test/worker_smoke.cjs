@@ -48,8 +48,7 @@ async function main() {
   await waitFor(messages, () => messages.some(
     (message) => message.stream === 'events' && message.event?.type === 'animationSnippetScheduled',
   ));
-
-  assert(messages.some(
+  await waitFor(messages, () => messages.some(
     (message) => message.stream === 'events' && message.event?.signal === 'blink-fast',
   ));
   assert(!messages.some(
@@ -60,11 +59,11 @@ async function main() {
     type: 'dispatch',
     id: 'character-a',
     message: {
-      agency: 'vocal',
+      agency: 'lipSync',
       command: {
         type: 'startTimeline',
         timeline: {
-          name: 'worker:vocal',
+          name: 'worker:lipSync',
           source: 'worker',
           visemes: [{ visemeId: 1, offsetMs: 0, durationMs: 120 }],
         },
@@ -73,7 +72,7 @@ async function main() {
   });
 
   await waitFor(messages, () => messages.some(
-    (message) => message.stream === 'events' && message.event?.type === 'vocalTimelineStarted',
+    (message) => message.stream === 'events' && message.event?.type === 'lipSyncTimelineStarted',
   ));
 
   assert(messages.some(

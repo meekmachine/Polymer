@@ -1,7 +1,7 @@
-(ns polymer.vocal.state
+(ns polymer.lipsync.state
   (:require [clojure.string :as str]))
 
-;; Vocal/LipSync state is the agency-local ledger for one character's speech
+;; LipSync state is the agency-local ledger for one character's speech
 ;; animation timeline. Provider credentials, audio playback, HTTP, LiveKit, and
 ;; browser APIs stay outside Polymer; this state only tracks the deterministic
 ;; timing data needed to schedule and correct viseme animation.
@@ -10,6 +10,7 @@
   {:intensity 1
    :speechRate 1
    :jawScale 1
+   :tongueScale 1
    :rampMs 15
    :holdMs 40
    :priority 50
@@ -17,7 +18,7 @@
    :wordDriftThresholdSec 0.06})
 
 (def default-state
-  {:agency "vocal"
+  {:agency "lipSync"
    :speaking false
    :currentWord nil
    :currentViseme nil
@@ -25,6 +26,8 @@
    :source nil
    :text nil
    :startTime nil
+   :audioStartedAt nil
+   :audioTimeSec nil
    :maxTime 0
    :wordIndex 0
    :wordTimings []
@@ -54,6 +57,7 @@
     {:intensity (clamp 0 2 (number-or (:intensity merged) (:intensity default-config)))
      :speechRate (clamp 0.2 3 (number-or (:speechRate merged) (:speechRate default-config)))
      :jawScale (clamp 0 2 (number-or (:jawScale merged) (:jawScale default-config)))
+     :tongueScale (clamp 0 2 (number-or (:tongueScale merged) (:tongueScale default-config)))
      :rampMs (clamp 0 200 (number-or (:rampMs merged) (:rampMs default-config)))
      :holdMs (clamp 0 500 (number-or (:holdMs merged) (:holdMs default-config)))
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
@@ -100,10 +104,10 @@
        :endSec end-sec})))
 
 (defn normalize-word-timings [word-timings]
-  (->> (or word-timings [])
-       (map normalize-word-timing)
-       (remove nil?)
-       vec))
+  ;; This is a pure row-normalization pass: normalize every provider timing row
+  ;; and drop malformed/empty words. A local transducer keeps that one pass
+  ;; explicit without creating a separate namespace for a tiny transformation.
+  (into [] (keep normalize-word-timing) (or word-timings [])))
 
 (defn record-start [state timeline snippet-name started-at max-time]
   ;; A timeline starts as one utterance-level animation snippet. Word timings are
@@ -119,11 +123,13 @@
                :source (or (:source timeline) "unknown")
                :text (:text timeline)
                :startTime started-at
+               :audioStartedAt nil
+               :audioTimeSec nil
                :maxTime max-time
                :wordIndex 0
                :wordTimings (normalize-word-timings (:wordTimings timeline)))
         (update :scheduledCount inc)
-        (assoc :lastEvent {:type "vocalTimelineStarted"
+        (assoc :lastEvent {:type "lipSyncTimelineStarted"
                            :name snippet-name
                            :source (or (:source timeline) "unknown")
                            :at started-at}))))
@@ -137,11 +143,13 @@
              :source nil
              :text nil
              :startTime nil
+             :audioStartedAt nil
+             :audioTimeSec nil
              :maxTime 0
              :wordIndex 0
              :wordTimings [])
       (update :stoppedCount inc)
-      (assoc :lastEvent {:type "vocalTimelineStopped"
+      (assoc :lastEvent {:type "lipSyncTimelineStopped"
                          :reason reason
                          :at stopped-at})))
 
@@ -149,7 +157,7 @@
   (-> state
       (assoc :currentWord word
              :wordIndex (inc (or word-index (:wordIndex state) 0)))
-      (assoc :lastEvent {:type "vocalWordBoundary"
+      (assoc :lastEvent {:type "lipSyncWordBoundary"
                          :word word
                          :wordIndex word-index
                          :at observed-at})))
@@ -157,21 +165,38 @@
 (defn record-word-timings [state word-timings updated-at]
   ;; Provider timing metadata can arrive after viseme data. Updating it in the
   ;; agency keeps later word-boundary drift correction accurate without asking
-  ;; LoomLarge to manage any Vocal internals.
+  ;; LoomLarge to manage any LipSync internals.
   (-> state
       (assoc :wordTimings (normalize-word-timings word-timings)
              :wordIndex 0)
-      (assoc :lastEvent {:type "vocalWordTimingsUpdated"
+      (assoc :lastEvent {:type "lipSyncWordTimingsUpdated"
                          :count (count (normalize-word-timings word-timings))
                          :at updated-at})))
 
 (defn record-sync-correction [state name offset-sec corrected-at]
   (-> state
       (update :syncCorrectionCount inc)
-      (assoc :lastEvent {:type "vocalSyncCorrection"
+      (assoc :lastEvent {:type "lipSyncSyncCorrection"
                          :name name
                          :offsetSec offset-sec
                          :at corrected-at})))
+
+(defn record-audio-started [state audio-time-sec observed-at]
+  ;; Audio remains a host side effect; LipSync only records the host clock value
+  ;; that should drive the already-scheduled animation timeline.
+  (-> state
+      (assoc :audioStartedAt observed-at
+             :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "lipSyncAudioStarted"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
+
+(defn record-audio-time [state audio-time-sec observed-at]
+  (-> state
+      (assoc :audioTimeSec (max 0 (number-or audio-time-sec 0)))
+      (assoc :lastEvent {:type "lipSyncAudioTime"
+                         :audioTimeSec (max 0 (number-or audio-time-sec 0))
+                         :at observed-at})))
 
 (defn visible-state [state]
   (clj->js state))

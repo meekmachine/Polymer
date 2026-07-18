@@ -9,6 +9,23 @@
 
 (def cleanup-buffer-ms 50)
 
+(defn debug-flag-enabled? [name]
+  (try
+    (let [search (when (exists? js/window)
+                   (.. js/window -location -search))
+          params (when search (js/URLSearchParams. search))
+          value (when params (.get params name))]
+      (or (= value "1") (= value "true")))
+    (catch :default _ false)))
+
+(defn animation-debug-enabled? []
+  (or (debug-flag-enabled? "polymerVocalDebug")
+      (debug-flag-enabled? "polymerLipSyncDebug")))
+
+(defn debug-log! [label payload]
+  (when (animation-debug-enabled?)
+    (.info js/console (str label " " (.stringify js/JSON (clj->js payload))))))
+
 (defn js-callable? [value]
   (= "function" (goog/typeOf value)))
 
@@ -31,33 +48,42 @@
   ;; Loom3 already exposes the dynamic clip/snippet methods the scheduler needs.
   ;; Polymer adapts the current engine once here and keeps all later playback,
   ;; parameter, and cleanup calls inside the Animation agency.
-  #js {:buildClip (fn [clip-name curves options]
-                    (call-js engine "buildClip" clip-name curves options))
-       :buildTypedClip (fn [clip-name channels options]
-                         (call-js engine "buildTypedClip" clip-name channels options))
-       :playSnippet (fn [clip-name curves options]
-                      (or
-                       (call-js engine "playSnippet" #js {:name clip-name :curves curves} options)
-                       (let [handle (call-js engine "buildClip" clip-name curves options)]
-                         (play-built-handle! handle))))
-       :playTypedSnippet (fn [snippet options]
-                           (let [clip-name (aget snippet "name")
-                                 channels (aget snippet "channels")]
-                             (or
-                              (call-js engine "playTypedSnippet" snippet options)
-                              (play-built-handle!
-                               (call-js engine "buildTypedClip" clip-name channels options)))))
-       :updateClipParams (fn [clip-name params]
-                           (call-js engine "updateClipParams" clip-name params))
-       :setSnippetTime (fn [clip-name offset-sec]
-                         (or (call-js engine "setSnippetTime" clip-name offset-sec)
-                             (call-js engine "seekSnippet" clip-name offset-sec)
-                             (call-js engine "seek" clip-name offset-sec)))
-       :cleanupSnippet (fn [clip-name]
-                         (or (call-js engine "cleanupSnippet" clip-name)
-                             (call-js engine "stopAnimation" clip-name)))
-       :getAnimationState (fn [clip-name]
-                            (call-js engine "getAnimationState" clip-name))})
+  (let [runtime #js {:buildClip (fn [clip-name curves options]
+                                  (call-js engine "buildClip" clip-name curves options))
+                     :playSnippet (fn [clip-name curves options]
+                                    (or
+                                     (call-js engine "playSnippet" #js {:name clip-name :curves curves} options)
+                                     (let [handle (call-js engine "buildClip" clip-name curves options)]
+                                       (play-built-handle! handle))))
+                     :updateClipParams (fn [clip-name params]
+                                         (call-js engine "updateClipParams" clip-name params))
+                     :setSnippetTime (fn [clip-name offset-sec]
+                                       (or (call-js engine "setSnippetTime" clip-name offset-sec)
+                                           (call-js engine "seekSnippet" clip-name offset-sec)
+                                           (call-js engine "seek" clip-name offset-sec)))
+                     :cleanupSnippet (fn [clip-name]
+                                       (or (call-js engine "cleanupSnippet" clip-name)
+                                           (call-js engine "stopAnimation" clip-name)))
+                     :getAnimationState (fn [clip-name]
+                                          (call-js engine "getAnimationState" clip-name))}]
+    ;; Only expose typed playback if the underlying engine really has a typed
+    ;; build/play entry point. Otherwise play-runtime-snippet! must use the legacy
+    ;; curve fallback and add the viseme category hint instead of dropping the clip.
+    (when (js-method engine "buildTypedClip")
+      (aset runtime "buildTypedClip"
+            (fn [clip-name channels options]
+              (call-js engine "buildTypedClip" clip-name channels options))))
+    (when (or (js-method engine "playTypedSnippet")
+              (js-method engine "buildTypedClip"))
+      (aset runtime "playTypedSnippet"
+            (fn [snippet options]
+              (let [clip-name (aget snippet "name")
+                    channels (aget snippet "channels")]
+                (or
+                 (call-js engine "playTypedSnippet" snippet options)
+                 (play-built-handle!
+                  (call-js engine "buildTypedClip" clip-name channels options)))))))
+    runtime))
 
 (defn config->runtime [config]
   (let [runtime (aget config "runtime")
@@ -85,16 +111,34 @@
 (defn typed-viseme-channel? [channel]
   (= "viseme" (:type (typed-channel-target channel))))
 
-(defn typed-jaw-au-channel? [channel]
+(defn typed-jaw-channel? [channel]
   (let [target (typed-channel-target channel)]
-    (and (= "au" (:type target))
-         (= 26 (:id target)))))
+    (or (and (= "au" (:type target))
+             (= 26 (:id target)))
+        (and (= "bone" (:type target))
+             (= "JAW" (:id target))))))
 
 (defn typed-viseme-snippet? [snippet]
   (boolean (some typed-viseme-channel? (typed-channels snippet))))
 
+(defn typed-viseme-curves-snippet? [snippet]
+  (and (typed-viseme-snippet? snippet)
+       (seq (:curves snippet))))
+
 (defn typed-jaw-snippet? [snippet]
-  (boolean (some typed-jaw-au-channel? (typed-channels snippet))))
+  (boolean (some typed-jaw-channel? (typed-channels snippet))))
+
+(defn typed-channel-summary [snippet]
+  (into []
+        (map (fn [channel]
+               (let [keyframes (:keyframes channel)
+                     peak (transduce (map :intensity) max 0 keyframes)]
+                 {:target (:target channel)
+                  :frames (count keyframes)
+                  :firstSec (:time (first keyframes))
+                  :lastSec (:time (last keyframes))
+                  :peak peak})))
+        (or (typed-channels snippet) [])))
 
 (defn explicit-auto-viseme-jaw [snippet]
   (when (contains? snippet :autoVisemeJaw)
@@ -177,9 +221,20 @@
         (call-js runtime "playSnippet" name curves-js clip-options)))))
 
 (defn play-runtime-snippet! [runtime snippet options]
-  (or (when (typed-channels snippet)
-        (play-runtime-typed-snippet! runtime snippet options))
-      (play-runtime-legacy-snippet! runtime snippet options)))
+  ;; Typed channels are Polymer's canonical animation contract. They say
+  ;; "viseme 7", "bone JAW rz", or "bone HEAD rx" directly, so Embody does not have to
+  ;; guess whether numeric curve keys are viseme slots or AU ids. The legacy
+  ;; curve fallback is kept only for older runtimes that do not expose typed
+  ;; playback yet; once a runtime accepts typed snippets, a failed typed build
+  ;; should surface as an error instead of falling back to a route that can play
+  ;; lip ids as unrelated facial AUs.
+  (if (typed-channels snippet)
+    (if (or (js-method runtime "playTypedSnippet")
+            (js-method runtime "buildTypedClip"))
+      (play-runtime-typed-snippet! runtime snippet options)
+      (when (seq (:curves snippet))
+        (play-runtime-legacy-snippet! runtime snippet options)))
+    (play-runtime-legacy-snippet! runtime snippet options)))
 
 (defn create-animation-agency [config]
   (let [runtime (config->runtime (or config #js {}))
@@ -269,6 +324,14 @@
                     snippet (assoc (:snippet payload) :name (state/snippet-name (:snippet payload) fallback-name))
                     options (assoc (or (:options payload) {}) :sourceAgency source-agency)
                     name (:name snippet)]
+                (debug-log! "[Polymer Animation CLJS] scheduleSnippet"
+                            {:name name
+                             :sourceAgency source-agency
+                             :typed (boolean (typed-channels snippet))
+                             :channelCount (count (typed-channels snippet))
+                             :channels (typed-channel-summary snippet)
+                             :curveKeys (vec (keys (or (:curves snippet) {})))
+                             :options options})
                 (swap! state-atom state/record-schedule snippet options source-agency requested-at)
                 (emit-event {:type "animationSnippetScheduled"
                              :agency "animation"
