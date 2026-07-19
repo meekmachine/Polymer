@@ -2,10 +2,10 @@
   (:require [polymer.animation.service :as animation-service]
             [polymer.eye-head.agency :as eye-head-agency]))
 
-;; This namespace preserves the JavaScript service API LoomLarge already uses,
-;; but the work now enters Polymer's Eye/Head agency first. The service owns the
-;; browser/engine-facing boundary: it routes accepted Eye/Head animation requests
-;; into Polymer Animation or into the animation manager Polymer exposed earlier.
+;; Compatibility adapter for the JavaScript service API LoomLarge already uses.
+;; This is not the Eye/Head agency implementation. Movement work enters
+;; Polymer's Eye/Head agency first; this adapter only preserves the historical
+;; API while routing accepted animation requests into Polymer Animation.
 
 (def EYE_AUS
   #js {:BOTH_LOOK_LEFT 61

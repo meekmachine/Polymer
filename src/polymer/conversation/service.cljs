@@ -1,10 +1,10 @@
 (ns polymer.conversation.service
   (:require [polymer.conversation.agency :as conversation-agency]))
 
-;; ConversationService keeps the old generator-based JavaScript API, but it is
-;; owned by Polymer. It coordinates existing TTS and Transcription service
-;; objects, publishes conversation facts into the CLJS agency, and keeps the
-;; host app out of cross-agency routing.
+;; Compatibility adapter for LoomLarge's old generator-based JavaScript API.
+;; This is not the Conversation agency implementation. It exists so current
+;; callers can keep their historical service shape while the agency owns
+;; conversation state, planning, scheduling, and stream facts.
 
 (defn data-map [value]
   (cond

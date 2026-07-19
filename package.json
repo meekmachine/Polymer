@@ -16,6 +16,7 @@
     "build": "shadow-cljs release npm worker",
     "test": "shadow-cljs compile test && node dist/test.js && shadow-cljs release worker && node test/worker_smoke.cjs",
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
+    "check:architecture": "node scripts/check-agency-architecture.mjs",
     "check:dist": "pnpm build && git diff --exit-code -- dist",
     "clean": "rm -rf .shadow-cljs dist/test.js",
     "prepublishOnly": "pnpm test && pnpm build && git diff --exit-code -- dist"

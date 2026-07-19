@@ -1,9 +1,10 @@
 (ns polymer.hair.service
   (:require [polymer.hair.agency :as hair-agency]))
 
-;; HairService is the JS class-style API LoomLarge's Hair UI already expects.
-;; Internally it dispatches to Polymer Hair first; accepted runtime requests are
-;; then applied through the Embody engine methods that already own scene changes.
+;; Compatibility adapter for the JS class-style API LoomLarge's Hair UI already
+;; expects. This is not the Hair agency implementation. It dispatches to Polymer
+;; Hair first; accepted runtime requests are then applied through the Embody
+;; engine boundary that already owns scene changes.
 
 (def HAIR_COLOR_PRESETS
   #js {:natural_black #js {:name "Natural Black" :baseColor "#1a1a1a" :emissive "#000000" :emissiveIntensity 0}

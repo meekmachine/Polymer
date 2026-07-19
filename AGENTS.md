@@ -16,6 +16,9 @@ scheduler responsibilities, stream routing, and side-effect placement.
 - Every agency should have the standard shape: state, local GOAP/planner,
   scheduler, incoming/outgoing streams, domain transforms, and effectors where
   needed.
+- Compatibility service APIs are not agencies. Keep them thin, explicitly
+  mark them as compatibility adapters, and route behavior through the owning
+  agency rather than adding parallel state, planning, scheduling, or effectors.
 - Agencies collaborate by stream messages. Messages may be facts, goals,
   requests, constraints, priorities, status, or diagnostics.
 - Do not add a public generic side-effect stream as the architecture. A request
@@ -55,3 +58,4 @@ scheduler responsibilities, stream routing, and side-effect placement.
   side-effect boundary before implementing.
 - Include tests that prove stream routing, planner decisions, scheduler
   behavior, and side-effect boundaries.
+- Run `pnpm check:architecture` when adding or changing agency exports.
