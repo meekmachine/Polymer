@@ -1,4 +1,118 @@
-import type { Embody } from '@lovelace_lol/embody';
+import type { Embody, EmbodyRuntime } from '@lovelace_lol/embody';
+
+export {
+  Embody,
+  BLENDING_MODES,
+  THREE_BLENDING_MODES,
+  collectMorphMeshes,
+  analyzeModel,
+  extractModelData,
+  getPreset,
+  validateMappings,
+  extendCharacterConfigWithPreset,
+  extractProfileOverrides,
+  mergeCharacterRegionsByName,
+  applyAUBoneBindingUpdate,
+  applyBilateralAxisBindingUpdate,
+  applyBoneAxisBindingUpdate,
+  buildBoneAuOptions,
+  classifyAuAsJointControl,
+  createBilateralBoneAxisAu,
+  createBoneAxisAu,
+  DEFAULT_AXIS_TO_CHANNEL,
+  DEFAULT_BONE_MAX_DEGREES,
+  ensureBilateralBoneNodeKeys,
+  ensureBoneNodeKey,
+  findNodeKeyForBone,
+  formatAxisDirectionLabel,
+  formatAxisLabel,
+  getAUBoneBindingState,
+  getAxisFromChannel,
+  getBilateralAxisBindingState,
+  getBoneAxisBindingState,
+  inferChiralBoneNamePair,
+  inferEyeControlFamily,
+  inferEyeControlScope,
+  isJointControlAuInfo,
+  isMaxDegreesOnlyAxisBindingUpdate,
+  JOINT_CONTROL_SECTION,
+  resolveBoneAxisChannel,
+  resolveBoneNameForNodeKey,
+  resolveContinuumDisplayLabel,
+  stripConfiguredBoneAffixes,
+  computeCameraRelativeGazeOffset,
+  detectAnnotationLaterality,
+  fuzzyNameMatch,
+  getDefaultAnnotationLaterality,
+  getMeshNamesForAUProfile,
+  getModelLocalOrbitAngle,
+  getSemanticHorizontalSign,
+  getSemanticHorizontalSignForSide,
+  getWorldDirectionForCameraAngle,
+  hasLeftRightMorphs,
+  isMixedAU,
+  passesMarkerCameraAngleGate,
+  resolveBoneNames,
+  resolveFaceCenter,
+  resolveRegionCameraAngle,
+  resolveRegionVisibilityCameraAngle,
+  toWorldDirection,
+  CC4_BONES,
+  VISEME_KEYS,
+} from '@lovelace_lol/embody';
+
+export type {
+  AUBoneBindingState,
+  AUInfo,
+  AnimationClipInfo,
+  AnimationInfo,
+  AnnotationLaterality,
+  BilateralAxisBindingState,
+  BilateralAxisDirectionScaleState,
+  BilateralAxisScopeBindingState,
+  BilateralBoneAxisScope,
+  BoneAxisBindingState,
+  BoneAxisBindingUpdate,
+  BoneAxisDirection,
+  BoneAxisDirectionScale,
+  BoneAxisKey,
+  BoneBinding,
+  BoneControlFamily,
+  BoneControlScope,
+  BoneInfo,
+  CameraRelativeGazeOffset,
+  CameraRelativeGazeOptions,
+  CharacterConfig,
+  CharacterRegistry,
+  ChiralBoneNamePair,
+  CompositeRotation,
+  CreatedBoneAxisAu,
+  ExpandAnimation,
+  ExpandedRegionState,
+  FallbackConfig,
+  LineConfig,
+  LineCurve,
+  LineStyle,
+  Embody,
+  EmbodyRuntime,
+  MarkerGroup,
+  MarkerStyle,
+  MarkerStyleOverrides,
+  MeshInfo,
+  ModelAnalysisReport,
+  ModelData,
+  MorphTargetsBySide,
+  NamedDirection,
+  PresetType,
+  Profile,
+  Region,
+  RotationAxis,
+  RotationChannel,
+  TrackInfo,
+  TransitionHandle,
+  ValidationResult,
+  VisemeSlot,
+} from '@lovelace_lol/embody';
 
 export interface BlinkState {
   agency: 'blink';
@@ -269,7 +383,7 @@ export interface AnimationState {
 
 export interface AnimationAgencyConfig {
   runtime?: PolymerAnimationRuntime;
-  engine?: Embody;
+  engine?: Embody | EmbodyRuntime;
   runtimeConfig?: Record<string, unknown>;
 }
 
@@ -585,6 +699,224 @@ export type ProsodicDispatch =
     }
   | { type: 'blinkFast'; sourceAgency?: string; plan?: Record<string, unknown> }
   | { type: 'stop'; reason?: string }
+  | { type: 'reset' };
+
+export interface ConversationConfig {
+  autoRespond?: boolean;
+  maxHistory?: number;
+  responseSource?: string;
+  ttsAgency?: string;
+  interruptionMode?: string;
+}
+
+export interface ConversationHistoryEntry {
+  role: 'user' | 'agent' | string;
+  text: string;
+  source?: string;
+  at?: number;
+  turnId?: string | null;
+}
+
+export interface ConversationState {
+  agency: 'conversation';
+  status: string;
+  started: boolean;
+  turnId: string | null;
+  history: ConversationHistoryEntry[];
+  context: Record<string, unknown>;
+  pendingResponse: Record<string, unknown> | null;
+  lastUserText: string | null;
+  lastAgentText: string | null;
+  lastEvent: Record<string, unknown> | null;
+  interrupted: boolean;
+  startedCount: number;
+  stoppedCount: number;
+  userUtteranceCount: number;
+  agentUtteranceCount: number;
+  responseRequestCount: number;
+  ttsRequestCount: number;
+  cancelCount: number;
+  config: Required<ConversationConfig>;
+}
+
+export type ConversationDispatch =
+  | { type: 'configure'; config: ConversationConfig }
+  | { type: 'start' }
+  | { type: 'stop'; reason?: string }
+  | { type: 'reset' }
+  | { type: 'cancel' | 'interrupt'; reason?: string }
+  | { type: 'transcript.final' | 'transcriptFinal' | 'userUtterance'; text?: string; transcript?: string; utterance?: string; responseText?: string; agentText?: string; source?: string }
+  | { type: 'agentUtterance' | 'responseReady'; text?: string; utterance?: string; responseText?: string; agentText?: string; source?: string }
+  | { type: 'tts.status'; status: string };
+
+export interface TranscriptionConfig {
+  provider?: string;
+  lang?: string;
+  continuous?: boolean;
+  interimResults?: boolean;
+  maxAlternatives?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  minConfidence?: number;
+  agentFilteringEnabled?: boolean;
+  interruptDetectionEnabled?: boolean;
+}
+
+export interface TranscriptionState {
+  agency: 'transcription';
+  status: string;
+  active: boolean;
+  sessionId: string | null;
+  sequence: number;
+  currentTranscript: string | null;
+  isFinal: boolean;
+  lastPartial: Record<string, unknown> | null;
+  lastFinal: Record<string, unknown> | null;
+  lastError: string | null;
+  lastEvent: Record<string, unknown> | null;
+  retryCount: number;
+  startedCount: number;
+  stoppedCount: number;
+  partialCount: number;
+  finalCount: number;
+  errorCount: number;
+  config: Required<TranscriptionConfig>;
+}
+
+export type TranscriptionDispatch =
+  | { type: 'configure'; config: TranscriptionConfig }
+  | { type: 'start' }
+  | { type: 'stop' | 'cancel'; reason?: string }
+  | { type: 'reset' }
+  | { type: 'providerPartial' | 'partialTranscript' | 'providerFinal' | 'finalTranscript'; text?: string; transcript?: string; confidence?: number; source?: string }
+  | { type: 'providerError'; message?: string; error?: string };
+
+export interface HairColorConfig {
+  name?: string;
+  baseColor?: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+}
+
+export interface HairPhysicsConfig {
+  enabled?: boolean;
+  stiffness?: number;
+  damping?: number;
+  inertia?: number;
+  gravity?: number;
+  responseScale?: number;
+  idleSwayAmount?: number;
+  idleSwaySpeed?: number;
+  windStrength?: number;
+  windDirectionX?: number;
+  windDirectionZ?: number;
+  windTurbulence?: number;
+  windFrequency?: number;
+  idleClipDurationMs?: number;
+  impulseClipDurationMs?: number;
+  coalesceMs?: number;
+}
+
+export interface HairObjectRef {
+  name: string;
+  isEyebrow?: boolean;
+  isMesh?: boolean;
+}
+
+export interface HairConfig {
+  physics?: HairPhysicsConfig;
+  hairColor?: HairColorConfig;
+  eyebrowColor?: HairColorConfig;
+  showOutline?: boolean;
+  outlineColor?: string;
+  outlineOpacity?: number;
+  objects?: HairObjectRef[];
+  parts?: Record<string, unknown>;
+}
+
+export interface HairState {
+  agency: 'hair';
+  status: string;
+  hairColor: Required<HairColorConfig>;
+  eyebrowColor: Required<HairColorConfig>;
+  showOutline: boolean;
+  outlineColor: string;
+  outlineOpacity: number;
+  objects: HairObjectRef[];
+  parts: Record<string, unknown>;
+  physics: Required<HairPhysicsConfig>;
+  lastMotion: Record<string, unknown> | null;
+  lastRuntimeRequest: Record<string, unknown> | null;
+  lastEvent: Record<string, unknown> | null;
+  motionCount: number;
+  runtimeRequestCount: number;
+  resetCount: number;
+  config: Required<Omit<HairConfig, 'physics' | 'hairColor' | 'eyebrowColor' | 'objects'>> & {
+    physics: Required<HairPhysicsConfig>;
+    hairColor: Required<HairColorConfig>;
+    eyebrowColor: Required<HairColorConfig>;
+    objects: HairObjectRef[];
+  };
+}
+
+export type HairDispatch =
+  | { type: 'configure'; config: HairConfig }
+  | { type: 'registerObjects'; objects: HairObjectRef[] }
+  | { type: 'motionFact'; velocity?: GazeTarget; delta?: GazeTarget; x?: number; y?: number; z?: number }
+  | { type: 'reset' };
+
+export interface CameraContextConfig {
+  coalesceMs?: number;
+  staleAfterMs?: number;
+  epsilon?: number;
+  yawWeight?: number;
+  pitchWeight?: number;
+}
+
+export interface PolymerVector3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface PolymerQuaternion {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface CameraContextState {
+  agency: 'cameraContext';
+  status: string;
+  cameraPosition: PolymerVector3 | null;
+  targetPosition: PolymerVector3 | null;
+  modelQuaternion: PolymerQuaternion;
+  relativeOffset: Required<GazeTarget>;
+  lastUpdatedAt: number | null;
+  lastPublishedAt: number | null;
+  lastFact: Record<string, unknown> | null;
+  lastPlan: Record<string, unknown> | null;
+  lastInvalidation: Record<string, unknown> | null;
+  stale: boolean;
+  invalidated: boolean;
+  updateCount: number;
+  publishedCount: number;
+  config: Required<CameraContextConfig>;
+}
+
+export type CameraContextDispatch =
+  | { type: 'configure'; config: CameraContextConfig }
+  | {
+      type: 'updateCamera';
+      facts?: Record<string, unknown>;
+      cameraPosition?: PolymerVector3;
+      targetPosition?: PolymerVector3;
+      modelQuaternion?: PolymerQuaternion;
+      source?: string;
+    }
+  | { type: 'publishCameraFacts' }
+  | { type: 'invalidateStale'; reason?: string }
   | { type: 'reset' };
 
 export type LipSyncSchedulerQueueEntry =
@@ -1238,7 +1570,24 @@ export type PolymerDomainEvent =
       scheduledAt: number;
     }
   | { type: 'prosodicStopped'; agency: 'prosodic'; reason: string; stoppedAt: number }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'gaze' | 'eyeHeadTracking' | 'lipSync' | 'tts' | 'gesture' | 'prosodic' | 'conversation' | 'transcription' | 'hair' | 'cameraContext' }
+  | { type: string; agency: 'conversation' | 'transcription' | 'hair' | 'cameraContext'; [key: string]: unknown }
+  | {
+      type: 'ready';
+      agency:
+        | 'character'
+        | 'blink'
+        | 'animation'
+        | 'gaze'
+        | 'eyeHeadTracking'
+        | 'lipSync'
+        | 'tts'
+        | 'gesture'
+        | 'prosodic'
+        | 'conversation'
+        | 'transcription'
+        | 'hair'
+        | 'cameraContext';
+    }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -1544,6 +1893,10 @@ export interface CharacterAgencySnapshot {
   tts: TTSState;
   lipSync: LipSyncState;
   prosodic: ProsodicState;
+  conversation: ConversationState;
+  transcription: TranscriptionState;
+  hair: HairState;
+  cameraContext: CameraContextState;
   animation: AnimationState;
 }
 
@@ -1559,6 +1912,10 @@ export type CharacterAgencyDispatch =
   | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'lipSync'; command: LipSyncDispatch }
   | { agency: 'prosodic'; command: ProsodicDispatch }
+  | { agency: 'conversation'; command: ConversationDispatch }
+  | { agency: 'transcription'; command: TranscriptionDispatch }
+  | { agency: 'hair'; command: HairDispatch }
+  | { agency: 'cameraContext'; command: CameraContextDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
@@ -1579,6 +1936,10 @@ export interface CharacterAgencies {
   agency(name: 'tts'): TTSAgency;
   agency(name: 'lipSync'): LipSyncAgency;
   agency(name: 'prosodic'): ProsodicAgency;
+  agency(name: 'conversation'): ConversationAgency;
+  agency(name: 'transcription'): TranscriptionAgency;
+  agency(name: 'hair'): HairAgency;
+  agency(name: 'cameraContext'): CameraContextAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
@@ -1616,5 +1977,9 @@ export function createCharacterAgencies(config?: {
   tts?: TTSConfig;
   lipSync?: LipSyncConfig;
   prosodic?: ProsodicConfig;
+  conversation?: ConversationConfig;
+  transcription?: TranscriptionConfig;
+  hair?: HairConfig;
+  cameraContext?: CameraContextConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;
