@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@lovelace_lol/embody':
-        specifier: git+https://github.com/meekmachine/embody.git#cac210fb7bf07db481fa4dc29176792f038bbed6
-        version: https://codeload.github.com/meekmachine/embody/tar.gz/cac210fb7bf07db481fa4dc29176792f038bbed6(three@0.184.0)
+        specifier: git+https://github.com/meekmachine/embody.git#918fcd94fd844f5adcedcb1881a32972ba286b92
+        version: https://codeload.github.com/meekmachine/embody/tar.gz/918fcd94fd844f5adcedcb1881a32972ba286b92(three@0.184.0)
     devDependencies:
       shadow-cljs:
         specifier: ^2.28.23
@@ -18,8 +18,8 @@ importers:
 
 packages:
 
-  '@lovelace_lol/embody@https://codeload.github.com/meekmachine/embody/tar.gz/cac210fb7bf07db481fa4dc29176792f038bbed6':
-    resolution: {tarball: https://codeload.github.com/meekmachine/embody/tar.gz/cac210fb7bf07db481fa4dc29176792f038bbed6}
+  '@lovelace_lol/embody@https://codeload.github.com/meekmachine/embody/tar.gz/918fcd94fd844f5adcedcb1881a32972ba286b92':
+    resolution: {tarball: https://codeload.github.com/meekmachine/embody/tar.gz/918fcd94fd844f5adcedcb1881a32972ba286b92}
     version: 0.0.0
     peerDependencies:
       three: '>=0.150.0'
@@ -449,7 +449,7 @@ packages:
 
 snapshots:
 
-  '@lovelace_lol/embody@https://codeload.github.com/meekmachine/embody/tar.gz/cac210fb7bf07db481fa4dc29176792f038bbed6(three@0.184.0)':
+  '@lovelace_lol/embody@https://codeload.github.com/meekmachine/embody/tar.gz/918fcd94fd844f5adcedcb1881a32972ba286b92(three@0.184.0)':
     dependencies:
       three: 0.184.0
 
