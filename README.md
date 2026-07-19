@@ -52,6 +52,6 @@ Polymer Git-SHA consumers should import checked-in JavaScript artifacts from
 application install.
 
 The package intentionally has no `prepare`, `install`, or `postinstall` build
-lifecycle. Polymer CI runs the CLJS build, verifies the checked-in `dist`
-artifacts are current, and `prepublishOnly` repeats the build/test check before
-an npm publish.
+lifecycle. Polymer CI runs the CLJS build, verifies that `dist` exposes the
+browser ESM API that Git-SHA consumers import, and `prepublishOnly` repeats the
+build/test/API check before an npm publish.

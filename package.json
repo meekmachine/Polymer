@@ -29,9 +29,9 @@
     "test": "shadow-cljs compile test && node dist/test.cjs && shadow-cljs release worker && node test/worker_smoke.cjs",
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
     "check:architecture": "node scripts/check-agency-architecture.mjs",
-    "check:dist": "pnpm build && git diff --exit-code -- dist",
+    "check:dist": "node scripts/check-built-dist.mjs",
     "clean": "rm -rf .shadow-cljs dist/test.js dist/test.cjs",
-    "prepublishOnly": "pnpm test && pnpm build && git diff --exit-code -- dist"
+    "prepublishOnly": "pnpm test && pnpm build && pnpm check:dist"
   },
   "dependencies": {
     "@lovelace_lol/embody": "git+https://github.com/meekmachine/embody.git#5441990775d07bef50f38547d41c0349e0fda3f1"
