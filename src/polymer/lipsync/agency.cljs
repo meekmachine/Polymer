@@ -425,10 +425,57 @@
                              :count (count (state/normalize-word-timings timings))
                              :updatedAt updated-at})))
 
+            (run-action! [action payload]
+              ;; `goap/plan-command` decides which agency operation is allowed
+              ;; for a command. Dispatch only echoes the input and reports the
+              ;; plan; accepted actions run here so the command router does not
+              ;; grow another copy of LipSync's state/scheduler policy.
+              (case (:op action)
+                "configure"
+                (do
+                  (swap! state-atom state/configure (:config payload))
+                  (emit-event {:type "lipSyncConfigChanged"
+                               :agency "lipSync"
+                               :state @state-atom}))
+
+                "start-text"
+                (start-text! payload)
+
+                "start-timeline"
+                (start-timeline! (:timeline payload))
+
+                "process-provider-visemes"
+                (process-azure! payload)
+
+                "record-word-boundary"
+                (handle-word-boundary! payload)
+
+                "align-audio-start"
+                (handle-audio-started! payload)
+
+                "align-audio-time"
+                (handle-audio-time! payload)
+
+                "update-word-timings"
+                (update-word-timings! payload)
+
+                "stop"
+                (stop-local! (:reason action) (:remove? action))
+
+                "reset-state"
+                (do
+                  (reset! state-atom (state/config->state nil))
+                  (emit-event {:type "lipSyncConfigChanged"
+                               :agency "lipSync"
+                               :state @state-atom}))
+
+                (emit-event {:type "error"
+                             :agency "lipSync"
+                             :message (str "Unknown LipSync planner action: " (:op action))})))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
-                      type (:type payload)
                       plan (goap/plan-command payload {:speaking (:speaking @state-atom)})]
                   ;; Every command produces an input echo and a plan event before
                   ;; any mutation. That makes failed/ignored commands observable
@@ -443,49 +490,8 @@
                     (emit-event {:type "error"
                                  :agency "lipSync"
                                  :message (plan-failure-message plan)})
-                    (case type
-                      "configure"
-                      (do
-                        (swap! state-atom state/configure (:config payload))
-                        (emit-event {:type "lipSyncConfigChanged"
-                                     :agency "lipSync"
-                                     :state @state-atom}))
-
-                      "startText"
-                      (start-text! payload)
-
-                      "startTimeline"
-                      (start-timeline! (:timeline payload))
-
-                      "processAzureVisemes"
-                      (process-azure! payload)
-
-                      "wordBoundary"
-                      (handle-word-boundary! payload)
-
-                      "audioStarted"
-                      (handle-audio-started! payload)
-
-                      "audioTime"
-                      (handle-audio-time! payload)
-
-                      "updateWordTimings"
-                      (update-word-timings! payload)
-
-                      "stop"
-                      (stop-local! "requested" true)
-
-                      "reset"
-                      (do
-                        (stop-local! "reset" true)
-                        (reset! state-atom (state/config->state nil))
-                        (emit-event {:type "lipSyncConfigChanged"
-                                     :agency "lipSync"
-                                     :state @state-atom}))
-
-                      (emit-event {:type "error"
-                                   :agency "lipSync"
-                                   :message (str "Unknown LipSync command: " type)}))))))]
+                    (doseq [action (:actions plan)]
+                      (run-action! action payload))))))]
       (reset! agency-scheduler (scheduler/create-scheduler {:emit-event emit-event
                                                             :on-finished finish-local!}))
       #js {:dispatch dispatch!

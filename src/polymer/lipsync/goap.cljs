@@ -97,11 +97,36 @@
   [steps]
   (not= "fail" (:op (first steps))))
 
+(defn command-actions
+  "Return the small executable action list for a valid LipSync command.
+
+  The `command-steps` plan above is the semantic audit trail: what goal the
+  agency believes it is pursuing. These action maps are intentionally narrower:
+  they name the agency-local operation that may mutate state, schedule the
+  accepted snippet, or touch the active audio-alignment clock."
+  [goal]
+  (case (:type goal)
+    "configure" [{:op "configure"}]
+    "startText" [{:op "start-text"}]
+    "startTimeline" [{:op "start-timeline"}]
+    "processAzureVisemes" [{:op "process-provider-visemes"}]
+    "wordBoundary" [{:op "record-word-boundary"}]
+    "audioStarted" [{:op "align-audio-start"}]
+    "audioTime" [{:op "align-audio-time"}]
+    "updateWordTimings" [{:op "update-word-timings"}]
+    "stop" [{:op "stop" :reason "requested" :remove? true}]
+    "reset" [{:op "stop" :reason "reset" :remove? true}
+             {:op "reset-state"}]
+    []))
+
 (defn plan-command
   "Build the auditable LipSync plan for one incoming command."
   [command world]
   (let [goal (command-goal command world)
-        steps (command-steps goal)]
+        steps (command-steps goal)
+        ok? (plan-ok? steps)]
     {:goal goal
      :steps steps
-     :ok (plan-ok? steps)}))
+     :actions (when ok?
+                (command-actions goal))
+     :ok ok?}))

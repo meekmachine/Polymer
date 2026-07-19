@@ -4,6 +4,7 @@
             [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.articulation.tongue :as tongue]
             [polymer.lipsync.articulation.visemes :as visemes]
+            [polymer.lipsync.goap :as goap]
             [polymer.tts.azure :as azure]))
 
 (defn collect [target subscribe-fn]
@@ -118,6 +119,18 @@
        (fn [name]
          (swap! calls conj {:method "cleanupSnippet" :name name})
          true)})
+
+(deftest LipSync-goap-produces-executable-actions
+  (let [start-plan (goap/plan-command {:type "startText" :text "hello"} {:speaking false})
+        reset-plan (goap/plan-command {:type "reset"} {:speaking true})
+        invalid-plan (goap/plan-command {:type "startText" :text ""} {:speaking false})]
+    (is (:ok start-plan))
+    (is (= ["plan-text-visemes" "build-articulated-snippet" "schedule-animation"]
+           (map :op (:steps start-plan))))
+    (is (= ["start-text"] (map :op (:actions start-plan))))
+    (is (= ["stop" "reset-state"] (map :op (:actions reset-plan))))
+    (is (false? (:ok invalid-plan)))
+    (is (nil? (:actions invalid-plan)))))
 
 (deftest LipSync-start-text-emits-one-animation-request
   (let [agency (polymer/createLipSyncAgency nil)
