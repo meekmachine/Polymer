@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@lovelace_lol/loom3':
+      '@lovelace_lol/embody':
         specifier: git+https://github.com/meekmachine/embody.git#3cc2203a3ac0783410ffb89245c97a37ec4c1434
-        version: '@lovelace_lol/embody@https://codeload.github.com/meekmachine/embody/tar.gz/3cc2203a3ac0783410ffb89245c97a37ec4c1434(three@0.184.0)'
+        version: https://codeload.github.com/meekmachine/embody/tar.gz/3cc2203a3ac0783410ffb89245c97a37ec4c1434(three@0.184.0)
     devDependencies:
       shadow-cljs:
         specifier: ^2.28.23

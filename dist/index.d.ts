@@ -1,4 +1,4 @@
-import type { LoomLargeThree } from '@lovelace_lol/loom3';
+import type { Embody } from '@lovelace_lol/embody';
 
 export interface BlinkState {
   agency: 'blink';
@@ -74,7 +74,7 @@ export interface AnimationState {
 
 export interface AnimationAgencyConfig {
   runtime?: PolymerAnimationRuntime;
-  engine?: LoomLargeThree;
+  engine?: Embody;
   runtimeConfig?: Record<string, unknown>;
 }
 
