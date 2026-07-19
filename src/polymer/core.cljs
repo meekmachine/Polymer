@@ -2,6 +2,7 @@
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
             [polymer.character :as character]
+            [polymer.gaze.agency :as gaze]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]))
@@ -24,6 +25,12 @@
   in config when the agency should execute snippets."
   ([] (animation/create-animation-agency nil))
   ([config] (animation/create-animation-agency config)))
+
+(defn createGazeAgency
+  "Create the Gaze agency directly. Use createCharacterAgencies when Gaze
+  should participate in the per-character agency network."
+  ([] (gaze/create-gaze-agency nil))
+  ([config] (gaze/create-gaze-agency config)))
 
 (defn createLipSyncAgency
   "Create the LipSync agency directly. Use createCharacterAgencies when
