@@ -3,7 +3,7 @@
 ;; Animation state is the agency-local schedule ledger.
 ;;
 ;; The Animation agency owns this schedule state and directly talks to the
-;; Loom3/Embody animation runtime. Other agencies can inspect summary state and
+;; injected animation runtime. Other agencies can inspect summary state and
 ;; subscribe to events, but they do not reach through to runtime handles.
 
 (def default-state
@@ -12,6 +12,7 @@
    :scheduledCount 0
    :startedCount 0
    :seekCount 0
+   :updatedCount 0
    :removedCount 0
    :lastEvent nil})
 
@@ -48,6 +49,8 @@
    :autoPlay (boolean (:autoPlay options))
    :requestedAt requested-at
    :startedAt nil
+   :lastUpdateAt nil
+   :lastUpdateParams nil
    :removedAt nil
    :removeReason nil})
 
@@ -93,6 +96,17 @@
                          :sourceAgency source-agency
                          :offsetSec offset-sec
                          :at seeked-at})))
+
+(defn record-update [state name source-agency updated-at params]
+  (-> state
+      (assoc-in [:scheduled name :lastUpdateAt] updated-at)
+      (assoc-in [:scheduled name :lastUpdateParams] params)
+      (update :updatedCount inc)
+      (assoc :lastEvent {:type "animationSnippetUpdated"
+                         :name name
+                         :sourceAgency source-agency
+                         :params params
+                         :at updated-at})))
 
 (defn visible-state [state]
   (clj->js state))
