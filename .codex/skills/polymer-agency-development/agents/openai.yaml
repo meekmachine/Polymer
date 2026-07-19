@@ -1,0 +1,4 @@
+interface:
+  display_name: "Polymer Agency Development"
+  short_description: "Build and review Polymer CLJS agencies"
+  default_prompt: "Use $polymer-agency-development to work in the Polymer repository. Read AGENTS.md and docs/agency-architecture.md as needed, preserve the local Society-of-Mind agency boundaries, and validate with the narrowest relevant Polymer checks."

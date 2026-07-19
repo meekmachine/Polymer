@@ -8,6 +8,15 @@ Before changing agency code, read `docs/agency-architecture.md`. Treat that file
 as the source of truth for agency collaboration, local GOAP/planner behavior,
 scheduler responsibilities, stream routing, and side-effect placement.
 
+## Codex Skills
+
+- When available, use `$polymer-agency-development` for Polymer agency
+  implementation, review, porting, packaging, and LoomLarge integration work.
+- Use `$loom-architect-pr-review` when a Polymer change crosses into LoomLarge,
+  Loom3, package boundaries, dependency pins, or PR review.
+- Do not duplicate skill instructions here. `docs/agency-architecture.md`
+  remains the source of truth for Polymer architecture.
+
 ## Agency Architecture
 
 - Model Polymer as a Society of Mind agency system. Do not introduce a central
@@ -44,6 +53,10 @@ scheduler responsibilities, stream routing, and side-effect placement.
   transforms.
 - Use transducers only for pure map/filter/keep/mapcat/reduce style data
   transformations. Do not use them to hide side effects or control flow.
+- Do not add Effect, Most, RxJS, XState, or similar JavaScript runtime
+  frameworks to Polymer core. Model replacements with small ClojureScript
+  primitives: immutable state transitions, plain data messages, local planners,
+  local schedulers, and stream boundaries owned by Polymer.
 - Keep comments useful and concrete. Explain boundaries and non-obvious
   scheduler or planning decisions; do not comment every obvious line.
 
