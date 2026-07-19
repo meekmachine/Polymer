@@ -1617,13 +1617,21 @@ export interface AIExpressionInterpretationMetadata {
   emotion?: string;
   title?: string;
   description?: string;
+  explanation?: string;
+  notesByAu?: Record<string, string>;
+  summary?: string;
   phases?: Array<{ title: string; description: string }>;
   aus?: Record<string, number>;
-  notesByAu?: Record<string, string>;
+  characterDetailsUsed?: string[];
+  eyeNote?: string | null;
+  headNote?: string | null;
+  pacingNote?: string | null;
+  handoffNote?: string | null;
   [key: string]: unknown;
 }
 
 export interface AIExpressionSnippetMetadata {
+  description?: string;
   interpretation?: AIExpressionInterpretationMetadata;
   source?: string;
   prompt?: string;
@@ -1636,8 +1644,21 @@ export interface Snippet {
   viseme?: Array<{ key: string | number; t?: number; v?: number; time?: number; intensity?: number; inherit?: boolean }>;
   curves?: Record<string, CurvePoint[]>;
   channels?: PolymerSnippetChannel[];
+  isPlaying?: boolean;
   loop?: boolean;
   maxTime?: number;
+  duration?: number;
+  snippetCategory?: 'auSnippet' | 'visemeSnippet' | 'eyeHeadTracking' | 'combined' | 'default' | string;
+  snippetPriority?: number;
+  snippetPlaybackRate?: number;
+  snippetIntensityScale?: number;
+  snippetBlendMode?: 'replace' | 'additive';
+  snippetJawScale?: number;
+  autoVisemeJaw?: boolean;
+  snippetBalance?: number;
+  snippetBalanceMap?: Record<string, number>;
+  snippetEasing?: EasingType;
+  aiExpressionMetadata?: AIExpressionSnippetMetadata;
   [key: string]: unknown;
 }
 
@@ -1875,6 +1896,17 @@ export interface EyeHeadTrackingCallbacks {
   onError?: (error: Error) => void;
 }
 
+export interface EyeHeadTrackingMachineContext {
+  config: EyeHeadTrackingConfig;
+  mode: 'manual' | 'mouse' | 'webcam' | string;
+  target: GazeTarget;
+  lastApplied: GazeTarget;
+  status: {
+    eye: 'idle' | 'tracking' | 'lagging';
+    head: 'idle' | 'tracking' | 'lagging';
+  };
+}
+
 export interface EyeHeadTrackingService {
   start(): void;
   stop(): void;
@@ -1887,7 +1919,7 @@ export interface EyeHeadTrackingService {
   setHeadBlendWeight(value: number): void;
   updateConfig(config: Partial<EyeHeadTrackingConfig>): void;
   getState(): EyeHeadTrackingRuntimeState;
-  getMachineContext(): Record<string, unknown> | null;
+  getMachineContext(): EyeHeadTrackingMachineContext | null;
   getSnippets(): { eye: Map<string, unknown>; head: Map<string, unknown> };
   setMode(mode: 'manual' | 'mouse' | 'webcam' | string): void;
   getMode(): 'manual' | 'mouse' | 'webcam' | string;
