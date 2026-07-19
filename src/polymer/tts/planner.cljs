@@ -120,3 +120,57 @@
     {:goal goal
      :steps steps
      :ok (plan-ok? steps)}))
+
+(def active-statuses
+  #{"loading" "speaking"})
+
+(defn active-speech?
+  "Return true when the current state has provider work that must be stopped
+  before replacement/reset."
+  [tts-state]
+  (contains? active-statuses (:status tts-state)))
+
+(defn command-action [op extra]
+  (merge {:op op} extra))
+
+(defn plan-command
+  "Plan public TTS dispatch commands into explicit agency actions.
+
+  This is deliberately separate from provider planning above. `plan-speech` and
+  `plan-voice-load` decide whether a provider goal can run. `plan-command`
+  decides which local session/voice actions must happen before those provider
+  goals are attempted."
+  [tts-state payload]
+  (case (:type payload)
+    "configure"
+    [(command-action "cancel-voice-loads" {})
+     (command-action "configure" {:config (:config payload)})]
+
+    "loadVoices"
+    [(command-action "load-voices"
+                     {:engine (or (:engine payload)
+                                  (get-in tts-state [:config :engine]))})]
+
+    "speak"
+    (cond-> []
+      (active-speech? tts-state)
+      (conj (command-action "stop-active-session" {:reason "replaced"}))
+
+      true
+      (conj (command-action "speak" {:command payload})))
+
+    "stop"
+    [(command-action "advance-session" {})
+     (command-action "stop-session" {:reason "requested"})]
+
+    "reset"
+    (cond-> [(command-action "advance-session" {})
+             (command-action "cancel-voice-loads" {})]
+      (active-speech? tts-state)
+      (conj (command-action "stop-active-session" {:reason "reset"}))
+
+      true
+      (conj (command-action "reset" {})))
+
+    [(command-action "error"
+                     {:message (str "Unknown TTS command: " (:type payload))})]))
