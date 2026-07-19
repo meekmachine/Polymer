@@ -1,12 +1,16 @@
 (ns polymer.core
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
+            [polymer.camera-context.agency :as camera-context]
             [polymer.character :as character]
+            [polymer.conversation.agency :as conversation]
             [polymer.eye-head.agency :as eye-head]
             [polymer.gaze.agency :as gaze]
+            [polymer.hair.agency :as hair]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]
-            [polymer.prosodic.agency :as prosodic]))
+            [polymer.prosodic.agency :as prosodic]
+            [polymer.transcription.agency :as transcription]))
 
 ;; Public JavaScript entry points.
 ;;
@@ -55,6 +59,30 @@
   when speech and blink facts should route to prosody inside Polymer."
   ([] (prosodic/create-prosodic-agency nil))
   ([config] (prosodic/create-prosodic-agency config)))
+
+(defn createConversationAgency
+  "Create the Conversation agency directly. Use createCharacterAgencies when
+  transcription facts should route to Conversation and Conversation speech
+  requests should route to TTS inside Polymer."
+  ([] (conversation/create-conversation-agency nil))
+  ([config] (conversation/create-conversation-agency config)))
+
+(defn createTranscriptionAgency
+  "Create the Transcription agency directly. Use createCharacterAgencies when
+  final transcript facts should route to Conversation inside Polymer."
+  ([] (transcription/create-transcription-agency nil))
+  ([config] (transcription/create-transcription-agency config)))
+
+(defn createHairAgency
+  "Create the Hair agency directly."
+  ([] (hair/create-hair-agency nil))
+  ([config] (hair/create-hair-agency config)))
+
+(defn createCameraContextAgency
+  "Create the Camera Context agency directly. Use createCharacterAgencies when
+  camera-relative facts should route to Gaze inside Polymer."
+  ([] (camera-context/create-camera-context-agency nil))
+  ([config] (camera-context/create-camera-context-agency config)))
 
 (defn createCharacterAgencies
   "Create the per-character Polymer agency network."

@@ -1,11 +1,15 @@
 (ns polymer.character
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
+            [polymer.camera-context.agency :as camera-context]
+            [polymer.conversation.agency :as conversation]
             [polymer.eye-head.agency :as eye-head]
             [polymer.gaze.agency :as gaze]
+            [polymer.hair.agency :as hair]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
             [polymer.stream :as stream]
+            [polymer.transcription.agency :as transcription]
             [polymer.tts.agency :as tts]))
 
 ;; A character is a network of Polymer agencies.
@@ -31,6 +35,10 @@
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
+        conversation-agency (conversation/create-conversation-agency (when config (aget config "conversation")))
+        transcription-agency (transcription/create-transcription-agency (when config (aget config "transcription")))
+        hair-agency (hair/create-hair-agency (when config (aget config "hair")))
+        camera-context-agency (camera-context/create-camera-context-agency (when config (aget config "cameraContext")))
         unsubscribers (atom [])
         disposed? (atom false)]
     (letfn [(track! [unsubscribe]
@@ -72,6 +80,10 @@
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
                     "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
                     "prosodic" (.dispatch ^js prosodic-agency (clj->js (:command payload)))
+                    "conversation" (.dispatch ^js conversation-agency (clj->js (:command payload)))
+                    "transcription" (.dispatch ^js transcription-agency (clj->js (:command payload)))
+                    "hair" (.dispatch ^js hair-agency (clj->js (:command payload)))
+                    "cameraContext" (.dispatch ^js camera-context-agency (clj->js (:command payload)))
                     (emit-event {:type "error"
                                  :agency (or (:agency payload) "unknown")
                                  :message "Unknown Polymer agency"})))))
@@ -83,6 +95,10 @@
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
                         :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :prosodic (js->clj (.snapshot ^js prosodic-agency) :keywordize-keys true)
+                        :conversation (js->clj (.snapshot ^js conversation-agency) :keywordize-keys true)
+                        :transcription (js->clj (.snapshot ^js transcription-agency) :keywordize-keys true)
+                        :hair (js->clj (.snapshot ^js hair-agency) :keywordize-keys true)
+                        :cameraContext (js->clj (.snapshot ^js camera-context-agency) :keywordize-keys true)
                         :animation (js->clj (.snapshot ^js animation-agency) :keywordize-keys true)}))
 
             (route-blink-event! [event]
@@ -178,6 +194,39 @@
                 "animation.requestRemoveSnippet"
                 (remove-animation! (:agency event) (:name event))
 
+                nil))
+
+            (route-transcription-event! [event]
+              (case (:type event)
+                "transcription.final"
+                (.dispatch ^js conversation-agency
+                           (clj->js {:type "transcriptFinal"
+                                     :text (:text event)
+                                     :source "transcription"}))
+
+                nil))
+
+            (route-conversation-event! [event]
+              (case (:type event)
+                "tts.requestSpeak"
+                (.dispatch ^js tts-agency
+                           (clj->js (or (:command event)
+                                        {:type "speak"
+                                         :text (:text event)
+                                         :source "conversation"})))
+
+                "conversation.cancelRequested"
+                (.dispatch ^js tts-agency
+                           (clj->js {:type "stop"
+                                     :reason (:reason event)}))
+
+                nil))
+
+            (route-camera-context-event! [event]
+              (case (:type event)
+                "camera.fact"
+                (.dispatch ^js gaze-agency (clj->js event))
+
                 nil))]
       ;; Fan-in agency events to one character-level event stream for tests,
       ;; workers, and future non-React observers. LoomLarge does not need to
@@ -228,6 +277,31 @@
                                     (emit-event payload)))))
       (track! (.subscribeEffects ^js prosodic-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js conversation-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-conversation-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js conversation-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js transcription-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-transcription-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js transcription-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js hair-agency
+                                #(emit-event (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEffects ^js hair-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js camera-context-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-camera-context-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js camera-context-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
       #js {:dispatch dispatch!
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
@@ -242,6 +316,10 @@
                        "tts" tts-agency
                        "lipSync" lipsync-agency
                        "prosodic" prosodic-agency
+                       "conversation" conversation-agency
+                       "transcription" transcription-agency
+                       "hair" hair-agency
+                       "cameraContext" camera-context-agency
                        nil))
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
@@ -261,6 +339,10 @@
                         (.dispose ^js tts-agency)
                         (.dispose ^js lipsync-agency)
                         (.dispose ^js prosodic-agency)
+                        (.dispose ^js conversation-agency)
+                        (.dispose ^js transcription-agency)
+                        (.dispose ^js hair-agency)
+                        (.dispose ^js camera-context-agency)
                         (.dispose ^js animation-agency)
                         ((:dispose input-stream))
                         ((:dispose event-stream))
