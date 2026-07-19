@@ -1,5 +1,6 @@
 (ns polymer.animation-test
   (:require [cljs.test :refer [async deftest is]]
+            [polymer.animation.planner :as planner]
             [polymer.core :as polymer]))
 
 (defn collect [target subscribe-fn]
@@ -88,6 +89,49 @@
          (swap! calls conj {:method "engine.cleanupSnippet" :name name})
          true)})
 
+(defn make-persistent-runtime [calls]
+  #js {:playSnippet
+       (fn [name curves options]
+         (swap! calls conj {:method "playSnippet"
+                            :name name
+                            :curves (js->clj curves :keywordize-keys true)
+                            :options (js->clj options :keywordize-keys true)})
+         #js {:clipName name
+              :stop (fn [] (swap! calls conj {:method "stop" :name name}))})
+       :updateClipParams
+       (fn [name params]
+         (swap! calls conj {:method "updateClipParams"
+                            :name name
+                            :params (js->clj params :keywordize-keys true)})
+         true)
+       :cleanupSnippet
+       (fn [name]
+         (swap! calls conj {:method "cleanupSnippet" :name name})
+         true)})
+
+(deftest animation-planner-normalizes-command-data
+  (let [actions (planner/plan-command
+                 {}
+                 {:type "scheduleSnippet"
+                  :sourceAgency "blink"
+                  :snippet {:name ""
+                            :curves {"43" [{:time 0 :intensity 0}]}}
+                  :options {:autoPlay true}}
+                 1234)
+        action (first actions)]
+    (is (= :schedule (:op action)))
+    (is (= "blink" (:sourceAgency action)))
+    (is (= "polymer:animation:1234" (get-in action [:snippet :name])))
+    (is (= "blink" (get-in action [:options :sourceAgency]))))
+  (is (= :error
+         (:op (first (planner/plan-command {} {:type "scheduleSnippet"} 1)))))
+  (is (= :update
+         (:op (first (planner/plan-command {}
+                                            {:type "updateSnippet"
+                                             :name "clip"
+                                             :params {:weight 0.5}}
+                                            1))))))
+
 (deftest animation-agency-owns-schedule-and-calls-runtime
   (async done
          (let [calls (atom [])
@@ -122,6 +166,61 @@
                   (.dispose ^js agency)
                   (throw error))))
             130))))
+
+(deftest animation-scheduler-replaces-active-snippet-by-name
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-persistent-runtime calls)})
+        events (domain-events agency)
+        snippet #js {:name "replace:blink"
+                     :curves #js {"43" #js [#js {:time 0 :intensity 0}
+                                             #js {:time 0.05 :intensity 1}]}
+                     :loop true
+                     :snippetCategory "blink"}]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "blink"
+                               :snippet snippet
+                               :options #js {:autoPlay true}})
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "blink"
+                               :snippet snippet
+                               :options #js {:autoPlay true}})
+    (let [methods (map :method @calls)
+          removed (some #(when (= "animationSnippetRemoved" (:type %)) %)
+                        @(:events events))
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (= ["playSnippet" "stop" "cleanupSnippet" "playSnippet"] methods))
+      (is (= "replaced" (:reason removed)))
+      (is (contains? (:scheduled snapshot) :replace:blink))
+      (is (= 2 (:scheduledCount snapshot)))
+      (is (= 1 (:removedCount snapshot))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest animation-update-request-stays-inside-animation-runtime-boundary
+  (let [calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-persistent-runtime calls)})
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "test"
+                               :snippet #js {:name "update:clip"
+                                             :curves #js {"1" #js [#js {:time 0 :intensity 0}
+                                                                   #js {:time 0.1 :intensity 1}]}
+                                             :loop true}
+                               :options #js {:autoPlay true}})
+    (.dispatch ^js agency #js {:type "updateSnippet"
+                               :sourceAgency "test"
+                               :name "update:clip"
+                               :params #js {:weight 0.35 :playbackRate 1.5}})
+    (let [update-call (some #(when (= "updateClipParams" (:method %)) %) @calls)
+          update-event (some #(when (= "animationSnippetUpdated" (:type %)) %)
+                             @(:events events))
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (= {:weight 0.35 :playbackRate 1.5} (:params update-call)))
+      (is (= "update:clip" (:name update-event)))
+      (is (= {:weight 0.35 :playbackRate 1.5}
+             (get-in snapshot [:scheduled :update:clip :lastUpdateParams]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
 
 (deftest animation-routes-lipsync-snippets-through-typed-runtime-when-available
   (let [calls (atom [])

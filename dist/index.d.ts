@@ -61,13 +61,20 @@ export interface AnimationState {
   scheduledCount: number;
   startedCount: number;
   seekCount: number;
+  updatedCount: number;
   removedCount: number;
   lastEvent: null | {
-    type: 'animationSnippetScheduled' | 'animationSnippetStarted' | 'animationSnippetSeeked' | 'animationSnippetRemoved';
+    type:
+      | 'animationSnippetScheduled'
+      | 'animationSnippetStarted'
+      | 'animationSnippetSeeked'
+      | 'animationSnippetUpdated'
+      | 'animationSnippetRemoved';
     name: string;
     sourceAgency: string;
     reason?: string;
     offsetSec?: number;
+    params?: Record<string, unknown>;
     at: number;
   };
 }
@@ -86,6 +93,7 @@ export type AnimationDispatch =
       options?: { autoPlay?: boolean; sourceAgency?: string; [key: string]: unknown };
     }
   | { type: 'seekSnippet'; sourceAgency?: string; name: string; offsetSec: number }
+  | { type: 'updateSnippet'; sourceAgency?: string; name: string; params: Record<string, unknown> }
   | { type: 'removeSnippet'; sourceAgency?: string; name: string }
   | { type: 'clear'; sourceAgency?: string };
 
@@ -119,6 +127,8 @@ export interface PolymerAnimationHandle {
   stop?: () => unknown;
   setTime?: (offsetSec: number) => unknown;
   seek?: (offsetSec: number) => unknown;
+  updateParams?: (params: Record<string, unknown>) => unknown;
+  setParams?: (params: Record<string, unknown>) => unknown;
   finished?: Promise<unknown> | { then: (onFulfilled?: () => unknown, onRejected?: (error: unknown) => unknown) => unknown };
 }
 
@@ -484,6 +494,14 @@ export type PolymerDomainEvent =
       seekedAt: number;
     }
   | {
+      type: 'animationSnippetUpdated';
+      agency: 'animation';
+      sourceAgency: string;
+      name: string;
+      params: Record<string, unknown>;
+      updatedAt: number;
+    }
+  | {
       type: 'animationSnippetRemoved';
       agency: 'animation';
       sourceAgency: string;
@@ -604,6 +622,7 @@ export interface AnimationAgency {
   subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   scheduleSnippet(snippet: PolymerAnimationSnippet, options?: { autoPlay?: boolean; [key: string]: unknown }): void;
   seekSnippet(name: string, offsetSec: number): void;
+  updateSnippet(name: string, params: Record<string, unknown>): void;
   removeSnippet(name: string): void;
   dispose(): void;
 }
