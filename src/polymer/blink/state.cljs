@@ -41,8 +41,8 @@
 
 (defn sanitize-state [state]
   ;; Every public configuration path flows through this sanitizer. That gives
-  ;; future hosts one predictable state contract regardless of whether commands
-  ;; came from React, workers, tests, or another agency.
+  ;; future callers one predictable state contract regardless of whether
+  ;; commands came from workers, tests, or another agency.
   (-> state
       (update :enabled boolean)
       (update :frequency #(clamp 0 60 (number-or % (:frequency default-state))))
@@ -71,8 +71,9 @@
     (sanitize-state (merge state input))))
 
 (defn apply-command [state payload]
-  ;; Command handling returns a new state map. Timer resets and emitted effects
-  ;; are handled by the agency/scheduler, not by these pure state functions.
+  ;; Command handling returns a new state map. Delay cancellation and emitted
+  ;; stream messages are handled by the agency/scheduler, not by these pure
+  ;; state functions.
   (let [type (:type payload)]
     (case type
       "enable" (assoc state :enabled true)

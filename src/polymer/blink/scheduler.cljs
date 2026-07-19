@@ -6,7 +6,8 @@
 ;;
 ;; It still does not call animation engines directly. When a blink should play,
 ;; it emits animation intent. The Polymer character network routes that intent
-;; to Polymer Animation, and only Polymer Animation talks to Loom3/Embody.
+;; to Polymer Animation, and only Polymer Animation talks to the animation
+;; runtime.
 
 (defn clear-timeout! [timer-atom]
   (when-let [timer @timer-atom]
@@ -35,14 +36,14 @@
                              :signal "blink-fast"
                              :plan plan})))
 
-            (trigger! [reason options]
+            (trigger! [reason options random-value now-ms]
               (when-not @disposed?
-                (let [plan (planner/make-plan @state-atom reason options)
+                (let [plan (planner/make-plan @state-atom reason options random-value now-ms)
                       snippet-data (snippet/build-blink-snippet plan)]
                   (record-plan! plan)
-                  ;; Blink requests animation as data. The character-level
-                  ;; Polymer network routes it to Animation instead of letting
-                  ;; Blink or LoomLarge touch the animation runtime.
+                  ;; Blink requests animation as data. The Polymer agency
+                  ;; network routes it to Animation instead of letting Blink
+                  ;; touch the animation runtime.
                   (emit-event {:type "animation.requestScheduleSnippet"
                                :agency "blink"
                                :requestId (:name snippet-data)
@@ -62,12 +63,12 @@
                               (js/setTimeout
                                (fn []
                                  (reset! auto-timer nil)
-                                 (when-let [snippet-data (trigger! "auto" nil)]
+                                 (when-let [snippet-data (trigger! "auto" nil (js/Math.random) (.now js/Date))]
                                    (let [extra-ms (max 0 (- (snippet/snippet-duration-ms snippet-data)
                                                            (* 1000 (:duration @state-atom))))]
                                      (schedule-next-auto! extra-ms))))
                                delay-ms)))))))]
-      {:trigger (fn [options] (trigger! "manual" options))
+      {:trigger trigger!
        :refresh-auto (fn [] (schedule-next-auto! 0))
        :stop (fn [] (clear-timeout! auto-timer))
        :dispose (fn []

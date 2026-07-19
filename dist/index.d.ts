@@ -31,6 +31,7 @@ export type BlinkDispatch =
   | { type: 'enable' }
   | { type: 'disable' }
   | { type: 'triggerBlink'; options?: BlinkTriggerOptions }
+  | { type: 'requestBlink'; reason?: string; options?: BlinkTriggerOptions }
   | { type: 'setFrequency'; value: number }
   | { type: 'setDuration'; value: number }
   | { type: 'setIntensity'; value: number }

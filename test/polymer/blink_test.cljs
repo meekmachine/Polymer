@@ -1,5 +1,7 @@
 (ns polymer.blink-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [polymer.blink.planner :as planner]
+            [polymer.blink.state :as blink-state]
             [polymer.core :as polymer]))
 
 (defn collect [target subscribe-fn]
@@ -41,6 +43,20 @@
     (is (= 8 (:burstCount snapshot)))
     (is (= 0.5 (:burstGap snapshot)))
     (.dispose ^js agency)))
+
+(deftest blink-planner-is-deterministic
+  (let [state (assoc blink-state/default-state
+                     :enabled true
+                     :burstEnabled true
+                     :burstFrequency 0.25
+                     :burstCount 4)
+        burst-plan (planner/make-plan state "auto" nil 0.1 1234)
+        single-plan (planner/make-plan state "auto" nil 0.9 1234)
+        disable-actions (planner/plan-command state {:type "disable"} 0.5 1234)]
+    (is (= 4 (:blink-count burst-plan)))
+    (is (= 1 (:blink-count single-plan)))
+    (is (= "polymer:blink:1234" (:name burst-plan)))
+    (is (= [:apply-state :stop-auto] (mapv :op disable-actions)))))
 
 (deftest manual-blink-emits-animation-request-and-state
   (let [agency (polymer/createBlinkAgency nil)
@@ -124,6 +140,24 @@
             (fn []
               (try
                 (is (some #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            1150))))
+
+(deftest disabling-cancels-automatic-blink-work
+  (async done
+         (let [agency (polymer/createBlinkAgency #js {:frequency 60 :randomness 0})
+               events (domain-events agency)]
+           (.enable ^js agency)
+           (.disable ^js agency)
+           (js/setTimeout
+            (fn []
+              (try
+                (is (not-any? #(= "animation.requestScheduleSnippet" (:type %)) @(:events events)))
                 ((:unsubscribe events))
                 (.dispose ^js agency)
                 (done)
