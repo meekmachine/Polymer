@@ -26,4 +26,5 @@ jobs:
       - run: pnpm check:install-surface
       - run: pnpm build
       - run: pnpm test
+      - run: pnpm build
       - run: git diff --exit-code -- dist
