@@ -2,6 +2,7 @@
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
             [polymer.character :as character]
+            [polymer.eye-head.agency :as eye-head]
             [polymer.gaze.agency :as gaze]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]
@@ -31,6 +32,11 @@
   should participate in the per-character agency network."
   ([] (gaze/create-gaze-agency nil))
   ([config] (gaze/create-gaze-agency config)))
+
+(defn createEyeHeadTrackingAgency
+  "Create the Eye/Head Tracking agency directly."
+  ([] (eye-head/create-eye-head-tracking-agency nil))
+  ([config] (eye-head/create-eye-head-tracking-agency config)))
 
 (defn createLipSyncAgency
   "Create the LipSync agency directly. Use createCharacterAgencies when

@@ -47,6 +47,7 @@
       "createBlinkAgency" (create-system! id {:blink (:config payload)})
       "createAnimationAgency" (create-system! id {:animation (:config payload)})
       "createGazeAgency" (create-system! id {:gaze (:config payload)})
+      "createEyeHeadTrackingAgency" (create-system! id {:eyeHeadTracking (:config payload)})
       "createLipSyncAgency" (create-system! id {:lipSync (:config payload)})
       "createTTSAgency" (create-system! id {:tts (:config payload)})
       "createProsodicAgency" (create-system! id {:prosodic (:config payload)})

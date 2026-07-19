@@ -7,6 +7,7 @@
    :exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
              :createGazeAgency polymer.core/createGazeAgency
+             :createEyeHeadTrackingAgency polymer.core/createEyeHeadTrackingAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency
              :createTTSAgency polymer.core/createTTSAgency
              :createProsodicAgency polymer.core/createProsodicAgency
