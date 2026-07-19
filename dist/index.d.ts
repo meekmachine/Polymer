@@ -362,6 +362,44 @@ export type TTSDispatch =
   | { type: 'stop' }
   | { type: 'reset' };
 
+export interface ProsodicConfig {
+  enabled?: boolean;
+  intensity?: number;
+  priority?: number;
+  speechGestureEvery?: number;
+  blinkFastCooldownMs?: number;
+}
+
+export interface ProsodicState {
+  agency: 'prosodic';
+  speaking: boolean;
+  wordIndex: number;
+  currentWord: string | null;
+  activeSnippets: string[];
+  scheduledCount: number;
+  removedCount: number;
+  lastGesture: string | null;
+  lastBlinkFastCueAt: number;
+  config: Required<ProsodicConfig>;
+  lastEvent: null | Record<string, unknown>;
+}
+
+export type ProsodicDispatch =
+  | { type: 'configure'; config: ProsodicConfig }
+  | { type: 'speechStarted'; name?: string; sourceAgency?: string; engine?: string }
+  | { type: 'speechStopped'; reason?: string; sourceAgency?: string }
+  | {
+      type: 'wordBoundary';
+      word: string;
+      wordIndex?: number;
+      observedElapsedSec?: number;
+      hostElapsedSec?: number;
+      sourceAgency?: string;
+    }
+  | { type: 'blinkFast'; sourceAgency?: string; plan?: Record<string, unknown> }
+  | { type: 'stop'; reason?: string }
+  | { type: 'reset' };
+
 export type LipSyncSchedulerQueueEntry =
   | {
       type: 'scheduleAnimation';
@@ -394,6 +432,26 @@ export type LipSyncSchedulerQueueEntry =
   | {
       type: 'finishTimeline';
       agency: 'lipSync';
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    };
+
+export type ProsodicSchedulerQueueEntry =
+  | {
+      type: 'scheduleAnimation';
+      agency: 'prosodic';
+      requestId: string;
+      snippetName: string;
+      effectors: string[];
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'removeAnimation';
+      agency: 'prosodic';
+      requestId: string;
+      name: string;
       reason: string;
       queueIndex: number;
       queuedAt: number;
@@ -444,7 +502,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestScheduleSnippet';
-      agency: 'blink' | 'lipSync';
+      agency: 'blink' | 'lipSync' | 'prosodic';
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
@@ -454,7 +512,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestRemoveSnippet';
-      agency: 'lipSync';
+      agency: 'lipSync' | 'prosodic';
       requestId: string;
       name: string;
       reason: string;
@@ -569,7 +627,21 @@ export type PolymerDomainEvent =
       hostElapsedSec?: number;
     }
   | { type: 'lipSync.command'; agency: 'tts'; command: LipSyncDispatch }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' }
+  | { type: 'prosodicPlanCreated'; agency: 'prosodic'; plan: Record<string, unknown> }
+  | { type: 'prosodicConfigChanged'; agency: 'prosodic'; state: ProsodicState }
+  | { type: 'prosodicSpeechStarted'; agency: 'prosodic'; name?: string; startedAt: number }
+  | { type: 'prosodicWordBoundary'; agency: 'prosodic'; word?: string; wordIndex: number; observedAt: number }
+  | {
+      type: 'prosodicGestureScheduled';
+      agency: 'prosodic';
+      gesture: string;
+      name: string;
+      word?: string;
+      wordIndex?: number;
+      scheduledAt: number;
+    }
+  | { type: 'prosodicStopped'; agency: 'prosodic'; reason: string; stoppedAt: number }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' | 'prosodic' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -681,10 +753,36 @@ export interface TTSAgency {
   dispose(): void;
 }
 
+export interface ProsodicAgency {
+  input: PolymerInputStream<ProsodicDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: ProsodicDispatch): void;
+  snapshot(): ProsodicState;
+  schedulerQueue(): ProsodicSchedulerQueueEntry[];
+  subscribeInput(listener: (event: { type: 'command'; agency: 'prosodic'; command: ProsodicDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: ProsodicConfig): void;
+  speechStarted(name?: string): void;
+  wordBoundary(word: string, wordIndex?: number): void;
+  blinkFast(): void;
+  stop(): void;
+  reset(): void;
+  dispose(): void;
+}
+
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
   tts: TTSState;
   lipSync: LipSyncState;
+  prosodic: ProsodicState;
   animation: AnimationState;
 }
 
@@ -692,6 +790,7 @@ export type CharacterAgencyDispatch =
   | { agency: 'blink'; command: BlinkDispatch }
   | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'lipSync'; command: LipSyncDispatch }
+  | { agency: 'prosodic'; command: ProsodicDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
@@ -704,6 +803,7 @@ export interface CharacterAgencies {
   agency(name: 'blink'): BlinkAgency;
   agency(name: 'tts'): TTSAgency;
   agency(name: 'lipSync'): LipSyncAgency;
+  agency(name: 'prosodic'): ProsodicAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
@@ -721,9 +821,11 @@ export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
 export function createLipSyncAgency(config?: LipSyncConfig): LipSyncAgency;
 export function createTTSAgency(config?: TTSConfig): TTSAgency;
+export function createProsodicAgency(config?: ProsodicConfig): ProsodicAgency;
 export function createCharacterAgencies(config?: {
   blink?: BlinkAgencyConfig;
   tts?: TTSConfig;
   lipSync?: LipSyncConfig;
+  prosodic?: ProsodicConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;

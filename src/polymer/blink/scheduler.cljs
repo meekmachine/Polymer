@@ -28,9 +28,8 @@
                            :nextDelayMs next-delay-ms})
               (when (:fast? plan)
                 ;; Cross-agency signals also live on the event stream. The
-                ;; Polymer character network turns this signal into a small
-                ;; prosodic animation cue until a dedicated prosodic agency
-                ;; owns that behavior.
+                ;; Polymer character network routes this signal to the
+                ;; Prosodic agency, which decides how to express fast blinking.
                 (emit-event {:type "signal"
                              :agency "blink"
                              :signal "blink-fast"

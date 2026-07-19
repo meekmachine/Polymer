@@ -48,6 +48,7 @@
       "createAnimationAgency" (create-system! id {:animation (:config payload)})
       "createLipSyncAgency" (create-system! id {:lipSync (:config payload)})
       "createTTSAgency" (create-system! id {:tts (:config payload)})
+      "createProsodicAgency" (create-system! id {:prosodic (:config payload)})
       "dispatch" (dispatch! id (:message payload))
       "dispose" (dispose-system! id)
       (post! {:id id
