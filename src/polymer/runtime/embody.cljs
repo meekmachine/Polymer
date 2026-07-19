@@ -5,7 +5,10 @@
 ;; these helpers from Polymer, while Polymer remains free to change the concrete
 ;; Embody/Three.js implementation behind this boundary later.
 
-(def Embody (.-Embody embody))
+(def Embody (or (aget embody "Embody")
+                (aget embody "LoomLargeThree")
+                (aget embody "Loom3Three")
+                (aget embody "Loom3")))
 (def BLENDING_MODES (or (.-BLENDING_MODES embody)
                         (.-THREE_BLENDING_MODES embody)))
 (def THREE_BLENDING_MODES (.-THREE_BLENDING_MODES embody))
@@ -66,5 +69,6 @@
 (def resolveRegionVisibilityCameraAngle (.-resolveRegionVisibilityCameraAngle embody))
 (def toWorldDirection (.-toWorldDirection embody))
 
-(def CC4_BONES (.-CC4_BONES embody))
+(def CC4_BONES (or (aget embody "CC4_BONES")
+                   (aget embody "CC4_BONE_NODES")))
 (def VISEME_KEYS (.-VISEME_KEYS embody))

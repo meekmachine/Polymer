@@ -6,6 +6,35 @@
    :output-to "dist/index.js"
    :exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
+             :createAnimationService polymer.core/createAnimationService
+             :createEyeHeadTrackingService polymer.core/createEyeHeadTrackingService
+             :createTranscriptionService polymer.core/createTranscriptionService
+             :createConversationService polymer.core/createConversationService
+             :HairService polymer.core/HairService
+             :TranscriptionService polymer.core/TranscriptionService
+             :ConversationService polymer.core/ConversationService
+             :HAIR_COLOR_PRESETS polymer.core/HAIR_COLOR_PRESETS
+             :DEFAULT_HAIR_PHYSICS_CONFIG polymer.core/DEFAULT_HAIR_PHYSICS_CONFIG
+             :DEFAULT_HAIR_PHYSICS_ENABLED polymer.core/DEFAULT_HAIR_PHYSICS_ENABLED
+             :DEFAULT_EYE_HEAD_CONFIG polymer.core/DEFAULT_EYE_HEAD_CONFIG
+             :DEFAULT_ANIMATION_KEYS polymer.core/DEFAULT_ANIMATION_KEYS
+             :EYE_AUS polymer.core/EYE_AUS
+             :HEAD_AUS polymer.core/HEAD_AUS
+             :animationEventEmitter polymer.core/animationEventEmitter
+             :snippetList$ polymer.core/snippetList$
+             :snippetState$ polymer.core/snippetState$
+             :snippetTime$ polymer.core/snippetTime$
+             :globalPlaybackState$ polymer.core/globalPlaybackState$
+             :bakedClipList$ polymer.core/bakedClipList$
+             :playingBakedAnimations$ polymer.core/playingBakedAnimations$
+             :bakedAnimationProgress$ polymer.core/bakedAnimationProgress$
+             :bakedAnimationState$ polymer.core/bakedAnimationState$
+             :getBundledSnippetNames polymer.core/getBundledSnippetNames
+             :getStoredSnippetNames polymer.core/getStoredSnippetNames
+             :getAvailableSnippetNames polymer.core/getAvailableSnippetNames
+             :resolveSnippetEntry polymer.core/resolveSnippetEntry
+             :preloadAllSnippets polymer.core/preloadAllSnippets
+             :clearPreloadedSnippets polymer.core/clearPreloadedSnippets
              :createGazeAgency polymer.core/createGazeAgency
              :createEyeHeadTrackingAgency polymer.core/createEyeHeadTrackingAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency

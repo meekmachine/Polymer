@@ -1,23 +1,28 @@
 (ns polymer.core
   (:require [polymer.animation.agency :as animation]
+            [polymer.animation.service :as animation-service]
             [polymer.blink.agency :as blink]
             [polymer.camera-context.agency :as camera-context]
             [polymer.character :as character]
             [polymer.conversation.agency :as conversation]
+            [polymer.conversation.service :as conversation-service]
             [polymer.eye-head.agency :as eye-head]
+            [polymer.eye-head.service :as eye-head-service]
             [polymer.gaze.agency :as gaze]
             [polymer.hair.agency :as hair]
+            [polymer.hair.service :as hair-service]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
-            [polymer.transcription.agency :as transcription]))
+            [polymer.transcription.agency :as transcription]
+            [polymer.transcription.service :as transcription-service]))
 
 ;; Public JavaScript entry points.
 ;;
 ;; Polymer is authored in CLJS, but LoomLarge imports the compiled package from
 ;; JavaScript/TypeScript. The exports stay agency-oriented: LoomLarge can create
 ;; a character agency network, but Polymer owns the cross-agency routing and
-;; Animation owns the Loom3/Embody runtime calls.
+;; Animation owns the Embody runtime calls.
 
 (defn createBlinkAgency
   "Create the Blink agency directly. Use createCharacterAgencies when Blink
@@ -26,10 +31,90 @@
   ([config] (blink/create-blink-agency config)))
 
 (defn createAnimationAgency
-  "Create the Animation agency directly. Pass an Embody runtime or Loom3 engine
-  in config when the agency should execute snippets."
+  "Create the Animation agency directly. Pass an Embody runtime or engine in
+  config when the agency should execute snippets."
   ([] (animation/create-animation-agency nil))
   ([config] (animation/create-animation-agency config)))
+
+(defn createAnimationService
+  "Create the JS compatibility animation API backed by Polymer Animation.
+  LoomLarge uses this while it is still calling the historical animation manager
+  shape; snippets still enter Polymer's agency-local planner and scheduler."
+  [engine]
+  (animation-service/createAnimationService engine))
+
+(defn createEyeHeadTrackingService
+  "Create the JS compatibility Eye/Head Tracking API backed by Polymer
+  Eye/Head. Accepted movement requests route through Polymer Animation."
+  ([] (eye-head-service/createEyeHeadTrackingService nil nil))
+  ([config] (eye-head-service/createEyeHeadTrackingService config nil))
+  ([config callbacks] (eye-head-service/createEyeHeadTrackingService config callbacks)))
+
+(defn createTranscriptionService
+  "Create the JS compatibility transcription API backed by Polymer
+  Transcription. Browser SpeechRecognition is owned inside this package."
+  ([] (transcription-service/createTranscriptionService nil nil))
+  ([config] (transcription-service/createTranscriptionService config nil))
+  ([config callbacks] (transcription-service/createTranscriptionService config callbacks)))
+
+(defn createConversationService
+  "Create the JS compatibility conversation API backed by Polymer
+  Conversation."
+  ([tts transcription] (conversation-service/createConversationService tts transcription nil nil))
+  ([tts transcription config] (conversation-service/createConversationService tts transcription config nil))
+  ([tts transcription config callbacks] (conversation-service/createConversationService tts transcription config callbacks)))
+
+(defn HairService
+  ([] (hair-service/HairService nil))
+  ([engine] (hair-service/HairService engine)))
+
+(def TranscriptionService transcription-service/TranscriptionService)
+(def ConversationService conversation-service/ConversationService)
+(def HAIR_COLOR_PRESETS hair-service/HAIR_COLOR_PRESETS)
+(def DEFAULT_HAIR_PHYSICS_CONFIG hair-service/DEFAULT_HAIR_PHYSICS_CONFIG)
+(def DEFAULT_HAIR_PHYSICS_ENABLED hair-service/DEFAULT_HAIR_PHYSICS_ENABLED)
+(def DEFAULT_EYE_HEAD_CONFIG eye-head-service/DEFAULT_EYE_HEAD_CONFIG)
+(def DEFAULT_ANIMATION_KEYS eye-head-service/DEFAULT_ANIMATION_KEYS)
+(def EYE_AUS eye-head-service/EYE_AUS)
+(def HEAD_AUS eye-head-service/HEAD_AUS)
+
+(def animationEventEmitter animation-service/animationEventEmitter)
+(def snippetList$ animation-service/snippetList$)
+(def globalPlaybackState$ animation-service/globalPlaybackState$)
+(def bakedClipList$ animation-service/bakedClipList$)
+(def playingBakedAnimations$ animation-service/playingBakedAnimations$)
+(def bakedAnimationProgress$ animation-service/bakedAnimationProgress$)
+
+(defn snippetState$ [snippet-name]
+  (animation-service/snippetState$ snippet-name))
+
+(defn snippetTime$ [snippet-name]
+  (animation-service/snippetTime$ snippet-name))
+
+(defn bakedAnimationState$ [clip-name]
+  (animation-service/bakedAnimationState$ clip-name))
+
+(defn getBundledSnippetNames [list-key]
+  (animation-service/getBundledSnippetNames list-key))
+
+(defn getStoredSnippetNames
+  ([list-key] (animation-service/getStoredSnippetNames list-key))
+  ([list-key storage] (animation-service/getStoredSnippetNames list-key storage)))
+
+(defn getAvailableSnippetNames
+  ([list-key] (animation-service/getAvailableSnippetNames list-key))
+  ([list-key storage] (animation-service/getAvailableSnippetNames list-key storage)))
+
+(defn resolveSnippetEntry
+  ([list-key name] (animation-service/resolveSnippetEntry list-key name))
+  ([list-key name storage] (animation-service/resolveSnippetEntry list-key name storage)))
+
+(defn preloadAllSnippets []
+  (animation-service/preloadAllSnippets))
+
+(defn clearPreloadedSnippets
+  ([] (animation-service/clearPreloadedSnippets))
+  ([storage] (animation-service/clearPreloadedSnippets storage)))
 
 (defn createGazeAgency
   "Create the Gaze agency directly. Use createCharacterAgencies when Gaze
