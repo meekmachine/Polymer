@@ -1,6 +1,7 @@
 (ns polymer.character
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
+            [polymer.gaze.agency :as gaze]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
             [polymer.stream :as stream]
@@ -24,6 +25,7 @@
         emit-effect (:emit effect-stream)
         animation-agency (animation/create-animation-agency (when config (aget config "animation")))
         blink-agency (blink/create-blink-agency (when config (aget config "blink")))
+        gaze-agency (gaze/create-gaze-agency (when config (aget config "gaze")))
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
@@ -62,6 +64,7 @@
                                :message payload})
                   (case (:agency payload)
                     "blink" (.dispatch ^js blink-agency (clj->js (:command payload)))
+                    "gaze" (.dispatch ^js gaze-agency (clj->js (:command payload)))
                     "animation" (.dispatch ^js animation-agency (clj->js (:command payload)))
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
                     "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
@@ -72,6 +75,7 @@
 
             (snapshot! []
               (clj->js {:blink (js->clj (.snapshot ^js blink-agency) :keywordize-keys true)
+                        :gaze (js->clj (.snapshot ^js gaze-agency) :keywordize-keys true)
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
                         :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :prosodic (js->clj (.snapshot ^js prosodic-agency) :keywordize-keys true)
@@ -163,6 +167,10 @@
                                     (emit-event payload)))))
       (track! (.subscribeEffects ^js blink-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js gaze-agency
+                                #(emit-event (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEffects ^js gaze-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
       (track! (.subscribeEvents ^js tts-agency
                                 (fn [event]
                                   (let [payload (js->clj event :keywordize-keys true)]
@@ -193,6 +201,7 @@
                      (case name
                        "animation" animation-agency
                        "blink" blink-agency
+                       "gaze" gaze-agency
                        "tts" tts-agency
                        "lipSync" lipsync-agency
                        "prosodic" prosodic-agency
@@ -210,6 +219,7 @@
                           (unsubscribe))
                         (reset! unsubscribers [])
                         (.dispose ^js blink-agency)
+                        (.dispose ^js gaze-agency)
                         (.dispose ^js tts-agency)
                         (.dispose ^js lipsync-agency)
                         (.dispose ^js prosodic-agency)

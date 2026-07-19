@@ -6,6 +6,7 @@
    :output-to "dist/index.js"
    :exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
+             :createGazeAgency polymer.core/createGazeAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency
              :createTTSAgency polymer.core/createTTSAgency
              :createProsodicAgency polymer.core/createProsodicAgency
