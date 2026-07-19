@@ -18,6 +18,13 @@
 (def extendCharacterConfigWithPreset (.-extendCharacterConfigWithPreset embody))
 (def extractProfileOverrides (.-extractProfileOverrides embody))
 (def mergeCharacterRegionsByName (.-mergeCharacterRegionsByName embody))
+(def computeHumanoidSkeletonTemplateRestBounds (.-computeHumanoidSkeletonTemplateRestBounds embody))
+(def createValidationSkeletonFromHumanoidTemplate (.-createValidationSkeletonFromHumanoidTemplate embody))
+(def extractHumanoidSkeletonTemplateFromModel (.-extractHumanoidSkeletonTemplateFromModel embody))
+(def getHumanoidSkeletonTemplate (.-getHumanoidSkeletonTemplate embody))
+(def getHumanoidSkeletonTemplateBoneNames (.-getHumanoidSkeletonTemplateBoneNames embody))
+(def HUMANOID_SKELETON_TEMPLATES (.-HUMANOID_SKELETON_TEMPLATES embody))
+(def JONATHAN_HUMANOID_SKELETON_TEMPLATE (.-JONATHAN_HUMANOID_SKELETON_TEMPLATE embody))
 
 (def applyAUBoneBindingUpdate (.-applyAUBoneBindingUpdate embody))
 (def applyBilateralAxisBindingUpdate (.-applyBilateralAxisBindingUpdate embody))

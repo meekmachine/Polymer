@@ -27,6 +27,13 @@
              :extendCharacterConfigWithPreset polymer.runtime.embody/extendCharacterConfigWithPreset
              :extractProfileOverrides polymer.runtime.embody/extractProfileOverrides
              :mergeCharacterRegionsByName polymer.runtime.embody/mergeCharacterRegionsByName
+             :computeHumanoidSkeletonTemplateRestBounds polymer.runtime.embody/computeHumanoidSkeletonTemplateRestBounds
+             :createValidationSkeletonFromHumanoidTemplate polymer.runtime.embody/createValidationSkeletonFromHumanoidTemplate
+             :extractHumanoidSkeletonTemplateFromModel polymer.runtime.embody/extractHumanoidSkeletonTemplateFromModel
+             :getHumanoidSkeletonTemplate polymer.runtime.embody/getHumanoidSkeletonTemplate
+             :getHumanoidSkeletonTemplateBoneNames polymer.runtime.embody/getHumanoidSkeletonTemplateBoneNames
+             :HUMANOID_SKELETON_TEMPLATES polymer.runtime.embody/HUMANOID_SKELETON_TEMPLATES
+             :JONATHAN_HUMANOID_SKELETON_TEMPLATE polymer.runtime.embody/JONATHAN_HUMANOID_SKELETON_TEMPLATE
              :applyAUBoneBindingUpdate polymer.runtime.embody/applyAUBoneBindingUpdate
              :applyBilateralAxisBindingUpdate polymer.runtime.embody/applyBilateralAxisBindingUpdate
              :applyBoneAxisBindingUpdate polymer.runtime.embody/applyBoneAxisBindingUpdate
