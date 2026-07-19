@@ -4,14 +4,15 @@
   "description": "Pure ClojureScript character agencies for Character Loom.",
   "license": "UNLICENSED",
   "private": false,
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./dist/worker/agency-worker.js": "./dist/worker/agency-worker.js",
     "./worker/agency-worker.js": "./dist/worker/agency-worker.js",
@@ -24,12 +25,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -f dist/index.js dist/index.cjs dist/index.mjs && shadow-cljs release npm worker && node scripts/write-esm-wrapper.mjs",
-    "test": "shadow-cljs compile test && node dist/test.js && shadow-cljs release worker && node test/worker_smoke.cjs",
+    "build": "rm -f dist/index.js dist/index.cjs dist/index.mjs && shadow-cljs release npm worker",
+    "test": "shadow-cljs compile test && node dist/test.cjs && shadow-cljs release worker && node test/worker_smoke.cjs",
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
     "check:architecture": "node scripts/check-agency-architecture.mjs",
     "check:dist": "pnpm build && git diff --exit-code -- dist",
-    "clean": "rm -rf .shadow-cljs dist/test.js",
+    "clean": "rm -rf .shadow-cljs dist/test.js dist/test.cjs",
     "prepublishOnly": "pnpm test && pnpm build && git diff --exit-code -- dist"
   },
   "dependencies": {
