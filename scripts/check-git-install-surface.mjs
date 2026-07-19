@@ -43,8 +43,8 @@ if (!files.includes('dist')) {
 }
 
 const rootExport = packageJson.exports?.['.'];
-if (!rootExport || rootExport.import !== './dist/index.mjs' || rootExport.require !== './dist/index.cjs') {
-  errors.push('package.json "exports[.]" must expose dist/index.mjs for ESM imports and dist/index.cjs for CJS requires.');
+if (!rootExport || rootExport.import !== './dist/index.js') {
+  errors.push('package.json "exports[.]" must expose the CLJS-generated ESM artifact at dist/index.js.');
 }
 
 if (errors.length > 0) {

@@ -2,9 +2,11 @@
  :dependencies []
  :builds
  {:npm
-  {:target :node-library
-   :output-to "dist/index.cjs"
-   :exports {:createBlinkAgency polymer.core/createBlinkAgency
+  {:target :esm
+   :output-dir "dist"
+   :js-options {:js-provider :import}
+   :modules {:index
+             {:exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
              :createAnimationService polymer.core/createAnimationService
              :createEyeHeadTrackingService polymer.core/createEyeHeadTrackingService
@@ -102,7 +104,7 @@
              :resolveRegionVisibilityCameraAngle polymer.runtime.embody/resolveRegionVisibilityCameraAngle
              :toWorldDirection polymer.runtime.embody/toWorldDirection
              :CC4_BONES polymer.runtime.embody/CC4_BONES
-             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}
+             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}}}
 
   :worker
   {:target :browser
@@ -111,5 +113,5 @@
 
   :test
   {:target :node-test
-   :output-to "dist/test.js"
+   :output-to "dist/test.cjs"
    :ns-regexp "polymer\\..*-test$"}}}
