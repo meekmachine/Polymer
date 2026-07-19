@@ -172,9 +172,9 @@
     (.dispatch ^js agency #js {:type "stop"})
     (let [queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)
           event-types (map :type @(:events events))]
-      (is (= ["scheduleAnimation" "seekAnimation" "removeAnimation"]
+      (is (= ["startTimeline" "scheduleAnimation" "seekAnimation" "stopTimeline" "removeAnimation"]
              (map :type queue)))
-      (is (= [0 1 2] (map :queueIndex queue)))
+      (is (= [0 1 2 3 4] (map :queueIndex queue)))
       (is (= "voice:scheduler" (:snippetName (first queue))))
       (is (contains? (set (:effectors (first queue))) "lip"))
       (is (contains? (set (:effectors (first queue))) "jaw"))
@@ -182,6 +182,29 @@
       (is (some #{"animation.requestSeekSnippet"} event-types))
       (is (some #{"animation.requestRemoveSnippet"} event-types)))
     ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest LipSync-scheduler-owns-replacement-ordering
+  (let [agency (polymer/createLipSyncAgency nil)]
+    (.dispatch ^js agency #js {:type "startTimeline"
+                               :timeline #js {:name "voice:first"
+                                              :source "test"
+                                              :visemes #js [#js {:visemeId 1
+                                                                 :offsetMs 0
+                                                                 :durationMs 160}]}})
+    (.dispatch ^js agency #js {:type "startTimeline"
+                               :timeline #js {:name "voice:second"
+                                              :source "test"
+                                              :visemes #js [#js {:visemeId 2
+                                                                 :offsetMs 0
+                                                                 :durationMs 160}]}})
+    (let [queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)]
+      (is (= ["startTimeline" "scheduleAnimation" "removeAnimation" "startTimeline" "scheduleAnimation"]
+             (map :type queue)))
+      (is (= "voice:first" (:name (nth queue 2))))
+      (is (= "replaced" (:reason (nth queue 2))))
+      (is (= "voice:first" (:replacedName (nth queue 3))))
+      (is (= "voice:second" (:snippetName (nth queue 3)))))
     (.dispose ^js agency)))
 
 (deftest web-speech-text-emits-lip-and-independent-jaw-channels
