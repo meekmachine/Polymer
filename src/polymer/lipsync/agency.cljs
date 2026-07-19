@@ -222,29 +222,25 @@
     ;; - events carry domain facts and cross-agency requests.
     ;; - effects remains an empty compatibility port; outgoing agency requests
     ;;   are plain events, not a generic side-effect stream.
-    (letfn [(active-name []
-              (:snippetName @state-atom))
-
-            (audio-clock-sec [payload]
+    (letfn [(audio-clock-sec [payload]
               (max 0
                    (state/number-or (or (:audioTimeSec payload)
                                         (:currentTimeSec payload)
                                         (:offsetSec payload))
                                     0)))
 
-            (stop-local! [reason remove?]
-              (when-let [name (active-name)]
-                (when remove?
-                  (when-let [s @agency-scheduler]
-                    ((:remove s) name reason))))
-              (when-let [s @agency-scheduler]
-                ((:stop s)))
+            (record-stop-state! [reason]
               (let [stopped-at (state/now-ms)]
                 (swap! state-atom state/record-stop stopped-at reason)
                 (emit-event {:type "lipSyncTimelineStopped"
                              :agency "lipSync"
                              :reason reason
                              :stoppedAt stopped-at})))
+
+            (stop-local! [reason remove?]
+              (when-let [s @agency-scheduler]
+                ((:stop-timeline s) reason remove?))
+              (record-stop-state! reason))
 
             (finish-local! []
               (when (:speaking @state-atom)
@@ -259,9 +255,11 @@
                                :message "lipSync timeline requires at least one viseme event"})
                   (do
                     ;; One active utterance at a time keeps lip sync from
-                    ;; accumulating stale viseme snippets.
+                    ;; accumulating stale viseme snippets. State records the
+                    ;; replacement fact; the scheduler owns the animation
+                    ;; removal/start ordering for the old and new snippets.
                     (when (:speaking @state-atom)
-                      (stop-local! "replaced" true))
+                      (record-stop-state! "replaced"))
                     (let [name (timeline-name normalized)
                           built (if (:text normalized)
                                   (snippet/build-text-snippet (:text normalized)
@@ -304,7 +302,7 @@
                                    :maxTime (:maxTime snippet-data)
                                    :startedAt started-at})
                       (when-let [s @agency-scheduler]
-                        ((:schedule-timeline s) snippet-data {:autoPlay true}))
+                        ((:start-timeline s) snippet-data {:autoPlay true}))
                       snippet-data)))))
 
             (start-text! [payload]

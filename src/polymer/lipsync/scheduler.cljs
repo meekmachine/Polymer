@@ -53,6 +53,7 @@
 
 (defn create-scheduler [{:keys [emit-event on-finished]}]
   (let [finish-timer (atom nil)
+        active-timeline (atom nil)
         queue (atom [])
         disposed? (atom false)]
     (letfn [(enqueue! [effect]
@@ -120,8 +121,58 @@
                              :offsetSec offset-sec
                              :reason reason
                              :queueIndex (:queueIndex entry)
-                             :queuedAt (:queuedAt entry)})))]
-      {:schedule-timeline
+                             :queuedAt (:queuedAt entry)})))
+
+            (start-timeline! [snippet-data options]
+              (let [name (:name snippet-data)
+                    effectors (snippet-effectors snippet-data)
+                    replaced-name (:name @active-timeline)
+                    replacement? (and replaced-name (not= replaced-name name))]
+                ;; A new utterance owns the same mouth/jaw/tongue effectors as
+                ;; the previous utterance, so the scheduler removes the previous
+                ;; animation request before accepting the next start. That keeps
+                ;; replacement ordering in one queue instead of scattering it
+                ;; through agency command handlers.
+                (when replacement?
+                  (remove-animation! replaced-name "replaced"))
+                (reset! active-timeline {:name name
+                                         :maxTime (:maxTime snippet-data)
+                                         :effectors effectors})
+                (enqueue! {:type "startTimeline"
+                           :agency "lipSync"
+                           :requestId name
+                           :snippetName name
+                           :effectors effectors
+                           :maxTime (:maxTime snippet-data)
+                           :replacedName (when replacement? replaced-name)})
+                (schedule-animation! snippet-data options)
+                {:name name
+                 :replacedName (when replacement? replaced-name)
+                 :effectors effectors}))
+
+            (stop-timeline! [reason remove?]
+              (clear-timeout! finish-timer)
+              (let [current @active-timeline
+                    name (:name current)]
+                (when name
+                  (enqueue! {:type "stopTimeline"
+                             :agency "lipSync"
+                             :requestId name
+                             :snippetName name
+                             :reason reason
+                             :remove? remove?})
+                  (when remove?
+                    (remove-animation! name reason)))
+                (reset! active-timeline nil)
+                {:name name
+                 :reason reason
+                 :remove? remove?}))]
+      {:start-timeline
+       (fn [snippet-data options]
+         (when-not @disposed?
+           (start-timeline! snippet-data options)))
+
+       :schedule-timeline
        (fn [snippet-data options]
          (when-not @disposed?
            (schedule-animation! snippet-data options)))
@@ -147,6 +198,11 @@
          ;; requests are separate queued effector operations.
          (clear-timeout! finish-timer))
 
+       :stop-timeline
+       (fn [reason remove?]
+         (when-not @disposed?
+           (stop-timeline! reason remove?)))
+
        :queue
        (fn []
          @queue)
@@ -157,4 +213,5 @@
          ;; guarded by disposed? even if a host implementation fails to clear.
          (reset! disposed? true)
          (clear-timeout! finish-timer)
+         (reset! active-timeline nil)
          (reset! queue []))})))
