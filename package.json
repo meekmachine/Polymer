@@ -4,8 +4,19 @@
   "description": "Pure ClojureScript character agencies for Character Loom.",
   "license": "UNLICENSED",
   "private": false,
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./dist/worker/agency-worker.js": "./dist/worker/agency-worker.js",
+    "./worker/agency-worker.js": "./dist/worker/agency-worker.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "src",
@@ -13,7 +24,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "shadow-cljs release npm worker",
+    "build": "rm -f dist/index.js dist/index.cjs dist/index.mjs && shadow-cljs release npm worker && node scripts/write-esm-wrapper.mjs",
     "test": "shadow-cljs compile test && node dist/test.js && shadow-cljs release worker && node test/worker_smoke.cjs",
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
     "check:architecture": "node scripts/check-agency-architecture.mjs",
