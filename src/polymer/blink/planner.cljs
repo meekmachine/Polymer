@@ -1,9 +1,9 @@
 (ns polymer.blink.planner
   (:require [polymer.blink.state :as state]))
 
-;; The planner is pure decision logic: given Blink state, a trigger reason, and
-;; optional trigger overrides, it returns a plan map. It does not mutate state,
-;; set timers, or emit effects.
+;; The planner is pure decision logic. It turns incoming commands and blink
+;; opportunities into action maps for the agency/scheduler to execute. It does
+;; not mutate state, touch clocks, choose random values, or emit stream data.
 
 (def fast-blink-frequency-threshold 36)
 
@@ -41,25 +41,75 @@
 
       :else 1)))
 
-(defn make-plan
-  ([blink-state reason options]
-   (make-plan blink-state reason options (js/Math.random)))
-  ([blink-state reason options random-value]
-   ;; A plan is the normalized, immutable description of one blink opportunity.
-   ;; The scheduler records it into state and turns it into snippet/effect data.
-   (let [options (trigger-options options)
-         blink-count (resolve-blink-count blink-state reason options random-value)
-         duration (state/clamp 0.05 1 (state/number-or (:duration options) (:duration blink-state)))
-         gap (state/clamp 0.02 0.5 (state/number-or (:burstGap options) (:burstGap blink-state)))
-         intensity (state/clamp 0 1 (state/number-or (:intensity options) (:intensity blink-state)))
-         now-ms (.now js/Date)]
-     {:agency "blink"
-      :name (str "polymer:blink:" now-ms)
-      :reason reason
-      :blink-count blink-count
-      :duration duration
-      :burst-gap gap
-      :intensity intensity
-      :created-at now-ms
-      :fast? (or (>= (:frequency blink-state) fast-blink-frequency-threshold)
-                 (> blink-count 2))})))
+(defn make-plan [blink-state reason options random-value now-ms]
+  ;; A plan is the normalized, immutable description of one blink opportunity.
+  ;; Time and randomness are supplied by the scheduler/agency boundary so this
+  ;; function remains deterministic and easy to test.
+  (let [options (trigger-options options)
+        blink-count (resolve-blink-count blink-state reason options random-value)
+        duration (state/clamp 0.05 1 (state/number-or (:duration options) (:duration blink-state)))
+        gap (state/clamp 0.02 0.5 (state/number-or (:burstGap options) (:burstGap blink-state)))
+        intensity (state/clamp 0 1 (state/number-or (:intensity options) (:intensity blink-state)))]
+    {:agency "blink"
+     :name (str "polymer:blink:" now-ms)
+     :reason reason
+     :blink-count blink-count
+     :duration duration
+     :burst-gap gap
+     :intensity intensity
+     :created-at now-ms
+     :fast? (or (>= (:frequency blink-state) fast-blink-frequency-threshold)
+                (> blink-count 2))}))
+
+(def config-command-types
+  #{"setFrequency"
+    "setDuration"
+    "setIntensity"
+    "setRandomness"
+    "setLeftEyeIntensity"
+    "setRightEyeIntensity"
+    "setBurstEnabled"
+    "setBurstFrequency"
+    "setBurstCount"
+    "setBurstGap"
+    "configure"})
+
+(defn error-action [message]
+  {:op :error
+   :message message})
+
+(defn trigger-action [reason payload random-value now-ms]
+  {:op :trigger
+   :reason reason
+   :options (:options payload)
+   :random-value random-value
+   :now-ms now-ms})
+
+(defn apply-state-action [payload]
+  {:op :apply-state
+   :payload payload})
+
+(defn plan-command [blink-state payload random-value now-ms]
+  (let [type (:type payload)]
+    (cond
+      (= "triggerBlink" type)
+      [(trigger-action "manual" payload random-value now-ms)]
+
+      (= "requestBlink" type)
+      [(trigger-action (or (:reason payload) "request") payload random-value now-ms)]
+
+      (= "enable" type)
+      [(apply-state-action payload)
+       {:op :refresh-auto}]
+
+      (or (= "disable" type)
+          (= "reset" type))
+      [(apply-state-action payload)
+       {:op :stop-auto}]
+
+      (contains? config-command-types type)
+      [(apply-state-action payload)
+       {:op :refresh-auto}]
+
+      :else
+      [(error-action (str "Unknown Blink command: " type))])))
