@@ -761,46 +761,53 @@
 
                     (emit-error! (str "Unsupported voice provider: " engine))))))
 
+            (run-action! [action]
+              (case (:op action)
+                "cancel-voice-loads"
+                (cancel-voice-loads!)
+
+                "configure"
+                (do
+                  (swap! state-atom state/configure (:config action))
+                  (emit-status!))
+
+                "load-voices"
+                (load-voices! (:engine action))
+
+                "stop-active-session"
+                (when (active-speech?)
+                  (stop-session! (:reason action)))
+
+                "advance-session"
+                (swap! state-atom state/next-session)
+
+                "stop-session"
+                (stop-session! (:reason action))
+
+                "speak"
+                (speak! (:command action))
+
+                "reset"
+                (do
+                  (stop-web-speech!)
+                  ((:stop-all session-scheduler))
+                  (cleanup-audio! resources)
+                  (reset! state-atom (state/default-state nil))
+                  (emit-status!))
+
+                "error"
+                (emit-error! (:message action))
+
+                (emit-error! (str "Unknown TTS planner action: " (:op action)))))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)]
                   (emit-input {:type "command"
                                :agency "tts"
                                :command payload})
-                  (case (:type payload)
-                    "configure"
-                    (do
-                      (cancel-voice-loads!)
-                      (swap! state-atom state/configure (:config payload))
-                      (emit-status!))
-
-                    "loadVoices"
-                    (load-voices! (or (:engine payload) (:engine (:config @state-atom))))
-
-                    "speak"
-                    (do
-                      (when (active-speech?)
-                        (stop-session! "replaced"))
-                      (speak! payload))
-
-                    "stop"
-                    (do
-                      (swap! state-atom state/next-session)
-                      (stop-session! "requested"))
-
-                    "reset"
-                    (do
-                      (swap! state-atom state/next-session)
-                      (cancel-voice-loads!)
-                      (when (active-speech?)
-                        (stop-session! "reset"))
-                      (stop-web-speech!)
-                      ((:stop-all session-scheduler))
-                      (cleanup-audio! resources)
-                      (reset! state-atom (state/default-state nil))
-                      (emit-status!))
-
-                    (emit-error! (str "Unknown TTS command: " (:type payload)))))))]
+                  (doseq [action (planner/plan-command @state-atom payload)]
+                    (run-action! action)))))]
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))
            :schedulerQueue (fn [] (clj->js ((:queue session-scheduler))))

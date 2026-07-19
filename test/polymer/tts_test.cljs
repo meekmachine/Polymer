@@ -117,6 +117,21 @@
                                     {:hasAzureSynthesize true})]
       (is (:ok plan)))))
 
+(deftest tts-command-planner-makes-session-interruption-explicit
+  (let [idle-state {:status "idle" :config {:engine "webSpeech"}}
+        active-state {:status "speaking" :config {:engine "webSpeech"}}
+        speak-command {:type "speak" :text "hello"}
+        load-command {:type "loadVoices"}
+        reset-command {:type "reset"}]
+    (is (= ["speak"]
+           (map :op (planner/plan-command idle-state speak-command))))
+    (is (= ["stop-active-session" "speak"]
+           (map :op (planner/plan-command active-state speak-command))))
+    (is (= [{:op "load-voices" :engine "webSpeech"}]
+           (planner/plan-command idle-state load-command)))
+    (is (= ["advance-session" "cancel-voice-loads" "stop-active-session" "reset"]
+           (map :op (planner/plan-command active-state reset-command))))))
+
 (deftest azure-provider-helpers-keep-provider-fields-and-build-lipsync-command
   (let [visemes (azure/normalize-provider-visemes [{:viseme_id 3 :audio_offset 0.2}
                                                    {:visemeId 1 :audioOffset 0.1}
