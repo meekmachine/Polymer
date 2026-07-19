@@ -117,6 +117,21 @@
                                     {:hasAzureSynthesize true})]
       (is (:ok plan)))))
 
+(deftest tts-command-planner-makes-session-interruption-explicit
+  (let [idle-state {:status "idle" :config {:engine "webSpeech"}}
+        active-state {:status "speaking" :config {:engine "webSpeech"}}
+        speak-command {:type "speak" :text "hello"}
+        load-command {:type "loadVoices"}
+        reset-command {:type "reset"}]
+    (is (= ["speak"]
+           (map :op (planner/plan-command idle-state speak-command))))
+    (is (= ["stop-active-session" "speak"]
+           (map :op (planner/plan-command active-state speak-command))))
+    (is (= [{:op "load-voices" :engine "webSpeech"}]
+           (planner/plan-command idle-state load-command)))
+    (is (= ["advance-session" "cancel-voice-loads" "stop-active-session" "reset"]
+           (map :op (planner/plan-command active-state reset-command))))))
+
 (deftest azure-provider-helpers-keep-provider-fields-and-build-lipsync-command
   (let [visemes (azure/normalize-provider-visemes [{:viseme_id 3 :audio_offset 0.2}
                                                    {:visemeId 1 :audioOffset 0.1}
@@ -178,15 +193,21 @@
                                :name "tts:test:web"})
     (let [event-types (map :type @(:events events))
           commands (keep #(when (= "lipSync.command" (:type %)) (:command %)) @(:events events))
-          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
+          queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)]
       (is (some #{"ttsPlanCreated"} event-types))
       (is (some #{"ttsSpeechStarted"} event-types))
       (is (= ["configure" "startText" "audioStarted" "wordBoundary"]
              (map :type commands)))
+      (is (= ["ttsSessionStarted"] (map :type queue)))
       (is (= 1.35 (get-in (first commands) [:config :tongueScale])))
       (is (= 0.35 (get-in (first commands) [:config :wordDriftThresholdSec])))
       (is (= "speaking" (:status snapshot)))
-      (is (:speaking snapshot)))
+      (is (:speaking snapshot))
+      (.stop ^js agency)
+      (let [stop-queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)]
+        (is (= ["ttsSessionStarted" "ttsSessionStopped"] (map :type stop-queue)))
+        (is (= "requested" (:reason (second stop-queue))))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
@@ -349,9 +370,9 @@
                   (is process-command)
                   (is (= [{:viseme_id 2 :audio_offset 0.1}] (:visemes process-command)))
                   (is (= [{:word "hello" :start_time 0 :end_time 0.3}] (:wordTimings process-command)))
-                  (is (= ["audioBoundaryPolling"] (map :type queue)))
-                  (is (= [0] (map :queueIndex queue)))
-                  (is (= 1 (:wordCount (first queue)))))
+                  (is (= ["ttsSessionStarted" "audioBoundaryPolling"] (map :type queue)))
+                  (is (= [0 1] (map :queueIndex queue)))
+                  (is (= 1 (:wordCount (second queue)))))
                 ((:unsubscribe events))
                 (.dispose ^js agency)
                 (done)

@@ -20,6 +20,189 @@ export interface BlinkState {
 
 export type BlinkAgencyConfig = Partial<Omit<BlinkState, 'agency'>>;
 
+export interface GazeTarget {
+  x: number;
+  y: number;
+  z?: number;
+}
+
+export interface GazeConfig {
+  enabled?: boolean;
+  eyesEnabled?: boolean;
+  headEnabled?: boolean;
+  headFollowEyes?: boolean;
+  mirrored?: boolean;
+  smoothFactor?: number;
+  minDelta?: number;
+  transitionDurationMs?: number;
+  eyeIntensity?: number;
+  headIntensity?: number;
+  coalesceMs?: number;
+}
+
+export interface GazeState {
+  agency: 'gaze';
+  status: string;
+  mode: string;
+  active: boolean;
+  rawTarget: Required<GazeTarget>;
+  target: Required<GazeTarget>;
+  lastRequestedTarget: Required<GazeTarget>;
+  pendingRequest: GazeLookRequest | null;
+  lastRequest: GazeLookRequest | GazeResetRequest | null;
+  lastIgnored: null | Record<string, unknown>;
+  lastPlan: null | Record<string, unknown>;
+  lastEvent: null | Record<string, unknown>;
+  receivedCount: number;
+  plannedCount: number;
+  requestedCount: number;
+  ignoredCount: number;
+  resetCount: number;
+  cancelCount: number;
+  config: Required<GazeConfig>;
+}
+
+export interface GazeApplyOptions {
+  eyeEnabled?: boolean;
+  headEnabled?: boolean;
+  headFollowEyes?: boolean;
+  force?: boolean;
+}
+
+export interface GazeAttentionCandidate {
+  target?: GazeTarget;
+  gazeTarget?: GazeTarget;
+  lookTarget?: GazeTarget;
+  x?: number;
+  y?: number;
+  z?: number;
+  priority?: number;
+  weight?: number;
+  confidence?: number;
+  source?: string;
+  label?: string;
+  id?: string;
+}
+
+export type GazeDispatch =
+  | { type: 'configure'; config: GazeConfig }
+  | { type: 'setMode' | 'set-mode'; mode: string }
+  | { type: 'setActive' | 'set-active'; active: boolean }
+  | { type: 'enable' }
+  | { type: 'disable' }
+  | { type: 'setTarget' | 'set-target' | 'focusTarget'; target: GazeTarget; options?: GazeApplyOptions }
+  | { type: 'attention.fact'; targets?: GazeAttentionCandidate[]; target?: GazeTarget; source?: string }
+  | { type: 'camera.fact'; relativeOffset: GazeTarget; source?: string }
+  | { type: 'reset'; durationMs?: number; eyes?: boolean; head?: boolean }
+  | { type: 'cancel'; reason?: string };
+
+export interface GazeLookRequest {
+  type: 'eyeHeadTracking.requestGaze';
+  agency: 'gaze';
+  targetAgency: 'eyeHeadTracking';
+  requestId: string;
+  source?: string;
+  label?: string;
+  mode: string;
+  target: Required<GazeTarget>;
+  rawTarget: Required<GazeTarget>;
+  previousTarget: Required<GazeTarget>;
+  eyeEnabled: boolean;
+  headEnabled: boolean;
+  headFollowEyes: boolean;
+  eyeIntensity: number;
+  headIntensity: number;
+  eyeDurationMs: number;
+  headDurationMs: number;
+  createdAt: number;
+  queuedAt?: number;
+  publishedAt?: number;
+}
+
+export interface GazeResetRequest {
+  type: 'eyeHeadTracking.requestReset';
+  agency: 'gaze';
+  targetAgency: 'eyeHeadTracking';
+  requestId: string;
+  durationMs: number;
+  eyes: boolean;
+  head: boolean;
+  requestedAt: number;
+}
+
+export interface GazeCancelRequest {
+  type: 'eyeHeadTracking.requestCancel';
+  agency: 'gaze';
+  targetAgency: 'eyeHeadTracking';
+  requestId: string;
+  reason: string;
+  requestedAt: number;
+}
+
+export interface EyeHeadTrackingConfig {
+  enabled?: boolean;
+  eyeTrackingEnabled?: boolean;
+  headTrackingEnabled?: boolean;
+  headFollowEyes?: boolean;
+  eyeIntensity?: number;
+  headIntensity?: number;
+  headRoll?: number;
+  eyePriority?: number;
+  headPriority?: number;
+  snippetPriority?: number;
+  transitionDurationMs?: number;
+  returnToCenterDurationMs?: number;
+  coalesceMs?: number;
+  replaceExisting?: boolean;
+}
+
+export interface EyeHeadTrackingState {
+  agency: 'eyeHeadTracking';
+  status: string;
+  mode: string;
+  currentTarget: Required<GazeTarget>;
+  pendingRequest: EyeHeadGazeRequest | null;
+  lastRequest: EyeHeadGazeRequest | null;
+  lastSnippet: PolymerAnimationSnippet | null;
+  activeSnippetNames: string[];
+  lastIgnored: null | Record<string, unknown>;
+  lastPlan: null | Record<string, unknown>;
+  scheduledCount: number;
+  removedCount: number;
+  resetCount: number;
+  cancelCount: number;
+  ignoredCount: number;
+  config: Required<EyeHeadTrackingConfig>;
+}
+
+export interface EyeHeadGazeRequest {
+  type: 'eyeHeadTracking.requestGaze';
+  agency: 'eyeHeadTracking' | 'gaze';
+  sourceAgency?: string;
+  requestId: string;
+  target: Required<GazeTarget>;
+  rawTarget?: Required<GazeTarget>;
+  mode?: string;
+  eyeEnabled?: boolean;
+  headEnabled?: boolean;
+  headFollowEyes?: boolean;
+  eyeIntensity?: number;
+  headIntensity?: number;
+  headRoll?: number;
+  eyeDurationMs?: number;
+  headDurationMs?: number;
+  createdAt?: number;
+}
+
+export type EyeHeadTrackingDispatch =
+  | { type: 'configure'; config: EyeHeadTrackingConfig }
+  | { type: 'enable' }
+  | { type: 'disable' }
+  | { type: 'setTarget' | 'set-target' | 'requestGaze'; target: GazeTarget }
+  | EyeHeadGazeRequest
+  | { type: 'reset' | 'eyeHeadTracking.requestReset'; durationMs?: number; eyes?: boolean; head?: boolean; reason?: string }
+  | { type: 'cancel' | 'eyeHeadTracking.requestCancel'; reason?: string };
+
 export interface BlinkTriggerOptions {
   intensity?: number;
   duration?: number;
@@ -31,6 +214,7 @@ export type BlinkDispatch =
   | { type: 'enable' }
   | { type: 'disable' }
   | { type: 'triggerBlink'; options?: BlinkTriggerOptions }
+  | { type: 'requestBlink'; reason?: string; options?: BlinkTriggerOptions }
   | { type: 'setFrequency'; value: number }
   | { type: 'setDuration'; value: number }
   | { type: 'setIntensity'; value: number }
@@ -61,13 +245,20 @@ export interface AnimationState {
   scheduledCount: number;
   startedCount: number;
   seekCount: number;
+  updatedCount: number;
   removedCount: number;
   lastEvent: null | {
-    type: 'animationSnippetScheduled' | 'animationSnippetStarted' | 'animationSnippetSeeked' | 'animationSnippetRemoved';
+    type:
+      | 'animationSnippetScheduled'
+      | 'animationSnippetStarted'
+      | 'animationSnippetSeeked'
+      | 'animationSnippetUpdated'
+      | 'animationSnippetRemoved';
     name: string;
     sourceAgency: string;
     reason?: string;
     offsetSec?: number;
+    params?: Record<string, unknown>;
     at: number;
   };
 }
@@ -86,6 +277,7 @@ export type AnimationDispatch =
       options?: { autoPlay?: boolean; sourceAgency?: string; [key: string]: unknown };
     }
   | { type: 'seekSnippet'; sourceAgency?: string; name: string; offsetSec: number }
+  | { type: 'updateSnippet'; sourceAgency?: string; name: string; params: Record<string, unknown> }
   | { type: 'removeSnippet'; sourceAgency?: string; name: string }
   | { type: 'clear'; sourceAgency?: string };
 
@@ -119,6 +311,8 @@ export interface PolymerAnimationHandle {
   stop?: () => unknown;
   setTime?: (offsetSec: number) => unknown;
   seek?: (offsetSec: number) => unknown;
+  updateParams?: (params: Record<string, unknown>) => unknown;
+  setParams?: (params: Record<string, unknown>) => unknown;
   finished?: Promise<unknown> | { then: (onFulfilled?: () => unknown, onRejected?: (error: unknown) => unknown) => unknown };
 }
 
@@ -351,6 +545,44 @@ export type TTSDispatch =
   | { type: 'stop' }
   | { type: 'reset' };
 
+export interface ProsodicConfig {
+  enabled?: boolean;
+  intensity?: number;
+  priority?: number;
+  speechGestureEvery?: number;
+  blinkFastCooldownMs?: number;
+}
+
+export interface ProsodicState {
+  agency: 'prosodic';
+  speaking: boolean;
+  wordIndex: number;
+  currentWord: string | null;
+  activeSnippets: string[];
+  scheduledCount: number;
+  removedCount: number;
+  lastGesture: string | null;
+  lastBlinkFastCueAt: number;
+  config: Required<ProsodicConfig>;
+  lastEvent: null | Record<string, unknown>;
+}
+
+export type ProsodicDispatch =
+  | { type: 'configure'; config: ProsodicConfig }
+  | { type: 'speechStarted'; name?: string; sourceAgency?: string; engine?: string }
+  | { type: 'speechStopped'; reason?: string; sourceAgency?: string }
+  | {
+      type: 'wordBoundary';
+      word: string;
+      wordIndex?: number;
+      observedElapsedSec?: number;
+      hostElapsedSec?: number;
+      sourceAgency?: string;
+    }
+  | { type: 'blinkFast'; sourceAgency?: string; plan?: Record<string, unknown> }
+  | { type: 'stop'; reason?: string }
+  | { type: 'reset' };
+
 export type LipSyncSchedulerQueueEntry =
   | {
       type: 'scheduleAnimation';
@@ -383,6 +615,26 @@ export type LipSyncSchedulerQueueEntry =
   | {
       type: 'finishTimeline';
       agency: 'lipSync';
+      reason: string;
+      queueIndex: number;
+      queuedAt: number;
+    };
+
+export type ProsodicSchedulerQueueEntry =
+  | {
+      type: 'scheduleAnimation';
+      agency: 'prosodic';
+      requestId: string;
+      snippetName: string;
+      effectors: string[];
+      queueIndex: number;
+      queuedAt: number;
+    }
+  | {
+      type: 'removeAnimation';
+      agency: 'prosodic';
+      requestId: string;
+      name: string;
       reason: string;
       queueIndex: number;
       queuedAt: number;
@@ -544,7 +796,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestScheduleSnippet';
-      agency: 'blink' | 'lipSync' | 'gesture';
+      agency: 'blink' | 'lipSync' | 'gesture' | 'prosodic' | 'eyeHeadTracking';
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
@@ -554,7 +806,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestRemoveSnippet';
-      agency: 'lipSync' | 'gesture';
+      agency: 'lipSync' | 'gesture' | 'prosodic' | 'eyeHeadTracking';
       requestId: string;
       name: string;
       reason: string;
@@ -595,6 +847,14 @@ export type PolymerDomainEvent =
       seekedAt: number;
     }
   | {
+      type: 'animationSnippetUpdated';
+      agency: 'animation';
+      sourceAgency: string;
+      name: string;
+      params: Record<string, unknown>;
+      updatedAt: number;
+    }
+  | {
       type: 'animationSnippetRemoved';
       agency: 'animation';
       sourceAgency: string;
@@ -610,6 +870,55 @@ export type PolymerDomainEvent =
       nextDelayMs: number | null;
     }
   | { type: 'signal'; agency: 'blink'; signal: 'blink-fast'; plan: Record<string, unknown> }
+  | { type: 'gaze.status'; agency: 'gaze'; status: string; mode: string; active: boolean; enabled: boolean; reason?: string; at: number }
+  | { type: 'gaze.targetReceived'; agency: 'gaze'; requestId: string; rawTarget: Required<GazeTarget>; source?: string; label?: string; at: number }
+  | {
+      type: 'gaze.targetPlanned';
+      agency: 'gaze';
+      requestId: string;
+      rawTarget: Required<GazeTarget>;
+      target: Required<GazeTarget>;
+      delta: number;
+      eyeDurationMs: number;
+      headDurationMs: number;
+      at: number;
+    }
+  | {
+      type: 'gaze.targetIgnored';
+      agency: 'gaze';
+      requestId: string;
+      rawTarget: Required<GazeTarget>;
+      target: Required<GazeTarget>;
+      reason: 'disabled' | 'min-delta' | string;
+      ignoredAt: number;
+    }
+  | GazeLookRequest
+  | GazeResetRequest
+  | GazeCancelRequest
+  | {
+      type: 'eyeHeadTracking.status';
+      agency: 'eyeHeadTracking';
+      status: string;
+      enabled: boolean;
+      activeSnippetNames: string[];
+      reason?: string;
+      at: number;
+    }
+  | {
+      type: 'eyeHeadTracking.requestIgnored';
+      agency: 'eyeHeadTracking';
+      requestId: string;
+      reason: string;
+      target?: Required<GazeTarget>;
+      ignoredAt: number;
+    }
+  | {
+      type: 'eyeHeadTracking.cancelled';
+      agency: 'eyeHeadTracking';
+      requestId: string;
+      reason: string;
+      at: number;
+    }
   | { type: 'lipSyncPlanCreated'; agency: 'lipSync'; plan: Record<string, unknown> }
   | { type: 'lipSyncConfigChanged'; agency: 'lipSync'; state: LipSyncState }
   | {
@@ -676,7 +985,21 @@ export type PolymerDomainEvent =
       scheduledAt: number;
     }
   | { type: 'gestureRemoved'; agency: 'gesture'; name: string; reason: string; removedAt: number }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'lipSync' | 'tts' | 'gesture' }
+  | { type: 'prosodicPlanCreated'; agency: 'prosodic'; plan: Record<string, unknown> }
+  | { type: 'prosodicConfigChanged'; agency: 'prosodic'; state: ProsodicState }
+  | { type: 'prosodicSpeechStarted'; agency: 'prosodic'; name?: string; startedAt: number }
+  | { type: 'prosodicWordBoundary'; agency: 'prosodic'; word?: string; wordIndex: number; observedAt: number }
+  | {
+      type: 'prosodicGestureScheduled';
+      agency: 'prosodic';
+      gesture: string;
+      name: string;
+      word?: string;
+      wordIndex?: number;
+      scheduledAt: number;
+    }
+  | { type: 'prosodicStopped'; agency: 'prosodic'; reason: string; stoppedAt: number }
+  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'gaze' | 'eyeHeadTracking' | 'lipSync' | 'tts' | 'gesture' | 'prosodic' }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -730,7 +1053,63 @@ export interface AnimationAgency {
   subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   scheduleSnippet(snippet: PolymerAnimationSnippet, options?: { autoPlay?: boolean; [key: string]: unknown }): void;
   seekSnippet(name: string, offsetSec: number): void;
+  updateSnippet(name: string, params: Record<string, unknown>): void;
   removeSnippet(name: string): void;
+  dispose(): void;
+}
+
+export interface GazeAgency {
+  input: PolymerInputStream<GazeDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: GazeDispatch): void;
+  snapshot(): GazeState;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'gaze'; command: GazeDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  setTarget(target: GazeTarget, options?: GazeApplyOptions): void;
+  focusTarget(target: GazeTarget): void;
+  configure(config: GazeConfig): void;
+  setMode(mode: string): void;
+  setActive(active: boolean): void;
+  enable(): void;
+  disable(): void;
+  reset(durationMs?: number): void;
+  cancel(reason?: string): void;
+  flush(): void;
+  queue(): Array<Record<string, unknown>>;
+  dispose(): void;
+}
+
+export interface EyeHeadTrackingAgency {
+  input: PolymerInputStream<EyeHeadTrackingDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: EyeHeadTrackingDispatch): void;
+  snapshot(): EyeHeadTrackingState;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'eyeHeadTracking'; command: EyeHeadTrackingDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  setTarget(target: GazeTarget): void;
+  configure(config: EyeHeadTrackingConfig): void;
+  enable(): void;
+  disable(): void;
+  reset(durationMs?: number): void;
+  cancel(reason?: string): void;
+  flush(): void;
+  queue(): Array<Record<string, unknown>>;
   dispose(): void;
 }
 
@@ -813,17 +1192,50 @@ export interface GestureAgency {
   dispose(): void;
 }
 
+export interface ProsodicAgency {
+  input: PolymerInputStream<ProsodicDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: ProsodicDispatch): void;
+  snapshot(): ProsodicState;
+  schedulerQueue(): ProsodicSchedulerQueueEntry[];
+  subscribeInput(listener: (event: { type: 'command'; agency: 'prosodic'; command: ProsodicDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: ProsodicConfig): void;
+  speechStarted(name?: string): void;
+  wordBoundary(word: string, wordIndex?: number): void;
+  blinkFast(): void;
+  stop(): void;
+  reset(): void;
+  dispose(): void;
+}
+
 export interface CharacterAgencySnapshot {
   blink: BlinkState;
+  gaze: GazeState;
+  eyeHeadTracking: EyeHeadTrackingState;
+  gesture: GestureState;
   tts: TTSState;
   lipSync: LipSyncState;
+  prosodic: ProsodicState;
   animation: AnimationState;
 }
 
 export type CharacterAgencyDispatch =
   | { agency: 'blink'; command: BlinkDispatch }
+  | { agency: 'gaze'; command: GazeDispatch }
+  | { agency: 'eyeHeadTracking'; command: EyeHeadTrackingDispatch }
+  | { agency: 'gesture'; command: GestureDispatch }
   | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'lipSync'; command: LipSyncDispatch }
+  | { agency: 'prosodic'; command: ProsodicDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
@@ -834,8 +1246,12 @@ export interface CharacterAgencies {
   snapshot(): CharacterAgencySnapshot;
   agency(name: 'animation'): AnimationAgency;
   agency(name: 'blink'): BlinkAgency;
+  agency(name: 'gaze'): GazeAgency;
+  agency(name: 'eyeHeadTracking'): EyeHeadTrackingAgency;
+  agency(name: 'gesture'): GestureAgency;
   agency(name: 'tts'): TTSAgency;
   agency(name: 'lipSync'): LipSyncAgency;
+  agency(name: 'prosodic'): ProsodicAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
@@ -851,12 +1267,19 @@ export interface CharacterAgencies {
 
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
+export function createGazeAgency(config?: GazeConfig): GazeAgency;
+export function createEyeHeadTrackingAgency(config?: EyeHeadTrackingConfig): EyeHeadTrackingAgency;
 export function createLipSyncAgency(config?: LipSyncConfig): LipSyncAgency;
 export function createTTSAgency(config?: TTSConfig): TTSAgency;
 export function createGestureAgency(config?: GestureConfig): GestureAgency;
+export function createProsodicAgency(config?: ProsodicConfig): ProsodicAgency;
 export function createCharacterAgencies(config?: {
   blink?: BlinkAgencyConfig;
+  gaze?: GazeConfig;
+  eyeHeadTracking?: EyeHeadTrackingConfig;
+  gesture?: GestureConfig;
   tts?: TTSConfig;
   lipSync?: LipSyncConfig;
+  prosodic?: ProsodicConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;

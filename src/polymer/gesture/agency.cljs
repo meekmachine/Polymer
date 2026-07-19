@@ -37,10 +37,37 @@
         effect-stream (stream/create-stream)
         state-atom (atom (state/config->state config))
         disposed? (atom false)
+        completion-timers (atom {})
         emit-input (:emit input-stream)
         emit-event (:emit event-stream)
         agency-scheduler (scheduler/create-scheduler {:emit-event emit-event})]
-    (letfn [(emit-plan! [plan]
+    (letfn [(clear-completion! [name]
+              (when-let [timer (get @completion-timers name)]
+                (js/clearTimeout timer)
+                (swap! completion-timers dissoc name)))
+
+            (clear-all-completions! []
+              (doseq [[_ timer] @completion-timers]
+                (js/clearTimeout timer))
+              (reset! completion-timers {}))
+
+            (complete-active! [name]
+              (when (get-in @state-atom [:activeSnippets name])
+                (remove-active! [name] "completed")))
+
+            (schedule-completion! [snippet-data]
+              (let [name (:name snippet-data)
+                    max-time (:maxTime snippet-data)]
+                (clear-completion! name)
+                (when (and name
+                           (not (:loop snippet-data))
+                           (state/finite-number? max-time)
+                           (pos? max-time))
+                  (let [timer (js/setTimeout #(complete-active! name)
+                                             (+ 50 (* 1000 max-time)))]
+                    (swap! completion-timers assoc name timer)))))
+
+            (emit-plan! [plan]
               (when (should-emit-plan? plan)
                 (emit-event {:type "gesturePlanCreated"
                              :agency "gesture"
@@ -48,6 +75,8 @@
 
             (remove-active! [names reason]
               (let [removed-at (state/now-ms)]
+                (doseq [name names]
+                  (clear-completion! name))
                 ((:remove-many agency-scheduler) names reason)
                 (doseq [name names]
                   (swap! state-atom state/record-remove name reason removed-at)
@@ -77,6 +106,7 @@
                                    :affectedBones (:affectedBones gesture)
                                    :name (:name snippet-data)
                                    :scheduledAt scheduled-at}))
+                    (schedule-completion! snippet-data)
                     snippet-data)
                   (emit-event {:type "error"
                                :agency "gesture"
@@ -167,6 +197,7 @@
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
+                        (clear-all-completions!)
                         ((:dispose agency-scheduler))
                         ((:dispose input-stream))
                         ((:dispose event-stream))

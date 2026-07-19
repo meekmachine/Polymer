@@ -33,10 +33,12 @@ serve as the normal message bus between Polymer agencies.
 
 ## Current Agencies
 
-Polymer currently includes early Blink, Animation, TTS, LipSync, and Gesture
-agencies. These are implementation milestones, not the limits of the
-architecture. Each agency should follow the same local GOAP/planner, scheduler,
-stream, transform, and effector pattern as the package grows.
+Polymer currently includes early Blink, Animation, Gaze, Eye/Head Tracking,
+TTS, LipSync, Prosodic Expression, and Gesture agencies, plus first slices for
+Conversation, Camera Context, Hair, and Transcription. These are implementation
+milestones, not the limits of the architecture. Each agency should follow the
+same local GOAP/planner, scheduler, stream, transform, and effector pattern as
+the package grows.
 
 Runtime-specific work belongs at the edge. The current animation path can target
 the existing web runtime, but Polymer core should remain able to support other
@@ -53,40 +55,24 @@ optional description or text representation, emoji trigger, left/right/both/cust
 scope, captured source metadata, duration, priority, affected bones, static bone
 targets, and optional time-based keyframes.
 
-The first integration can use individual agencies:
+Host integrations should prefer the character agency network so Gesture's
+animation requests are routed to Animation inside Polymer:
 
 ```js
-const animation = createAnimationAgency({ engine });
-const gesture = createGestureAgency({
-  gestures: profile.characterGestures,
-  emojiMappings: profile.gestureEmojiMappings,
+const agencies = createCharacterAgencies({
+  animation: { engine },
+  gesture: {
+    gestures: profile.characterGestures,
+    emojiMappings: profile.gestureEmojiMappings,
+  },
 });
 
-gesture.subscribeEvents((event) => {
-  if (event.type === "animation.requestScheduleSnippet") {
-    animation.dispatch({
-      type: "scheduleSnippet",
-      sourceAgency: "gesture",
-      snippet: event.snippet,
-      options: event.options,
-    });
-  }
-
-  if (event.type === "animation.requestRemoveSnippet") {
-    animation.dispatch({
-      type: "removeSnippet",
-      sourceAgency: "gesture",
-      name: event.name,
-    });
-  }
-});
-
-gesture.dispatch({ type: "playEmoji", emoji: "👋" });
+agencies.dispatch({ agency: "gesture", command: { type: "playEmoji", emoji: "👋" } });
 ```
 
 The host supplies the gesture library and may observe streams for diagnostics,
-but Gesture's own scheduler is responsible for replacement/cancellation before
-Animation owns the runtime side effect.
+but Gesture's own scheduler is responsible for replacement, cancellation, and
+completion cleanup before Animation owns the runtime side effect.
 
 ## Git Install Contract
 

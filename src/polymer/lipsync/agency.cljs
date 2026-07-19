@@ -222,29 +222,25 @@
     ;; - events carry domain facts and cross-agency requests.
     ;; - effects remains an empty compatibility port; outgoing agency requests
     ;;   are plain events, not a generic side-effect stream.
-    (letfn [(active-name []
-              (:snippetName @state-atom))
-
-            (audio-clock-sec [payload]
+    (letfn [(audio-clock-sec [payload]
               (max 0
                    (state/number-or (or (:audioTimeSec payload)
                                         (:currentTimeSec payload)
                                         (:offsetSec payload))
                                     0)))
 
-            (stop-local! [reason remove?]
-              (when-let [name (active-name)]
-                (when remove?
-                  (when-let [s @agency-scheduler]
-                    ((:remove s) name reason))))
-              (when-let [s @agency-scheduler]
-                ((:stop s)))
+            (record-stop-state! [reason]
               (let [stopped-at (state/now-ms)]
                 (swap! state-atom state/record-stop stopped-at reason)
                 (emit-event {:type "lipSyncTimelineStopped"
                              :agency "lipSync"
                              :reason reason
                              :stoppedAt stopped-at})))
+
+            (stop-local! [reason remove?]
+              (when-let [s @agency-scheduler]
+                ((:stop-timeline s) reason remove?))
+              (record-stop-state! reason))
 
             (finish-local! []
               (when (:speaking @state-atom)
@@ -259,9 +255,11 @@
                                :message "lipSync timeline requires at least one viseme event"})
                   (do
                     ;; One active utterance at a time keeps lip sync from
-                    ;; accumulating stale viseme snippets.
+                    ;; accumulating stale viseme snippets. State records the
+                    ;; replacement fact; the scheduler owns the animation
+                    ;; removal/start ordering for the old and new snippets.
                     (when (:speaking @state-atom)
-                      (stop-local! "replaced" true))
+                      (record-stop-state! "replaced"))
                     (let [name (timeline-name normalized)
                           built (if (:text normalized)
                                   (snippet/build-text-snippet (:text normalized)
@@ -304,7 +302,7 @@
                                    :maxTime (:maxTime snippet-data)
                                    :startedAt started-at})
                       (when-let [s @agency-scheduler]
-                        ((:schedule-timeline s) snippet-data {:autoPlay true}))
+                        ((:start-timeline s) snippet-data {:autoPlay true}))
                       snippet-data)))))
 
             (start-text! [payload]
@@ -425,10 +423,57 @@
                              :count (count (state/normalize-word-timings timings))
                              :updatedAt updated-at})))
 
+            (run-action! [action payload]
+              ;; `goap/plan-command` decides which agency operation is allowed
+              ;; for a command. Dispatch only echoes the input and reports the
+              ;; plan; accepted actions run here so the command router does not
+              ;; grow another copy of LipSync's state/scheduler policy.
+              (case (:op action)
+                "configure"
+                (do
+                  (swap! state-atom state/configure (:config payload))
+                  (emit-event {:type "lipSyncConfigChanged"
+                               :agency "lipSync"
+                               :state @state-atom}))
+
+                "start-text"
+                (start-text! payload)
+
+                "start-timeline"
+                (start-timeline! (:timeline payload))
+
+                "process-provider-visemes"
+                (process-azure! payload)
+
+                "record-word-boundary"
+                (handle-word-boundary! payload)
+
+                "align-audio-start"
+                (handle-audio-started! payload)
+
+                "align-audio-time"
+                (handle-audio-time! payload)
+
+                "update-word-timings"
+                (update-word-timings! payload)
+
+                "stop"
+                (stop-local! (:reason action) (:remove? action))
+
+                "reset-state"
+                (do
+                  (reset! state-atom (state/config->state nil))
+                  (emit-event {:type "lipSyncConfigChanged"
+                               :agency "lipSync"
+                               :state @state-atom}))
+
+                (emit-event {:type "error"
+                             :agency "lipSync"
+                             :message (str "Unknown LipSync planner action: " (:op action))})))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
-                      type (:type payload)
                       plan (goap/plan-command payload {:speaking (:speaking @state-atom)})]
                   ;; Every command produces an input echo and a plan event before
                   ;; any mutation. That makes failed/ignored commands observable
@@ -443,49 +488,8 @@
                     (emit-event {:type "error"
                                  :agency "lipSync"
                                  :message (plan-failure-message plan)})
-                    (case type
-                      "configure"
-                      (do
-                        (swap! state-atom state/configure (:config payload))
-                        (emit-event {:type "lipSyncConfigChanged"
-                                     :agency "lipSync"
-                                     :state @state-atom}))
-
-                      "startText"
-                      (start-text! payload)
-
-                      "startTimeline"
-                      (start-timeline! (:timeline payload))
-
-                      "processAzureVisemes"
-                      (process-azure! payload)
-
-                      "wordBoundary"
-                      (handle-word-boundary! payload)
-
-                      "audioStarted"
-                      (handle-audio-started! payload)
-
-                      "audioTime"
-                      (handle-audio-time! payload)
-
-                      "updateWordTimings"
-                      (update-word-timings! payload)
-
-                      "stop"
-                      (stop-local! "requested" true)
-
-                      "reset"
-                      (do
-                        (stop-local! "reset" true)
-                        (reset! state-atom (state/config->state nil))
-                        (emit-event {:type "lipSyncConfigChanged"
-                                     :agency "lipSync"
-                                     :state @state-atom}))
-
-                      (emit-event {:type "error"
-                                   :agency "lipSync"
-                                   :message (str "Unknown LipSync command: " type)}))))))]
+                    (doseq [action (:actions plan)]
+                      (run-action! action payload))))))]
       (reset! agency-scheduler (scheduler/create-scheduler {:emit-event emit-event
                                                             :on-finished finish-local!}))
       #js {:dispatch dispatch!

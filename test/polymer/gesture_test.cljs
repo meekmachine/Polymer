@@ -1,5 +1,5 @@
 (ns polymer.gesture-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [polymer.core :as polymer]))
 
 (def wave-emoji "👋")
@@ -175,6 +175,40 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest gesture-completion-clears-active-snippet-capacity
+  (async done
+         (let [quick-wave (assoc wave-gesture :durationMs 80)
+               quick-point (assoc point-gesture :durationMs 80)
+               agency (polymer/createGestureAgency
+                       (clj->js {:replaceActive false
+                                 :maxActive 1
+                                 :gestures {"wave" quick-wave
+                                            "point" quick-point}}))
+               events (domain-events agency)]
+           (.dispatch ^js agency #js {:type "playGesture" :gestureId "wave"})
+           (js/setTimeout
+            (fn []
+              (try
+                (.dispatch ^js agency #js {:type "playGesture" :gestureId "point"})
+                (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
+                      completed-remove (some #(when (and (= "animation.requestRemoveSnippet" (:type %))
+                                                         (= "completed" (:reason %)))
+                                                %)
+                                             @(:events events))]
+                  (is completed-remove)
+                  (is (= 2 (count (scheduled-requests events))))
+                  (is (= 2 (:scheduledCount snapshot)))
+                  (is (= 1 (:removedCount snapshot)))
+                  (is (= 1 (count (:activeSnippets snapshot)))))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  ((:unsubscribe events))
+                  (.dispose ^js agency)
+                  (throw error))))
+            180))))
+
 (deftest gesture-configure-can-refresh-library
   (let [agency (polymer/createGestureAgency nil)
         events (domain-events agency)]
@@ -239,3 +273,28 @@
     (unsubscribe)
     (.dispose ^js gesture)
     (.dispose ^js animation)))
+
+(deftest character-network-routes-gesture-to-animation-agency
+  (let [calls (atom [])
+        system (polymer/createCharacterAgencies
+                (clj->js {:animation {:runtime (make-runtime calls)}
+                          :gesture {:gestures {"wave" wave-gesture}
+                                    :emojiMappings {wave-emoji "wave"}}}))
+        events (domain-events system)
+        effects (effect-events system)]
+    (is (.agency ^js system "gesture"))
+    (.dispatch ^js system #js {:agency "gesture"
+                               :command #js {:type "playEmoji"
+                                             :emoji wave-emoji}})
+    (let [snapshot (js->clj (.snapshot ^js system) :keywordize-keys true)]
+      (is (some #(= "gestureScheduled" (:type %)) @(:events events)))
+      (is (some #(and (= "animation.requestScheduleSnippet" (:type %))
+                      (= "gesture" (:agency %)))
+                @(:events events)))
+      (is (some #(= "animationSnippetScheduled" (:type %)) @(:events events)))
+      (is (= "playTypedSnippet" (:method (first @calls))))
+      (is (= "gesture" (get-in (first @calls) [:options :sourceAgency])))
+      (is (= 1 (get-in snapshot [:gesture :scheduledCount]))))
+    ((:unsubscribe events))
+    ((:unsubscribe effects))
+    (.dispose ^js system)))

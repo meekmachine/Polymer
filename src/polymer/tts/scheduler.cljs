@@ -26,6 +26,7 @@
 (defn create-scheduler []
   (let [start-fallbacks (atom {})
         boundary-frames (atom {})
+        active-session (atom nil)
         queue (atom [])
         disposed? (atom false)]
     (letfn [(enqueue! [effect]
@@ -52,7 +53,22 @@
             (stop-session! [session-id]
               (cancel-start-fallback! session-id)
               (cancel-boundaries! session-id))]
-      {:schedule-start-fallback
+      {:start-session
+       (fn [session-id engine snippet-name]
+         (when-not @disposed?
+           ;; Provider callbacks can arrive late, but the scheduler records the
+           ;; accepted session before browser/backend work begins. Stop/reset can
+           ;; then cancel the active scheduled work from one place.
+           (reset! active-session {:sessionId session-id
+                                   :engine engine
+                                   :snippetName snippet-name})
+           (enqueue! {:type "ttsSessionStarted"
+                      :agency "tts"
+                      :sessionId session-id
+                      :engine engine
+                      :snippetName snippet-name})))
+
+       :schedule-start-fallback
        (fn [session-id delay-ms callback]
          (when-not @disposed?
            (cancel-start-fallback! session-id)
@@ -106,12 +122,28 @@
        (fn [session-id]
          (stop-session! session-id))
 
+       :stop-active-session
+       (fn [reason]
+         (when-not @disposed?
+           (let [session @active-session
+                 session-id (:sessionId session)]
+             (when session-id
+               (stop-session! session-id)
+               (enqueue! {:type "ttsSessionStopped"
+                          :agency "tts"
+                          :sessionId session-id
+                          :engine (:engine session)
+                          :snippetName (:snippetName session)
+                          :reason reason}))
+             (reset! active-session nil))))
+
        :stop-all
        (fn []
          (doseq [session-id (keys @start-fallbacks)]
            (cancel-start-fallback! session-id))
          (doseq [session-id (keys @boundary-frames)]
-           (cancel-boundaries! session-id)))
+           (cancel-boundaries! session-id))
+         (reset! active-session nil))
 
        :queue
        (fn []
@@ -124,6 +156,7 @@
            (clear-timeout! timer))
          (doseq [frame (vals @boundary-frames)]
            (clear-frame! frame))
+         (reset! active-session nil)
          (reset! start-fallbacks {})
          (reset! boundary-frames {})
          (reset! queue []))})))
