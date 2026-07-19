@@ -24,7 +24,7 @@ for (const scriptName of forbiddenConsumerScripts) {
   }
 }
 
-for (const field of ['main', 'types']) {
+for (const field of ['main', 'module', 'types']) {
   const value = packageJson[field];
   if (typeof value !== 'string' || !value.startsWith('dist/')) {
     errors.push(`package.json "${field}" must point at a checked-in dist artifact.`);
@@ -40,6 +40,11 @@ for (const field of ['main', 'types']) {
 const files = Array.isArray(packageJson.files) ? packageJson.files : [];
 if (!files.includes('dist')) {
   errors.push('package.json "files" must include "dist" so packed/Git installs expose prebuilt JS.');
+}
+
+const rootExport = packageJson.exports?.['.'];
+if (!rootExport || rootExport.import !== './dist/index.mjs' || rootExport.require !== './dist/index.cjs') {
+  errors.push('package.json "exports[.]" must expose dist/index.mjs for ESM imports and dist/index.cjs for CJS requires.');
 }
 
 if (errors.length > 0) {

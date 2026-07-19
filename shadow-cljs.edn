@@ -3,7 +3,7 @@
  :builds
  {:npm
   {:target :node-library
-   :output-to "dist/index.js"
+   :output-to "dist/index.cjs"
    :exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
              :createAnimationService polymer.core/createAnimationService
