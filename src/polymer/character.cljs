@@ -1,6 +1,7 @@
 (ns polymer.character
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
+            [polymer.eye-head.agency :as eye-head]
             [polymer.gaze.agency :as gaze]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
@@ -26,6 +27,7 @@
         animation-agency (animation/create-animation-agency (when config (aget config "animation")))
         blink-agency (blink/create-blink-agency (when config (aget config "blink")))
         gaze-agency (gaze/create-gaze-agency (when config (aget config "gaze")))
+        eye-head-agency (eye-head/create-eye-head-tracking-agency (when config (aget config "eyeHeadTracking")))
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
@@ -65,6 +67,7 @@
                   (case (:agency payload)
                     "blink" (.dispatch ^js blink-agency (clj->js (:command payload)))
                     "gaze" (.dispatch ^js gaze-agency (clj->js (:command payload)))
+                    "eyeHeadTracking" (.dispatch ^js eye-head-agency (clj->js (:command payload)))
                     "animation" (.dispatch ^js animation-agency (clj->js (:command payload)))
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
                     "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
@@ -76,6 +79,7 @@
             (snapshot! []
               (clj->js {:blink (js->clj (.snapshot ^js blink-agency) :keywordize-keys true)
                         :gaze (js->clj (.snapshot ^js gaze-agency) :keywordize-keys true)
+                        :eyeHeadTracking (js->clj (.snapshot ^js eye-head-agency) :keywordize-keys true)
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
                         :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :prosodic (js->clj (.snapshot ^js prosodic-agency) :keywordize-keys true)
@@ -93,6 +97,28 @@
                              (clj->js {:type "blinkFast"
                                        :sourceAgency "blink"
                                        :plan (:plan event)})))
+
+                nil))
+
+            (route-gaze-event! [event]
+              (case (:type event)
+                ("eyeHeadTracking.requestGaze"
+                 "eyeHeadTracking.requestReset"
+                 "eyeHeadTracking.requestCancel")
+                (.dispatch ^js eye-head-agency (clj->js event))
+
+                nil))
+
+            (route-eye-head-event! [event]
+              (case (:type event)
+                "animation.requestScheduleSnippet"
+                (schedule-animation! (:agency event) (:snippet event) (:options event))
+
+                "animation.requestRemoveSnippet"
+                (.dispatch ^js animation-agency
+                           (clj->js {:type "removeSnippet"
+                                     :sourceAgency (:agency event)
+                                     :name (:name event)}))
 
                 nil))
 
@@ -168,8 +194,18 @@
       (track! (.subscribeEffects ^js blink-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
       (track! (.subscribeEvents ^js gaze-agency
-                                #(emit-event (js->clj % :keywordize-keys true))))
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-gaze-event! payload)
+                                    (emit-event payload)))))
       (track! (.subscribeEffects ^js gaze-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js eye-head-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-eye-head-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js eye-head-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
       (track! (.subscribeEvents ^js tts-agency
                                 (fn [event]
@@ -202,6 +238,7 @@
                        "animation" animation-agency
                        "blink" blink-agency
                        "gaze" gaze-agency
+                       "eyeHeadTracking" eye-head-agency
                        "tts" tts-agency
                        "lipSync" lipsync-agency
                        "prosodic" prosodic-agency
@@ -220,6 +257,7 @@
                         (reset! unsubscribers [])
                         (.dispose ^js blink-agency)
                         (.dispose ^js gaze-agency)
+                        (.dispose ^js eye-head-agency)
                         (.dispose ^js tts-agency)
                         (.dispose ^js lipsync-agency)
                         (.dispose ^js prosodic-agency)
