@@ -5,10 +5,7 @@
 ;; these helpers from Polymer, while Polymer remains free to change the concrete
 ;; Embody/Three.js implementation behind this boundary later.
 
-(def Embody (or (aget embody "Embody")
-                (aget embody "LoomLargeThree")
-                (aget embody "Loom3Three")
-                (aget embody "Loom3")))
+(def Embody (aget embody "Embody"))
 (def BLENDING_MODES (or (.-BLENDING_MODES embody)
                         (.-THREE_BLENDING_MODES embody)))
 (def THREE_BLENDING_MODES (.-THREE_BLENDING_MODES embody))

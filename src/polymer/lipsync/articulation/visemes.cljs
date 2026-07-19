@@ -3,7 +3,7 @@
             [polymer.lipsync.state :as state]))
 
 ;; Polymer keeps the canonical 15-slot CC4/ARKit viseme order beside the CLJS
-;; lip-sync code so numeric curves line up with Embody/Loom3. This mirrors the
+;; lip-sync code so numeric curves line up with Embody. This mirrors the
 ;; installed Embody export:
 ;; ["AE" "Ah" "B_M_P" "Ch_J" "EE" "Er" "F_V" "Ih" "K_G_H_NG" "Oh" "R"
 ;;  "S_Z" "T_L_D_N" "Th" "W_OO"].
