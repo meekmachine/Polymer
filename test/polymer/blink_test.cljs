@@ -64,9 +64,11 @@
         effects (effect-events agency)]
     (.triggerBlink ^js agency)
     (let [animation-request (some #(when (= "animation.requestScheduleSnippet" (:type %)) %) @(:events events))
+          queue (js->clj (.schedulerQueue ^js agency) :keywordize-keys true)
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is animation-request)
       (is (= "blink" (:agency animation-request)))
+      (is (= ["blinkScheduled"] (mapv :type queue)))
       (is (= 1 (get-in animation-request [:snippet :metadata :blinkCount])))
       (is (empty? @(:events effects)))
       (is (= 1 (:scheduledBlinkCount snapshot))))

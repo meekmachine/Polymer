@@ -24,6 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:install-surface
+      - run: pnpm check:architecture
       - run: pnpm build
       - run: pnpm test
       - run: git diff --exit-code -- dist

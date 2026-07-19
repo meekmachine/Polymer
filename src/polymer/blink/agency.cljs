@@ -129,6 +129,9 @@
              :setBurstCount (fn [value] (dispatch! (js-command "setBurstCount" value)))
              :setBurstGap (fn [value] (dispatch! (js-command "setBurstGap" value)))
              :reset (fn [] (dispatch! #js {:type "reset"}))
+             :schedulerQueue (fn []
+                               (when-let [agency-scheduler @scheduler-atom]
+                                 (clj->js ((:queue agency-scheduler)))))
              :dispose (fn []
                         (when-not @disposed?
                           (reset! disposed? true)
