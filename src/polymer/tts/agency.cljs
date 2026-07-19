@@ -112,7 +112,7 @@
                                                                   (:webSpeechDriftThresholdSec config))}})))
 
             (stop-session! [reason]
-              ((:stop-all session-scheduler))
+              ((:stop-active-session session-scheduler) reason)
               (stop-web-speech!)
               (cleanup-audio! resources)
               (emit-lipsync! {:type "stop" :reason reason})
@@ -294,10 +294,12 @@
                 (emit-status!)
                 (if-not (:ok plan)
                   (emit-error! (plan-failure-message plan))
-                  (case engine
-                    "azure" (start-azure! (session-id) command snippet-name)
-                    "webSpeech" (start-web-speech! (session-id) command snippet-name)
-                    (emit-error! (str "Unsupported TTS engine: " engine))))))
+                  (do
+                    ((:start-session session-scheduler) (session-id) engine snippet-name)
+                    (case engine
+                      "azure" (start-azure! (session-id) command snippet-name)
+                      "webSpeech" (start-web-speech! (session-id) command snippet-name)
+                      (emit-error! (str "Unsupported TTS engine: " engine)))))))
 
             (load-voices! [engine]
               (let [config (:config @state-atom)
