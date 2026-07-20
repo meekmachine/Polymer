@@ -1,6 +1,7 @@
 (ns polymer.lipsync-test
   (:require [cljs.test :refer [deftest is testing]]
             [polymer.core :as polymer]
+            [polymer.lipsync.articulation.lip :as lip]
             [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.articulation.tongue :as tongue]
             [polymer.lipsync.articulation.visemes :as visemes]
@@ -928,3 +929,168 @@
     (is (some #(= "cleanupSnippet" (:method %)) @calls))
     ((:unsubscribe events))
     (.dispose ^js system)))
+
+(deftest jali-lip-planner-keeps-sibilants-narrower-than-open-vowels
+  (let [chess (build-text-fixture "chess")
+        duke (build-text-fixture "duke")
+        sibilant (viseme-channel chess (:S_Z visemes/canonical-visemes))
+        open-vowel (viseme-channel duke (:Ah visemes/canonical-visemes))]
+    (is sibilant)
+    (is open-vowel)
+    (is (<= (channel-max-intensity sibilant) 0.72))
+    (is (>= (channel-max-intensity open-vowel) 0.85))))
+
+(deftest jali-lip-planner-skips-pause-mouth-beats
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.45
+                   :offsetMs 0
+                   :durationMs 120}
+                  {:visemeId (:B_M_P visemes/canonical-visemes)
+                   :phoneme "PAUSE_COMMA"
+                   :phonemeClass "pause"
+                   :phonemeClasses ["pause"]
+                   :jawActivation 0
+                   :offsetMs 140
+                   :durationMs 80}
+                  {:visemeId (:EE visemes/canonical-visemes)
+                   :phoneme "IY"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.2
+                   :offsetMs 240
+                   :durationMs 100}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:pause")
+        bilabial (viseme-channel snippet (:B_M_P visemes/canonical-visemes))
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        ee (viseme-channel snippet (:EE visemes/canonical-visemes))]
+    (is ah)
+    (is ee)
+    (is (nil? bilabial))))
+
+(deftest jali-vowels-do-not-smear-through-bilabial-closure
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.5
+                   :offsetMs 0
+                   :durationMs 90}
+                  {:visemeId (:B_M_P visemes/canonical-visemes)
+                   :phoneme "P"
+                   :phonemeClass "bilabial"
+                   :phonemeClasses ["bilabial" "obstruent"]
+                   :jawActivation 0
+                   :offsetMs 90
+                   :durationMs 50}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:no-smear")
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        bilabial (viseme-channel snippet (:B_M_P visemes/canonical-visemes))]
+    (is ah)
+    (is bilabial)
+    (is (>= (sample-channel bilabial 0.11) 0.90))
+    (is (<= (sample-channel ah 0.11) 0.05))))
+
+(deftest jali-lip-heavy-sounds-anticipate-neighbors
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.4
+                   :offsetMs 0
+                   :durationMs 80}
+                  {:visemeId (:W_OO visemes/canonical-visemes)
+                   :phoneme "W"
+                   :phonemeClass "glide"
+                   :phonemeClasses ["glide" "lip-heavy"]
+                   :jawActivation 0.3
+                   :offsetMs 80
+                   :durationMs 100}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:lip-heavy")
+        rounded (viseme-channel snippet (:W_OO visemes/canonical-visemes))]
+    (is rounded)
+    (is (> (sample-channel rounded 0.070) 0.05))
+    (is (>= (channel-max-intensity rounded) 0.85))))
+
+(deftest jali-speech-style-and-lip-scale-modulate-amplitudes
+  (let [base (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 1 :jawScale 1})
+        mumbled (build-text-fixture "hello" {:speechStyle "mumbled" :lipScale 1 :jawScale 1})
+        emphasized (build-text-fixture "hello" {:speechStyle "emphasized" :lipScale 1 :jawScale 1})
+        soft-lips (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 0.4 :jawScale 1})
+        base-lip (channel-max-intensity (viseme-channel base (:Ah visemes/canonical-visemes)))
+        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:Ah visemes/canonical-visemes)))
+        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:Ah visemes/canonical-visemes)))
+        soft-lip (channel-max-intensity (viseme-channel soft-lips (:Ah visemes/canonical-visemes)))
+        base-jaw (channel-max-intensity (jaw-channel base))
+        mumbled-jaw (channel-max-intensity (jaw-channel mumbled))]
+    (is (> base-lip 0))
+    (is (< mumbled-lip (* base-lip 0.55)))
+    (is (> emphasized-lip base-lip))
+    (is (< soft-lip (* base-lip 0.55)))
+    (is (< mumbled-jaw (* base-jaw 0.55)))
+    (is (= "mumbled" (get-in mumbled [:metadata :speechStyle])))))
+
+(deftest jali-audio-features-scale-jaw-and-lip-without-changing-structure
+  (let [quiet [{:visemeId (:Ah visemes/canonical-visemes)
+                :phoneme "AA"
+                :phonemeClass "vowel"
+                :phonemeClasses ["vowel"]
+                :jawActivation 0.5
+                :energy 0.4
+                :offsetMs 0
+                :durationMs 140}
+               {:visemeId (:S_Z visemes/canonical-visemes)
+                :phoneme "S"
+                :phonemeClass "sibilant"
+                :phonemeClasses ["sibilant" "fricative"]
+                :jawActivation 0.06
+                :highFreqEnergy 0.45
+                :offsetMs 150
+                :durationMs 90}]
+        loud [{:visemeId (:Ah visemes/canonical-visemes)
+               :phoneme "AA"
+               :phonemeClass "vowel"
+               :phonemeClasses ["vowel"]
+               :jawActivation 0.5
+               :energy 1.6
+               :offsetMs 0
+               :durationMs 140}
+              {:visemeId (:S_Z visemes/canonical-visemes)
+               :phoneme "S"
+               :phonemeClass "sibilant"
+               :phonemeClasses ["sibilant" "fricative"]
+               :jawActivation 0.06
+               :highFreqEnergy 1.7
+               :offsetMs 150
+               :durationMs 90}]
+        quiet-snippet (snippet/build-lipsync-snippet quiet {:intensity 1 :jawScale 1} "voice:quiet")
+        loud-snippet (snippet/build-lipsync-snippet loud {:intensity 1 :jawScale 1} "voice:loud")]
+    (is (= (count (:channels quiet-snippet)) (count (:channels loud-snippet))))
+    (is (> (channel-max-intensity (jaw-channel loud-snippet))
+           (channel-max-intensity (jaw-channel quiet-snippet))))
+    (is (> (channel-max-intensity (viseme-channel loud-snippet (:S_Z visemes/canonical-visemes)))
+           (channel-max-intensity (viseme-channel quiet-snippet (:S_Z visemes/canonical-visemes)))))))
+
+(deftest jali-lip-planner-runs-without-agency
+  (let [events (snippet/normalize-events
+                [{:visemeId (:F_V visemes/canonical-visemes)
+                  :phoneme "F"
+                  :phonemeClass "labiodental"
+                  :phonemeClasses ["labiodental" "fricative"]
+                  :jawActivation 0.06
+                  :offsetMs 0
+                  :durationMs 80}])
+        curves (lip/build-lip-curves
+                events
+                {:intensity 1 :lipScale 1 :speechStyle "conversational"})]
+    (is (seq (get curves (str (:F_V visemes/canonical-visemes)))))
+    (is (seq (get curves "32")))
+    (is (nil? (get curves "26")))))

@@ -10,7 +10,11 @@
   {:intensity 1
    :speechRate 1
    :jawScale 1
+   :lipScale 1
+   :articulationScale 1
    :tongueScale 1
+   :speechStyle "conversational"
+   :emotionIntensity 1
    :rampMs 15
    :holdMs 40
    :priority 50
@@ -53,11 +57,24 @@
   ;; This is the only place public config gets clamped. The rest of the agency
   ;; can then treat config as ordinary data, whether it came from LoomLarge UI,
   ;; another Polymer agency, or a worker message.
-  (let [merged (merge default-config config)]
+  (let [merged (merge default-config config)
+        speech-style (let [raw (or (:speechStyle merged) (:speech_style merged))]
+                       (if (string? raw)
+                         (str/lower-case (str/trim raw))
+                         (:speechStyle default-config)))
+        known-styles #{"mumbled" "relaxed" "conversational" "emphasized" "shouted"}]
     {:intensity (clamp 0 2 (number-or (:intensity merged) (:intensity default-config)))
      :speechRate (clamp 0.2 3 (number-or (:speechRate merged) (:speechRate default-config)))
      :jawScale (clamp 0 2 (number-or (:jawScale merged) (:jawScale default-config)))
+     :lipScale (clamp 0 2 (number-or (:lipScale merged) (:lipScale default-config)))
+     :articulationScale (clamp 0 2 (number-or (:articulationScale merged)
+                                              (:articulationScale default-config)))
      :tongueScale (clamp 0 2 (number-or (:tongueScale merged) (:tongueScale default-config)))
+     :speechStyle (if (contains? known-styles speech-style)
+                    speech-style
+                    (:speechStyle default-config))
+     :emotionIntensity (clamp 0.5 1.6 (number-or (:emotionIntensity merged)
+                                                 (:emotionIntensity default-config)))
      :rampMs (clamp 0 200 (number-or (:rampMs merged) (:rampMs default-config)))
      :holdMs (clamp 0 500 (number-or (:holdMs merged) (:holdMs default-config)))
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
