@@ -89,17 +89,62 @@
       (str "TTS plan failed: " reason))))
 
 (defn scalar->azure-percent
-  "Convert UI scalar rate/pitch into Azure SSML percent strings."
+  "Convert UI scalar rate into Azure SSML percent strings."
   [value]
   (let [percent (js/Math.round (* (- value 1) 100))]
     (if (pos? percent)
       (str "+" percent "%")
       (str percent "%"))))
 
+(defn scalar->azure-pitch-percent
+  "Convert UI scalar pitch into Azure SSML percent strings.
+
+  Match Latticework's pitch mapping (* 50), not the rate mapping (* 100)."
+  [value]
+  (let [percent (js/Math.round (* (- value 1) 50))]
+    (if (pos? percent)
+      (str "+" percent "%")
+      (str percent "%"))))
+
+(defn present-string?
+  "Return true for non-blank strings."
+  [value]
+  (and (string? value) (pos? (count (.trim value)))))
+
+(defn azure-voice-name
+  "Resolve Azure voice with blank-safe fallbacks."
+  [config command]
+  (or (when (present-string? (:voiceName command)) (:voiceName command))
+      (when (present-string? (:azureVoiceName config)) (:azureVoiceName config))
+      "en-US-JennyNeural"))
+
+(defn azure-style
+  "Resolve optional Azure style; blank becomes nil for the backend."
+  [config command]
+  (let [style (or (:style command) (:azureStyle config))]
+    (when (present-string? style) style)))
+
 (defn backend-url
   "Resolve backend URL from command first, then agency config."
   [config command]
   (state/string-or (:backendUrl command) (:backendUrl config)))
+
+(defn http-error-detail
+  "Prefer FastAPI-style detail/body text over a bare statusText."
+  [status status-text body]
+  (let [detail (try
+                 (let [parsed (js/JSON.parse body)
+                       d (aget parsed "detail")]
+                   (cond
+                     (string? d) d
+                     d (.stringify js/JSON d)
+                     :else nil))
+                 (catch :default _ nil))]
+    (str "HTTP " status " "
+         (or detail
+             (when (and (string? body) (pos? (count body))) body)
+             status-text
+             "request failed"))))
 
 (defn json-request
   "Make a JSON request through the browser fetch API."
@@ -109,7 +154,13 @@
         (.then (fn [response]
                  (if (.-ok response)
                    (.json response)
-                   (throw (js-error (str "HTTP " (.-status response) " " (.-statusText response))))))))
+                   (-> (.text response)
+                       (.catch (fn [_] ""))
+                       (.then (fn [body]
+                                (throw (js-error (http-error-detail
+                                                  (.-status response)
+                                                  (.-statusText response)
+                                                  body))))))))))
     (js/Promise.reject (js-error "fetch is not available in this JavaScript runtime"))))
 
 (defn post-json
@@ -292,13 +343,18 @@
     (promise-resolve (custom (clj->js command)))
     (let [base (backend-url config command)]
       (if (pos? (count base))
-        (post-json (str base "/api/azure-tts/synthesize")
-                   {:text (:text command)
-                    :voice_name (or (:voiceName command) (:azureVoiceName config))
-                    :style (let [style (or (:style command) (:azureStyle config))]
-                             (when (pos? (count style)) style))
-                    :rate (scalar->azure-percent (or (:rate command) (:rate config)))
-                    :pitch (scalar->azure-percent (or (:pitch command) (:pitch config)))})
+        (let [style (azure-style config command)
+              style-degree (cond
+                             (state/finite-number? (:styleDegree command)) (:styleDegree command)
+                             (state/finite-number? (:azureStyleDegree config)) (:azureStyleDegree config)
+                             :else nil)
+              body (cond-> {:text (:text command)
+                            :voice_name (azure-voice-name config command)
+                            :rate (scalar->azure-percent (or (:rate command) (:rate config)))
+                            :pitch (scalar->azure-pitch-percent (or (:pitch command) (:pitch config)))}
+                     style (assoc :style style)
+                     (some? style-degree) (assoc :style_degree style-degree))]
+          (post-json (str base "/api/azure-tts/synthesize") body))
         (js/Promise.reject (js-error "Azure backendUrl is not configured"))))))
 
 (defn extract-boundary-word

@@ -17,9 +17,11 @@
     (min maximum (max minimum candidate))))
 
 (defn string-or
-  "Keep string configuration values stable and avoid leaking nil into JS events."
+  "Keep non-blank string configuration values; treat nil/blank as missing."
   [value fallback]
-  (if (string? value) value fallback))
+  (if (and (string? value) (pos? (count (.trim value))))
+    value
+    fallback))
 
 (defn bool-or
   "Normalize optional booleans without treating false as missing."

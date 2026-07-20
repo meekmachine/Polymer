@@ -3,6 +3,7 @@
             [polymer.tts.azure :as azure]
             [polymer.tts.planner :as planner]
             [polymer.tts.runtime :refer [azure-cache-key
+                                          azure-voice-name
                                           backend-url
                                           callback-event
                                           cleanup-audio!
@@ -17,6 +18,7 @@
                                           prime-audio!
                                           remember-cache
                                           scalar->azure-percent
+                                          scalar->azure-pitch-percent
                                           speak-web-speech!
                                           speech-synthesis*
                                           synthesize-azure!
@@ -197,12 +199,15 @@
             (start-azure! [id command snippet-name]
               (let [config (:config @state-atom)
                     text (:text command)
-                    voice-name (or (:voiceName command) (:azureVoiceName config))
-                    style (or (:style command) (:azureStyle config))
+                    voice-name (azure-voice-name config command)
+                    style (let [raw (or (:style command) (:azureStyle config))]
+                            (when (and (string? raw) (pos? (count (.trim raw)))) raw))
                     rate (or (:rate command) (:rate config))
                     pitch (or (:pitch command) (:pitch config))
                     volume (or (:volume command) (:volume config))
-                    cache-key (azure-cache-key text voice-name style (scalar->azure-percent rate) (scalar->azure-percent pitch))
+                    cache-key (azure-cache-key text voice-name style
+                                               (scalar->azure-percent rate)
+                                               (scalar->azure-pitch-percent pitch))
                     cached (get @azure-cache cache-key)
                     synth-promise (if cached
                                     (js/Promise.resolve (clj->js cached))
@@ -219,12 +224,17 @@
                     (.then (fn [raw]
                                ;; Provider/backend shapes are normalized before
                                ;; any playback or LipSync command is emitted.
-                             (let [payload (azure/normalize-azure-synthesis (js->clj raw :keywordize-keys true))]
+                             (let [payload (azure/normalize-azure-synthesis
+                                            (if (map? raw)
+                                              raw
+                                              (js->clj raw :keywordize-keys true)))]
                                (when-not cached
                                  (swap! azure-cache remember-cache cache-key payload (:azureCacheLimit config)))
-                               (if (and (:audioBase64 payload) (seq (:visemes payload)))
+                               ;; Audio is required. Visemes help LipSync but must not
+                               ;; block playback when Azure returns audio alone.
+                               (if (pos? (count (str (:audioBase64 payload))))
                                  payload
-                                 (throw (js-error "Azure TTS returned no usable audio or viseme payload"))))))
+                                 (throw (js-error "Azure TTS returned no usable audio payload"))))))
                     (.then (fn [payload]
                              (when (active-session? id)
                                (play-azure-audio! config resources

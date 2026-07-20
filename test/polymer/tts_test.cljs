@@ -3,7 +3,9 @@
             [polymer.core :as polymer]
             [polymer.lipsync.state :as lipsync-state]
             [polymer.tts.azure :as azure]
-            [polymer.tts.planner :as planner]))
+            [polymer.tts.planner :as planner]
+            [polymer.tts.runtime :as runtime]
+            [polymer.tts.state :as state]))
 
 ;; These tests keep the TTS provider boundary honest.
 ;; Provider side effects are injected here; production defaults live in Polymer.
@@ -131,6 +133,25 @@
            (planner/plan-command idle-state load-command)))
     (is (= ["advance-session" "cancel-voice-loads" "stop-active-session" "reset"]
            (map :op (planner/plan-command active-state reset-command))))))
+
+(deftest azure-config-ignores-blank-voice-and-backend-overrides
+  (testing "blank strings do not wipe Azure voice defaults"
+    (let [normalized (state/normalize-config {:azureVoiceName ""
+                                              :backendUrl ""
+                                              :voiceName ""})]
+      (is (= "en-US-JennyNeural" (:azureVoiceName normalized)))
+      (is (= "" (:backendUrl normalized)))
+      (is (= "" (:voiceName normalized)))))
+  (testing "azure-voice-name falls back when command voice is blank"
+    (is (= "en-US-JennyNeural"
+           (runtime/azure-voice-name {:azureVoiceName ""} {:voiceName ""})))
+    (is (= "en-US-AriaNeural"
+           (runtime/azure-voice-name {:azureVoiceName "en-US-AriaNeural"}
+                                     {:voiceName ""}))))
+  (testing "pitch mapping matches Latticework (* 50)"
+    (is (= "0%" (runtime/scalar->azure-pitch-percent 1)))
+    (is (= "+25%" (runtime/scalar->azure-pitch-percent 1.5)))
+    (is (= "-25%" (runtime/scalar->azure-pitch-percent 0.5)))))
 
 (deftest azure-provider-helpers-keep-provider-fields-and-build-lipsync-command
   (let [visemes (azure/normalize-provider-visemes [{:viseme_id 3 :audio_offset 0.2}
