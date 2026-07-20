@@ -75,6 +75,35 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest tts-status-controls-agent-speech-filtering-and-interruption-facts
+  (let [agency (transcription/create-transcription-agency nil)
+        events (collect-events agency)]
+    (.start ^js agency)
+    (.dispatch ^js agency #js {:type "ttsSpeechStarted"})
+    (.dispatch ^js agency #js {:type "providerFinal"
+                               :text "agent echo"
+                               :source "tts"})
+    (.dispatch ^js agency #js {:type "providerFinal"
+                               :text "user interruption"
+                               :source "microphone"})
+    (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (:agentSpeaking snapshot))
+      (is (= 1 (:ignoredCount snapshot)))
+      (is (= 1 (:interruptionCount snapshot)))
+      (is (some #(and (= "transcription.ignored" (:type %))
+                      (= "agent-speech" (:reason %)))
+                @(:events events)))
+      (is (some #(and (= "transcription.interruption" (:type %))
+                      (= "user interruption" (:text %)))
+                @(:events events)))
+      (is (< (.indexOf (mapv :type @(:events events)) "transcription.interruption")
+             (.indexOf (mapv :type @(:events events)) "transcription.final"))))
+    (.dispatch ^js agency #js {:type "ttsSpeechStopped"})
+    (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (false? (:agentSpeaking snapshot))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest disposed-transcription-stops-emitting
   (let [agency (transcription/create-transcription-agency nil)
         events (collect-events agency)]

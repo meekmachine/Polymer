@@ -1,6 +1,5 @@
 (ns polymer.conversation.planner
-  (:require [clojure.string :as str]
-            [polymer.conversation.state :as state]))
+  (:require [polymer.conversation.domain :as domain]))
 
 ;; Conversation planning stays agency-local. It decides what this agency wants
 ;; to do with a transcript, provider result, or interruption, then hands ordered
@@ -25,28 +24,19 @@
   [command]
   (:type command))
 
-(defn clean-text
-  [value]
-  (let [text (str/trim (or value ""))]
-    (when (pos? (count text))
-      text)))
-
-(defn user-text
-  [command]
-  (clean-text (or (:text command)
-                  (:transcript command)
-                  (:utterance command))))
-
-(defn agent-text
-  [command]
-  (clean-text (or (:agentText command)
-                  (:responseText command)
-                  (:text command)
-                  (:utterance command))))
-
 (defn request-id
   [prefix now-ms]
   (str prefix ":" now-ms ":" (rand-int 1000000)))
+
+(defn stale-response?
+  [command state]
+  (or (:interrupted state)
+      (nil? (:pendingResponse state))
+      (and (:turnId command)
+           (not= (:turnId command) (:turnId state)))
+      (and (:requestId command)
+           (not= (:requestId command)
+                 (:requestId (:pendingResponse state))))))
 
 (defn failure-step
   [command]
@@ -57,22 +47,22 @@
      :commandType (command-type command)}
 
     (and (#{"transcript.final" "transcriptFinal" "userUtterance"} (command-type command))
-         (not (user-text command)))
+         (not (domain/user-text command)))
     {:op "fail"
      :reason "missing-user-text"
      :commandType (command-type command)}
 
     (and (#{"agentUtterance" "responseReady"} (command-type command))
-         (not (agent-text command)))
+         (not (domain/agent-text command)))
     {:op "fail"
      :reason "missing-agent-text"
      :commandType (command-type command)}))
 
 (defn transcript-steps
   [command state now-ms]
-  (let [text (user-text command)
+  (let [text (domain/user-text command)
         source (or (:source command) "transcription")
-        response-text (clean-text (or (:responseText command) (:agentText command)))
+        response-text (domain/clean-text (or (:responseText command) (:agentText command)))
         response-request {:requestId (request-id "conversation:response" now-ms)
                           :text text
                           :source source
@@ -84,9 +74,11 @@
               :source source}
              {:op "emit-user-utterance"
               :text text
-              :source source}
-             {:op "request-response"
-              :request response-request}]
+              :source source}]
+      (get-in state [:config :autoRespond])
+      (conj {:op "request-response"
+             :request response-request})
+
       response-text
       (conj {:op "record-agent-utterance"
              :text response-text
@@ -97,15 +89,21 @@
              :requestId (request-id "conversation:tts" now-ms)}))))
 
 (defn agent-utterance-steps
-  [command now-ms]
-  (let [text (agent-text command)]
-    [{:op "record-agent-utterance"
-      :text text
-      :source (or (:source command) "conversation")}
-     {:op "request-tts"
-      :text text
-      :source (or (:source command) "conversation")
-      :requestId (request-id "conversation:tts" now-ms)}]))
+  [command state now-ms]
+  (let [text (domain/agent-text command)]
+    (if (and (= "responseReady" (:type command))
+             (stale-response? command state))
+      [{:op "ignore-stale-response"
+        :reason "stale-response"
+        :requestId (:requestId command)
+        :turnId (:turnId command)}]
+      [{:op "record-agent-utterance"
+        :text text
+        :source (or (:source command) "conversation")}
+       {:op "request-tts"
+        :text text
+        :source (or (:source command) "conversation")
+        :requestId (request-id "conversation:tts" now-ms)}])))
 
 (defn command-steps
   [command state now-ms]
@@ -128,7 +126,7 @@
       ("transcript.final" "transcriptFinal" "userUtterance")
       (transcript-steps command state now-ms)
       ("agentUtterance" "responseReady")
-      (agent-utterance-steps command now-ms)
+      (agent-utterance-steps command state now-ms)
       "tts.status" [{:op "record-tts-status"
                      :status (:status command)}
                     {:op "publish-status" :status (:status command)}])))

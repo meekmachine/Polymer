@@ -89,8 +89,10 @@
      :parts (:parts normalized)
      :physics (:physics normalized)
      :lastMotion nil
+     :lastPlan nil
      :lastRuntimeRequest nil
      :lastEvent nil
+     :planCount 0
      :motionCount 0
      :runtimeRequestCount 0
      :resetCount 0
@@ -123,6 +125,12 @@
   [state]
   (-> (default-state (:config state))
       (assoc :resetCount (inc (:resetCount state)))))
+
+(defn record-plan
+  [state plan]
+  (-> state
+      (assoc :lastPlan plan)
+      (update :planCount inc)))
 
 (defn record-motion
   [state motion]

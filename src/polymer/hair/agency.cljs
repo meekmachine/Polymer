@@ -30,6 +30,10 @@
                   (emit-input {:type "command"
                                :agency "hair"
                                :command payload})
+                  (swap! state-atom state/record-plan plan)
+                  (emit-event {:type "hairPlanCreated"
+                               :agency "hair"
+                               :plan plan})
                   (when-let [agency-scheduler @scheduler-atom]
                     ((:schedule agency-scheduler) payload plan)))))
             (dispatch-type! [type]

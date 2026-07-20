@@ -12,6 +12,10 @@
              :createTTSAgency polymer.core/createTTSAgency
              :createGestureAgency polymer.core/createGestureAgency
              :createProsodicAgency polymer.core/createProsodicAgency
+             :createConversationAgency polymer.core/createConversationAgency
+             :createTranscriptionAgency polymer.core/createTranscriptionAgency
+             :createHairAgency polymer.core/createHairAgency
+             :createCameraContextAgency polymer.core/createCameraContextAgency
              :createCharacterAgencies polymer.core/createCharacterAgencies}}
 
   :worker

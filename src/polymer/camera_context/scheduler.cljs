@@ -35,13 +35,16 @@
             (schedule-stale! []
               (clear-timeout! stale-timer)
               (when-not @disposed?
-                (let [delay-ms (get-in @state-atom [:config :staleAfterMs])]
+                (let [delay-ms (get-in @state-atom [:config :staleAfterMs])
+                      published-at (:lastPublishedAt @state-atom)]
                   (when (pos? delay-ms)
                     (reset! stale-timer
                             (js/setTimeout
                              (fn []
                                (reset! stale-timer nil)
-                               (when-not @disposed?
+                               (when (and (not @disposed?)
+                                          (nil? @pending-fact)
+                                          (= published-at (:lastPublishedAt @state-atom)))
                                  (enqueue! {:type "invalidateStale"
                                             :agency "cameraContext"
                                             :reason "timeout"})
@@ -63,6 +66,7 @@
               (when-not @disposed?
                 (reset! pending-fact fact)
                 (clear-timeout! publish-timer)
+                (clear-timeout! stale-timer)
                 (let [delay-ms (get-in @state-atom [:config :coalesceMs])]
                   (enqueue! {:type "coalesceCameraFact"
                              :agency "cameraContext"

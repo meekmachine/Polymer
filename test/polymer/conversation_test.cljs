@@ -56,6 +56,43 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest auto-respond-can-record-user-text-without-requesting-provider
+  (let [agency (conversation/create-conversation-agency #js {:autoRespond false})
+        events (collect-events agency)]
+    (.start ^js agency)
+    (.dispatch ^js agency #js {:type "transcriptFinal"
+                               :text "just remember this"})
+    (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (= 1 (:userUtteranceCount snapshot)))
+      (is (some #(= "conversation.userUtterance" (:type %))
+                @(:events events)))
+      (is (not-any? #(= "conversation.requestResponse" (:type %))
+                    @(:events events))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest stale-response-after-interrupt-does-not-request-tts
+  (let [agency (conversation/create-conversation-agency nil)
+        events (collect-events agency)]
+    (.start ^js agency)
+    (.dispatch ^js agency #js {:type "transcriptFinal"
+                               :text "hello"})
+    (let [request (some #(when (= "conversation.requestResponse" (:type %)) %)
+                        @(:events events))]
+      (.interrupt ^js agency "barge-in")
+      (.dispatch ^js agency #js {:type "responseReady"
+                                 :requestId (:requestId request)
+                                 :turnId (:turnId request)
+                                 :text "late response"}))
+    (is (some #(and (= "conversation.ignored" (:type %))
+                    (= "stale-response" (:reason %)))
+              @(:events events)))
+    (is (not-any? #(and (= "tts.requestSpeak" (:type %))
+                        (= "late response" (:text %)))
+                  @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest interruption-publishes-cancel-without-host-callbacks
   (let [agency (conversation/create-conversation-agency nil)
         events (collect-events agency)]

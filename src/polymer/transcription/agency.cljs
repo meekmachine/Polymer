@@ -1,5 +1,6 @@
 (ns polymer.transcription.agency
   (:require [polymer.stream :as stream]
+            [polymer.transcription.domain :as domain]
             [polymer.transcription.planner :as planner]
             [polymer.transcription.scheduler :as scheduler]
             [polymer.transcription.state :as state]))
@@ -25,7 +26,7 @@
         scheduler-atom (atom nil)]
     (letfn [(dispatch! [command]
               (when-not @disposed?
-                (let [payload (state/data-map command)
+                (let [payload (domain/data-map command)
                       plan (planner/plan-command payload @state-atom (now-ms))]
                   (emit-input {:type "command"
                                :agency "transcription"

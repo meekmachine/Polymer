@@ -102,6 +102,18 @@
                     (swap! state-atom state/record-final fact)
                     (emit-event fact))
 
+                  "publish-interruption"
+                  (let [fact {:type "transcription.interruption"
+                              :agency "transcription"
+                              :targetAgency "conversation"
+                              :text (:text step)
+                              :confidence (:confidence step)
+                              :source (:source step)
+                              :sessionId (:sessionId @state-atom)
+                              :at now}]
+                    (swap! state-atom state/record-interruption fact)
+                    (emit-event fact))
+
                   "record-error"
                   (do
                     (swap! state-atom state/record-error (:message step) now (:retry step))
@@ -123,11 +135,18 @@
                   (emit-status! emit-event state-atom (:status step) (:reason step))
 
                   "ignore"
-                  (emit-event {:type "transcription.ignored"
-                               :agency "transcription"
-                               :reason (:reason step)
-                               :commandType (:commandType step)
-                               :at now})
+                  (let [ignored {:type "transcription.ignored"
+                                 :agency "transcription"
+                                 :reason (:reason step)
+                                 :commandType (:commandType step)
+                                 :at now}]
+                    (swap! state-atom state/record-ignored ignored)
+                    (emit-event ignored))
+
+                  "record-tts-status"
+                  (let [fact (:fact step)]
+                    (swap! state-atom state/record-tts-status fact)
+                    (emit-event fact))
 
                   "fail"
                   (emit-event {:type "error"

@@ -115,8 +115,115 @@ async function main() {
       && message.event?.type === 'gestureScheduled',
   ));
 
+  worker.postMessage({
+    type: 'createTranscriptionAgency',
+    id: 'transcription-a',
+    config: {},
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'transcription-a'
+      && message.stream === 'events'
+      && message.event?.type === 'ready',
+  ));
+
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'transcription-a',
+    message: { agency: 'transcription', command: { type: 'providerFinal', text: 'worker transcript' } },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'transcription-a'
+      && message.stream === 'events'
+      && message.event?.type === 'transcription.final',
+  ));
+
+  worker.postMessage({
+    type: 'createConversationAgency',
+    id: 'conversation-a',
+    config: {},
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'conversation-a'
+      && message.stream === 'events'
+      && message.event?.type === 'ready',
+  ));
+
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'conversation-a',
+    message: { agency: 'conversation', command: { type: 'transcriptFinal', text: 'worker user' } },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'conversation-a'
+      && message.stream === 'events'
+      && message.event?.type === 'conversation.requestResponse',
+  ));
+
+  worker.postMessage({
+    type: 'createHairAgency',
+    id: 'hair-a',
+    config: {},
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'hair-a'
+      && message.stream === 'events'
+      && message.event?.type === 'ready',
+  ));
+
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'hair-a',
+    message: { agency: 'hair', command: { type: 'setBaseColor', value: '#334455' } },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'hair-a'
+      && message.stream === 'events'
+      && message.event?.type === 'hair.requestRuntime',
+  ));
+
+  worker.postMessage({
+    type: 'createCameraContextAgency',
+    id: 'camera-a',
+    config: { coalesceMs: 0 },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'camera-a'
+      && message.stream === 'events'
+      && message.event?.type === 'ready',
+  ));
+
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'camera-a',
+    message: {
+      agency: 'cameraContext',
+      command: {
+        type: 'updateCamera',
+        cameraPosition: { x: 1, y: 0, z: 2 },
+        targetPosition: { x: 0, y: 0, z: 0 },
+      },
+    },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'camera-a'
+      && message.stream === 'events'
+      && message.event?.type === 'camera.fact',
+  ));
+
   worker.postMessage({ type: 'dispose', id: 'character-a' });
   worker.postMessage({ type: 'dispose', id: 'gesture-a' });
+  worker.postMessage({ type: 'dispose', id: 'transcription-a' });
+  worker.postMessage({ type: 'dispose', id: 'conversation-a' });
+  worker.postMessage({ type: 'dispose', id: 'hair-a' });
+  worker.postMessage({ type: 'dispose', id: 'camera-a' });
   await worker.terminate();
 }
 

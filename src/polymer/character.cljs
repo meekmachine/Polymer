@@ -1,12 +1,16 @@
 (ns polymer.character
   (:require [polymer.animation.agency :as animation]
             [polymer.blink.agency :as blink]
+            [polymer.camera-context.agency :as camera-context]
+            [polymer.conversation.agency :as conversation]
             [polymer.eye-head.agency :as eye-head]
             [polymer.gaze.agency :as gaze]
             [polymer.gesture.agency :as gesture]
+            [polymer.hair.agency :as hair]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
             [polymer.stream :as stream]
+            [polymer.transcription.agency :as transcription]
             [polymer.tts.agency :as tts]))
 
 ;; A character is a network of Polymer agencies.
@@ -14,9 +18,11 @@
 ;; LoomLarge may still consume streams from legacy Latticework services during
 ;; the migration, but it should not consume Polymer animation events and turn
 ;; them into animation calls. Inside Polymer, Blink emits blink intent and fast
-;; blink facts, TTS emits speech timing facts, LipSync emits mouth animation
-;; intent, Gesture emits arm/hand animation intent, Prosodic emits speech/blink
-;; expression intent, and Animation talks directly to Embody.
+;; blink facts, Camera Context emits gaze facts, Transcription emits transcript
+;; facts, Conversation emits speech requests, TTS emits speech timing facts,
+;; LipSync emits mouth animation intent, Gesture emits arm/hand animation intent,
+;; Prosodic emits speech/blink expression intent, Hair emits hair runtime
+;; requests, and Animation talks directly to Embody.
 
 (defn create-character-agencies [config]
   (let [input-stream (stream/create-stream)
@@ -30,6 +36,10 @@
         gaze-agency (gaze/create-gaze-agency (when config (aget config "gaze")))
         eye-head-agency (eye-head/create-eye-head-tracking-agency (when config (aget config "eyeHeadTracking")))
         gesture-agency (gesture/create-gesture-agency (when config (aget config "gesture")))
+        camera-context-agency (camera-context/create-camera-context-agency (when config (aget config "cameraContext")))
+        transcription-agency (transcription/create-transcription-agency (when config (aget config "transcription")))
+        conversation-agency (conversation/create-conversation-agency (when config (aget config "conversation")))
+        hair-agency (hair/create-hair-agency (when config (aget config "hair")))
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
@@ -71,6 +81,10 @@
                     "gaze" (.dispatch ^js gaze-agency (clj->js (:command payload)))
                     "eyeHeadTracking" (.dispatch ^js eye-head-agency (clj->js (:command payload)))
                     "gesture" (.dispatch ^js gesture-agency (clj->js (:command payload)))
+                    "cameraContext" (.dispatch ^js camera-context-agency (clj->js (:command payload)))
+                    "transcription" (.dispatch ^js transcription-agency (clj->js (:command payload)))
+                    "conversation" (.dispatch ^js conversation-agency (clj->js (:command payload)))
+                    "hair" (.dispatch ^js hair-agency (clj->js (:command payload)))
                     "animation" (.dispatch ^js animation-agency (clj->js (:command payload)))
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
                     "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
@@ -84,6 +98,10 @@
                         :gaze (js->clj (.snapshot ^js gaze-agency) :keywordize-keys true)
                         :eyeHeadTracking (js->clj (.snapshot ^js eye-head-agency) :keywordize-keys true)
                         :gesture (js->clj (.snapshot ^js gesture-agency) :keywordize-keys true)
+                        :cameraContext (js->clj (.snapshot ^js camera-context-agency) :keywordize-keys true)
+                        :transcription (js->clj (.snapshot ^js transcription-agency) :keywordize-keys true)
+                        :conversation (js->clj (.snapshot ^js conversation-agency) :keywordize-keys true)
+                        :hair (js->clj (.snapshot ^js hair-agency) :keywordize-keys true)
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
                         :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :prosodic (js->clj (.snapshot ^js prosodic-agency) :keywordize-keys true)
@@ -136,17 +154,76 @@
 
                 nil))
 
+            (route-camera-context-event! [event]
+              (case (:type event)
+                "camera.fact"
+                (.dispatch ^js gaze-agency (clj->js event))
+
+                "camera.stale"
+                (.dispatch ^js gaze-agency (clj->js event))
+
+                nil))
+
+            (route-transcription-event! [event]
+              (case (:type event)
+                "transcription.final"
+                (.dispatch ^js conversation-agency
+                           (clj->js {:type "transcript.final"
+                                     :text (:text event)
+                                     :source "transcription"
+                                     :confidence (:confidence event)
+                                     :sequence (:sequence event)
+                                     :sessionId (:sessionId event)
+                                     :at (:at event)}))
+
+                "transcription.interruption"
+                (.dispatch ^js conversation-agency
+                           (clj->js {:type "interrupt"
+                                     :reason "transcription-interruption"
+                                     :text (:text event)
+                                     :source "transcription"}))
+
+                nil))
+
+            (route-conversation-event! [event]
+              (case (:type event)
+                "tts.requestSpeak"
+                (.dispatch ^js tts-agency (clj->js (:command event)))
+
+                "conversation.cancelRequested"
+                (.dispatch ^js tts-agency (clj->js {:type "stop"
+                                                    :reason (:reason event)}))
+
+                nil))
+
             (route-tts-event! [event]
               (case (:type event)
                 "lipSync.command"
                 (.dispatch ^js lipsync-agency (clj->js (:command event)))
 
+                "ttsStatusChanged"
+                (let [status (get-in event [:state :status])]
+                  (.dispatch ^js conversation-agency
+                             (clj->js {:type "tts.status"
+                                       :status status}))
+                  (.dispatch ^js transcription-agency
+                             (clj->js {:type "tts.status"
+                                       :status status
+                                       :speaking (get-in event [:state :speaking])
+                                       :state (:state event)})))
+
                 "ttsSpeechStarted"
-                (.dispatch ^js prosodic-agency
-                           (clj->js {:type "speechStarted"
-                                     :sourceAgency "tts"
-                                     :name (:name event)
-                                     :engine (:engine event)}))
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "speechStarted"
+                                       :sourceAgency "tts"
+                                       :name (:name event)
+                                       :engine (:engine event)}))
+                  (.dispatch ^js transcription-agency
+                             (clj->js event))
+                  (.dispatch ^js conversation-agency
+                             (clj->js {:type "tts.status"
+                                       :status "speaking"})))
 
                 "ttsWordBoundary"
                 (.dispatch ^js prosodic-agency
@@ -158,16 +235,28 @@
                                      :hostElapsedSec (:hostElapsedSec event)}))
 
                 "ttsSpeechStopped"
-                (.dispatch ^js prosodic-agency
-                           (clj->js {:type "speechStopped"
-                                     :sourceAgency "tts"
-                                     :reason (:reason event)}))
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "speechStopped"
+                                       :sourceAgency "tts"
+                                       :reason (:reason event)}))
+                  (.dispatch ^js transcription-agency
+                             (clj->js event))
+                  (.dispatch ^js conversation-agency
+                             (clj->js {:type "tts.status"
+                                       :status "idle"})))
 
                 "ttsSpeechEnded"
-                (.dispatch ^js prosodic-agency
-                           (clj->js {:type "speechStopped"
-                                     :sourceAgency "tts"
-                                     :reason "completed"}))
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "speechStopped"
+                                       :sourceAgency "tts"
+                                       :reason "completed"}))
+                  (.dispatch ^js transcription-agency
+                             (clj->js event))
+                  (.dispatch ^js conversation-agency
+                             (clj->js {:type "tts.status"
+                                       :status "idle"})))
 
                 nil))
 
@@ -228,6 +317,31 @@
                                     (emit-event payload)))))
       (track! (.subscribeEffects ^js gesture-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js camera-context-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-camera-context-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js camera-context-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js transcription-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-transcription-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js transcription-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js conversation-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-conversation-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js conversation-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js hair-agency
+                                #(emit-event (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEffects ^js hair-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
       (track! (.subscribeEvents ^js tts-agency
                                 (fn [event]
                                   (let [payload (js->clj event :keywordize-keys true)]
@@ -261,6 +375,10 @@
                        "gaze" gaze-agency
                        "eyeHeadTracking" eye-head-agency
                        "gesture" gesture-agency
+                       "cameraContext" camera-context-agency
+                       "transcription" transcription-agency
+                       "conversation" conversation-agency
+                       "hair" hair-agency
                        "tts" tts-agency
                        "lipSync" lipsync-agency
                        "prosodic" prosodic-agency
@@ -281,6 +399,10 @@
                         (.dispose ^js gaze-agency)
                         (.dispose ^js eye-head-agency)
                         (.dispose ^js gesture-agency)
+                        (.dispose ^js camera-context-agency)
+                        (.dispose ^js transcription-agency)
+                        (.dispose ^js conversation-agency)
+                        (.dispose ^js hair-agency)
                         (.dispose ^js tts-agency)
                         (.dispose ^js lipsync-agency)
                         (.dispose ^js prosodic-agency)

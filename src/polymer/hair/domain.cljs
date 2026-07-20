@@ -41,12 +41,17 @@
 
 (defn normalize-color
   [value fallback]
-  (let [input (merge fallback (data-map value))]
-    {:name (or (:name input) (:name fallback))
-     :baseColor (or (:baseColor input) (:baseColor fallback))
-     :emissive (or (:emissive input) (:emissive fallback))
-     :emissiveIntensity (clamp 0 1 (number-or (:emissiveIntensity input)
-                                             (:emissiveIntensity fallback)))}))
+  (if (string? value)
+    (assoc fallback :baseColor value)
+    (let [input (merge fallback (data-map value))]
+      {:name (or (:name input) (:name fallback))
+       :baseColor (or (:baseColor input)
+                      (:base-color input)
+                      (:baseColor fallback))
+       :emissive (or (:emissive input) (:emissive fallback))
+       :emissiveIntensity (clamp 0 1 (number-or (or (:emissiveIntensity input)
+                                                    (:emissive-intensity input))
+                                                (:emissiveIntensity fallback)))})))
 
 (defn eyebrow-name?
   [name]
@@ -95,6 +100,7 @@
              :color (:outlineColor state)
              :opacity (:outlineOpacity state)}
    :parts (:parts state)
+   :physics (:physics state)
    :objects (:objects state)
    :requestedAt now-ms})
 

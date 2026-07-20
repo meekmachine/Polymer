@@ -13,7 +13,12 @@
     "reset"
     "setHairColor"
     "setEyebrowColor"
-    "setOutline"})
+    "setOutline"
+    "setBaseColor"
+    "setHairBaseColor"
+    "configurePhysics"
+    "updatePhysicsConfig"
+    "setPhysicsEnabled"})
 
 (defn failure-step
   [command]
@@ -33,16 +38,34 @@
                           :config {:objects (:objects command)}}
                          {:op "request-apply-state"}]
       "setHairColor" [{:op "apply-config"
-                       :config {:hairColor (:color command)}}
+                       :config {:hairColor (or (:color command)
+                                               (:value command)
+                                               (:hairColor command))}}
                       {:op "request-apply-state"}]
+      ("setBaseColor" "setHairBaseColor") [{:op "apply-config"
+                                            :config {:hairColor (or (:color command)
+                                                                    (:value command)
+                                                                    (:baseColor command)
+                                                                    (:base-color command))}}
+                                           {:op "request-apply-state"}]
       "setEyebrowColor" [{:op "apply-config"
-                          :config {:eyebrowColor (:color command)}}
+                          :config {:eyebrowColor (or (:color command)
+                                                     (:value command)
+                                                     (:eyebrowColor command))}}
                          {:op "request-apply-state"}]
       "setOutline" [{:op "apply-config"
                      :config {:showOutline (:show command)
                               :outlineColor (:color command)
                               :outlineOpacity (:opacity command)}}
                     {:op "request-apply-state"}]
+      ("configurePhysics" "updatePhysicsConfig") [{:op "apply-config"
+                                                   :config {:physics (or (:physics command)
+                                                                         (:config command)
+                                                                         (:value command))}}
+                                                  {:op "request-apply-state"}]
+      "setPhysicsEnabled" [{:op "apply-config"
+                            :config {:physics {:enabled (:enabled command)}}}
+                           {:op "request-apply-state"}]
       ("motionFact" "environmentFact") [{:op "record-motion"
                                          :motion (domain/data-map (or (:motion command) (:facts command) command))}
                                         {:op "coalesce-motion"}]
