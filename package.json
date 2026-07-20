@@ -14,8 +14,6 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./dist/worker/agency-worker.js": "./dist/worker/agency-worker.js",
-    "./worker/agency-worker.js": "./dist/worker/agency-worker.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -25,8 +23,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -f dist/index.js dist/index.cjs dist/index.mjs && shadow-cljs release npm worker",
-    "test": "shadow-cljs compile test && node dist/test.cjs && shadow-cljs release worker && node test/worker_smoke.cjs",
+    "build": "rm -f dist/index.js dist/index.cjs dist/index.mjs && shadow-cljs release npm",
+    "test": "shadow-cljs compile test && node dist/test.cjs",
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
     "check:architecture": "node scripts/check-agency-architecture.mjs",
     "check:dist": "node scripts/check-built-dist.mjs",
