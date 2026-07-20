@@ -231,12 +231,15 @@
   (let [letter (subs remaining 0 1)
         next-letter (when (> (count remaining) 1) (subs remaining 1 2))
         at-end? (= 1 (count remaining))]
+    ;; Map single letters onto distinct mouth families. Do not collapse o/u into
+    ;; Ah (AA/AH) — that makes Web Speech text planning look like one open
+    ;; vowel for almost every round vowel letter.
     (case letter
       "a" ["AE"]
       "e" ["EH"]
       "i" ["IH"]
-      "o" ["AA"]
-      "u" ["AH"]
+      "o" ["OW"]
+      "u" ["UW"]
       "y" (if at-end? ["IY"] ["Y"])
       "b" ["B"]
       "c" (if (#{"e" "i"} next-letter) ["S"] ["K"])

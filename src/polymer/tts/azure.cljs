@@ -13,13 +13,16 @@
 ;; other text/timeline source.
 
 (def azure->canonical
+  ;; SAPI/Azure IDs 0-21 → canonical 15-slot CC4 order. Keep distinct lip
+  ;; families: id 4 is mid-front (ɛ) → Ih, id 6 is high-front (i/ɪ/j) → EE.
+  ;; Mapping both to Ih erased the spread-EE mouth for most Azure speech.
   {0 (:B_M_P visemes/canonical-visemes)
    1 (:AE visemes/canonical-visemes)
    2 (:Ah visemes/canonical-visemes)
    3 (:Oh visemes/canonical-visemes)
    4 (:Ih visemes/canonical-visemes)
    5 (:Er visemes/canonical-visemes)
-   6 (:Ih visemes/canonical-visemes)
+   6 (:EE visemes/canonical-visemes)
    7 (:W_OO visemes/canonical-visemes)
    8 (:Oh visemes/canonical-visemes)
    9 (:Ah visemes/canonical-visemes)

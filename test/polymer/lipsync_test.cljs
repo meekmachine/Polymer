@@ -319,7 +319,9 @@
 
 (deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
   (let [sibilant-snippet (build-text-fixture "chess")
-        open-vowel-snippet (build-text-fixture "duke")
+        ;; "out" expands AW → Ah (+ W_OO). Round-vowel letters no longer collapse
+        ;; to Ah, so do not use "duke"/"so" as the open-vowel fixture.
+        open-vowel-snippet (build-text-fixture "out")
         sibilant-jaw (jaw-channel sibilant-snippet)
         open-vowel-jaw (jaw-channel open-vowel-snippet)]
     (is sibilant-jaw)
@@ -569,6 +571,29 @@
     (is (some #(= (:Oh visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
+
+(deftest azure-high-front-viseme-maps-to-ee-not-ih
+  ;; SAPI id 6 is i/ɪ/j. Mapping it to Ih collapsed Azure speech onto the same
+  ;; mid-front mouth as id 4; EE keeps the spread high-front shape distinct.
+  (let [timeline (azure/azure-visemes->timeline
+                  [{:id 4 :time 0}
+                   {:id 6 :time 0.14}]
+                  400
+                  {})
+        viseme-ids (set (map :visemeId timeline))]
+    (is (contains? viseme-ids (:Ih visemes/canonical-visemes)))
+    (is (contains? viseme-ids (:EE visemes/canonical-visemes)))))
+
+(deftest web-speech-round-vowels-use-oh-and-woo-not-ah
+  ;; Single-letter o/u used to emit AA/AH → Ah for almost every round vowel,
+  ;; which made Web Speech mouths look stuck on one open shape.
+  (let [so-ids (set (map :visemeId (visemes/text->visemes "so")))
+        moon-ids (set (map :visemeId (visemes/text->visemes "moon")))]
+    (is (contains? so-ids (:Oh visemes/canonical-visemes)))
+    (is (contains? so-ids (:W_OO visemes/canonical-visemes)))
+    (is (not (contains? so-ids (:Ah visemes/canonical-visemes))))
+    (is (contains? moon-ids (:W_OO visemes/canonical-visemes)))
+    (is (not (contains? moon-ids (:Ah visemes/canonical-visemes))))))
 
 (deftest azure-visemes-carry-coarse-jali-class-metadata
   (let [timeline (azure/azure-visemes->timeline
@@ -1007,9 +1032,9 @@
 
 (deftest jali-lip-planner-keeps-sibilants-narrower-than-open-vowels
   (let [chess (build-text-fixture "chess")
-        duke (build-text-fixture "duke")
+        out (build-text-fixture "out")
         sibilant (viseme-channel chess (:S_Z visemes/canonical-visemes))
-        open-vowel (viseme-channel duke (:Ah visemes/canonical-visemes))]
+        open-vowel (viseme-channel out (:Ah visemes/canonical-visemes))]
     (is sibilant)
     (is open-vowel)
     (is (<= (channel-max-intensity sibilant) 0.72))

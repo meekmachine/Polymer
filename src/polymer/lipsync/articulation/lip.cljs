@@ -413,7 +413,7 @@
                                                                        0.02
                                                                        0)
                                                                      (if (= (:key entry) prev-winner)
-                                                                       0.03
+                                                                       0.01
                                                                        0)))]
                                                       (compare (score b) (score a)))))
                                             vec)
@@ -429,8 +429,11 @@
                                 frames-a (if handoff-time
                                            (conj frames {:time handoff-time :pose zero-pose})
                                            frames)]
+                            ;; Clear prev-winner when nothing is active so a
+                            ;; closed gap cannot stick the next phone to the
+                            ;; previous vowel family via hysteresis.
                             {:frames (conj frames-a {:time time :pose pose})
-                             :prev-winner (or winner prev-winner)
+                             :prev-winner winner
                              :prev-time time}))
                         {:frames [] :prev-winner nil :prev-time nil}
                         sample-times)
