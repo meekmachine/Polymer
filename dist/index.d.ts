@@ -69,18 +69,63 @@ export interface WasmHairPhysicsSolver {
 }
 
 export interface WasmRuntimeCore {
+  configure(profileJson: string, modelJson: string): void;
+  viseme_slot_index(slotId: string): number;
   load_au_morph_bindings(values: Float32Array): void;
   load_viseme_morph_bindings(values: Float32Array): void;
   set_mixed_aus(ids: Uint32Array): void;
   set_au(id: number, value: number, balance: number): void;
+  set_au_signed(id: number, value: number, balance: number): void;
+  set_continuum(negAu: number, posAu: number, value: number, balance: number): void;
+  get_continuum(negAu: number, posAu: number): number;
   get_au(id: number): number;
   set_au_mix_weight(id: number, weight: number): void;
   set_viseme(index: number, value: number): void;
+  set_viseme_jaw_scale(index: number, jawScale: number): void;
   set_viseme_slot_count(count: number): void;
+  transition_au(id: number, to: number, durationMs: number, balance: number): void;
+  transition_viseme(index: number, to: number, durationMs: number, jawScale: number): void;
+  update(dtSeconds: number): number;
+  active_transition_count(): number;
+  clear_transitions(): void;
   clear(): void;
   evaluate_morph_frame_delta(): Float32Array;
+  evaluate_bone_frame_delta(): Float32Array;
   free?: () => void;
 }
+
+/**
+ * Thin Three.js host over the Rust engine. All animation logic (profile
+ * compilation, AU/viseme/continuum state, transitions, frame evaluation)
+ * runs inside the Rust RuntimeCore.
+ */
+export declare class RustEmbodyHost {
+  static create(model: unknown, config?: {
+    profile?: Record<string, unknown>;
+    presetType?: string;
+    meshes?: unknown[];
+  }): Promise<RustEmbodyHost>;
+  bindModel(meshes?: unknown[]): void;
+  setAU(id: number, value: number, balance?: number): void;
+  getAU(id: number): number;
+  setContinuum(negAU: number, posAU: number, value: number, balance?: number): void;
+  getContinuum(negAU: number, posAU: number): number;
+  setViseme(index: number, value: number, jawScale?: number): void;
+  setVisemeById(slotId: string, value: number, jawScale?: number): void;
+  setAUMixWeight(id: number, weight: number): void;
+  transitionAU(id: number, to: number, durationMs?: number, balance?: number): void;
+  transitionViseme(index: number, to: number, durationMs?: number, jawScale?: number): void;
+  transitionVisemeById(slotId: string, to: number, durationMs?: number, jawScale?: number): void;
+  update(dtSeconds: number): void;
+  activeTransitionCount(): number;
+  clear(): void;
+  dispose(): void;
+}
+
+export declare function createRustEmbodyHost(
+  model: unknown,
+  config?: Parameters<typeof RustEmbodyHost.create>[1]
+): Promise<RustEmbodyHost>;
 
 export interface EmbodyCoreWasmModule {
   core_abi_version(): number;

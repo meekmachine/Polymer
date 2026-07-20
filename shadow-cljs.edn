@@ -115,6 +115,8 @@
              :computeHumanoidSkeletonTemplateRestBounds polymer.runtime.embody/computeHumanoidSkeletonTemplateRestBounds
              :extractHumanoidSkeletonTemplateFromModel polymer.runtime.embody/extractHumanoidSkeletonTemplateFromModel
              :createCharacterHost polymer.runtime.embody/createCharacterHost
+             :RustEmbodyHost polymer.runtime.embody/RustEmbodyHost
+             :createRustEmbodyHost polymer.runtime.embody/createRustEmbodyHost
              :createDefaultCharacterScene polymer.runtime.embody/createDefaultCharacterScene
              :createDefaultCharacterLighting polymer.runtime.embody/createDefaultCharacterLighting
              :createShadowPlane polymer.runtime.embody/createShadowPlane
