@@ -89,17 +89,62 @@
       (str "TTS plan failed: " reason))))
 
 (defn scalar->azure-percent
-  "Convert UI scalar rate/pitch into Azure SSML percent strings."
+  "Convert UI scalar rate into Azure SSML percent strings."
   [value]
   (let [percent (js/Math.round (* (- value 1) 100))]
     (if (pos? percent)
       (str "+" percent "%")
       (str percent "%"))))
 
+(defn scalar->azure-pitch-percent
+  "Convert UI scalar pitch into Azure SSML percent strings.
+
+  Match Latticework's pitch mapping (* 50), not the rate mapping (* 100)."
+  [value]
+  (let [percent (js/Math.round (* (- value 1) 50))]
+    (if (pos? percent)
+      (str "+" percent "%")
+      (str percent "%"))))
+
+(defn present-string?
+  "Return true for non-blank strings."
+  [value]
+  (and (string? value) (pos? (count (.trim value)))))
+
+(defn azure-voice-name
+  "Resolve Azure voice with blank-safe fallbacks."
+  [config command]
+  (or (when (present-string? (:voiceName command)) (:voiceName command))
+      (when (present-string? (:azureVoiceName config)) (:azureVoiceName config))
+      "en-US-JennyNeural"))
+
+(defn azure-style
+  "Resolve optional Azure style; blank becomes nil for the backend."
+  [config command]
+  (let [style (or (:style command) (:azureStyle config))]
+    (when (present-string? style) style)))
+
 (defn backend-url
   "Resolve backend URL from command first, then agency config."
   [config command]
   (state/string-or (:backendUrl command) (:backendUrl config)))
+
+(defn http-error-detail
+  "Prefer FastAPI-style detail/body text over a bare statusText."
+  [status status-text body]
+  (let [detail (try
+                 (let [parsed (js/JSON.parse body)
+                       d (aget parsed "detail")]
+                   (cond
+                     (string? d) d
+                     d (.stringify js/JSON d)
+                     :else nil))
+                 (catch :default _ nil))]
+    (str "HTTP " status " "
+         (or detail
+             (when (and (string? body) (pos? (count body))) body)
+             status-text
+             "request failed"))))
 
 (defn json-request
   "Make a JSON request through the browser fetch API."
@@ -109,7 +154,13 @@
         (.then (fn [response]
                  (if (.-ok response)
                    (.json response)
-                   (throw (js-error (str "HTTP " (.-status response) " " (.-statusText response))))))))
+                   (-> (.text response)
+                       (.catch (fn [_] ""))
+                       (.then (fn [body]
+                                (throw (js-error (http-error-detail
+                                                  (.-status response)
+                                                  (.-statusText response)
+                                                  body))))))))))
     (js/Promise.reject (js-error "fetch is not available in this JavaScript runtime"))))
 
 (defn post-json
@@ -159,12 +210,132 @@
    (js/Blob. #js [(base64->bytes audio-base64)]
              #js {:type (audio-mime-type format)})))
 
+(defn ensure-playback-audio-context!
+  "Create/resume the AudioContext used for Azure playback-reference capture."
+  [resources]
+  (when (exists? js/AudioContext)
+    (let [existing (:audioContext @resources)
+          ctx (if (or (nil? existing) (= "closed" (.-state existing)))
+                (js/AudioContext.)
+                existing)
+          destination (or (:playbackReferenceDestination @resources)
+                          (.createMediaStreamDestination ctx))]
+      (swap! resources assoc
+             :audioContext ctx
+             :playbackReferenceDestination destination)
+      (when (= "suspended" (.-state ctx))
+        (let [resume (.resume ctx)]
+          (when (js-promise? resume)
+            (.catch resume (fn [_error] nil)))))
+      ctx)))
+
+(defn ensure-html-audio-playback-graph!
+  "Route HTMLAudio through Web Audio so barge-in can hear agent playback.
+
+  Latticework Azure TTS taps a MediaStreamDestination on the same graph used
+  for speaker output. Polymer keeps HTMLAudio for autoplay unlock, then mirrors
+  that tap with MediaElementSource -> gain -> destination + reference stream."
+  [resources audio volume]
+  (when-let [ctx (ensure-playback-audio-context! resources)]
+    (when-not (:mediaElementSource @resources)
+      (try
+        (let [source (.createMediaElementSource ctx audio)
+              gain (.createGain ctx)
+              destination (:playbackReferenceDestination @resources)]
+          (set! (.-value (.-gain gain)) volume)
+          (.connect source gain)
+          (.connect gain (.-destination ctx))
+          (when destination
+            (.connect gain destination))
+          (swap! resources assoc
+                 :mediaElementSource source
+                 :playbackGain gain
+                 :audio audio))
+        (catch :default error
+          (js/console.warn "[TTS] Failed to create MediaElementSource playback reference graph:" error))))
+    (when-let [gain (:playbackGain @resources)]
+      (set! (.-value (.-gain gain)) volume))
+    (aget (.getAudioTracks (.-stream (:playbackReferenceDestination @resources))) 0)))
+
+(defn get-playback-reference-track
+  "Return the live agent playback reference track when available."
+  [resources]
+  (or (let [display (:displayMediaReferenceTrack @resources)]
+        (when (and display (= "live" (.-readyState display)))
+          display))
+      (when-let [destination (:playbackReferenceDestination @resources)]
+        (let [track (aget (.getAudioTracks (.-stream destination)) 0)]
+          (when (and track (= "live" (.-readyState track)))
+            track)))))
+
+(defn clear-display-media-reference!
+  "Stop experimental Web Speech display-media capture."
+  [resources]
+  (when-let [stream (:displayMediaReferenceStream @resources)]
+    (doseq [track (array-seq (.getTracks stream))]
+      (set! (.-onended track) nil)
+      (when (= "live" (.-readyState track))
+        (.stop track))))
+  (swap! resources assoc
+         :displayMediaReferenceStream nil
+         :displayMediaReferenceTrack nil))
+
+(defn ensure-web-speech-display-media-reference!
+  "Capture tab/system audio as an experimental Web Speech playback reference."
+  [resources]
+  (js/Promise.
+   (fn [resolve]
+     (let [existing (get-playback-reference-track resources)]
+       (if (and existing (:displayMediaReferenceTrack @resources))
+         (resolve "available")
+         (let [media (.-mediaDevices js/navigator)]
+           (if-not (and media (.-getDisplayMedia media))
+             (do
+               (js/console.warn "[TTS] Display media capture is not supported; Web Speech playback reference unavailable")
+               (resolve "unavailable"))
+             (do
+               (clear-display-media-reference! resources)
+               (-> (.getDisplayMedia media
+                                     (clj->js {:video true
+                                               :audio {:echoCancellation false
+                                                       :noiseSuppression false
+                                                       :autoGainControl false}
+                                               :preferCurrentTab true
+                                               :selfBrowserSurface "include"
+                                               :systemAudio "include"
+                                               :surfaceSwitching "exclude"}))
+                   (.then (fn [stream]
+                            (let [audio-track (aget (.getAudioTracks stream) 0)]
+                              (if-not audio-track
+                                (do
+                                  (doseq [track (array-seq (.getTracks stream))]
+                                    (.stop track))
+                                  (js/console.warn "[TTS] Display capture did not include audio; Web Speech playback reference unavailable")
+                                  (resolve "no-audio"))
+                                (do
+                                  (swap! resources assoc
+                                         :displayMediaReferenceStream stream
+                                         :displayMediaReferenceTrack audio-track)
+                                  (doseq [track (array-seq (.getTracks stream))]
+                                    (set! (.-onended track)
+                                          (fn []
+                                            (clear-display-media-reference! resources))))
+                                  (js/console.info "[TTS] Using display media audio as experimental Web Speech playback reference")
+                                  (resolve "available"))))))
+                   (.catch (fn [error]
+                             (let [name (if (exists? (.-name error)) (.-name error) "")
+                                   status (if (= name "NotAllowedError") "denied" "failed")]
+                               (js/console.warn "[TTS] Display media reference capture failed; continuing without Web Speech playback reference:" error)
+                               (resolve status)))))))))))))
+
 (defn prime-audio!
   "Prime one HTMLAudio element while the user gesture is still fresh."
   [resources volume]
   (when (exists? js/Audio)
+    (ensure-playback-audio-context! resources)
     (let [audio (or (:audio @resources) (js/Audio.))]
       (swap! resources assoc :audio audio)
+      (ensure-html-audio-playback-graph! resources audio volume)
       (set! (.-muted audio) true)
       (set! (.-loop audio) true)
       (set! (.-volume audio) volume)
@@ -187,7 +358,10 @@
   (.load audio))
 
 (defn cleanup-audio!
-  "Stop and release the active audio element/object URL resources."
+  "Stop and release the active audio element/object URL resources.
+
+  Keep the MediaElementSource graph and AudioContext alive across utterances so
+  the playback-reference track remains stable for interruption monitoring."
   [resources]
   (when-let [audio (:audio @resources)]
     (.pause audio)
@@ -201,9 +375,29 @@
   (when-let [url (:audioUrl @resources)]
     (js/URL.revokeObjectURL url))
   (swap! resources assoc
+         :audioUrl nil
+         :audioSource nil
+         :webSpeechFallbackTimer nil))
+
+(defn dispose-playback-resources!
+  "Tear down playback-reference capture owned by the TTS agency."
+  [resources]
+  (cleanup-audio! resources)
+  (clear-display-media-reference! resources)
+  (when-let [source (:mediaElementSource @resources)]
+    (try (.disconnect source) (catch :default _ nil)))
+  (when-let [gain (:playbackGain @resources)]
+    (try (.disconnect gain) (catch :default _ nil)))
+  (when-let [ctx (:audioContext @resources)]
+    (try (.close ctx) (catch :default _ nil)))
+  (swap! resources assoc
          :audio nil
          :audioUrl nil
          :audioSource nil
+         :mediaElementSource nil
+         :playbackGain nil
+         :audioContext nil
+         :playbackReferenceDestination nil
          :webSpeechFallbackTimer nil))
 
 (defn stop-web-speech-handle!
@@ -220,6 +414,7 @@
         url (base64->object-url audio-base64 audio-format)]
     (reset-primed-audio! audio volume)
     (swap! resources assoc :audio audio :audioUrl url)
+    (ensure-html-audio-playback-graph! resources audio volume)
     (set! (.-preload audio) "auto")
     (set! (.-volume audio) volume)
     (set! (.-src audio) url)
@@ -230,7 +425,8 @@
                   :durationSec (if (state/finite-number? (.-duration audio)) (.-duration audio) 0)
                   :clock {:currentTime (fn [] (.-currentTime audio))
                           :shouldContinue (fn [] (and (not (.-paused audio)) (not (.-ended audio))))}
-                  :audio audio})))))
+                  :audio audio
+                  :playbackReferenceTrack (get-playback-reference-track resources)})))))
 
 (defn play-azure-audio!
   "Use an injected audio player when present, otherwise use browser HTMLAudio."
@@ -241,7 +437,6 @@
                       (:audioBase64 plan)
                       (:audioFormat plan)
                       (:volume plan))))
-
 (defn load-web-speech-voices!
   "Load browser Web Speech voices, using an injected provider in tests."
   [config]
@@ -292,13 +487,18 @@
     (promise-resolve (custom (clj->js command)))
     (let [base (backend-url config command)]
       (if (pos? (count base))
-        (post-json (str base "/api/azure-tts/synthesize")
-                   {:text (:text command)
-                    :voice_name (or (:voiceName command) (:azureVoiceName config))
-                    :style (let [style (or (:style command) (:azureStyle config))]
-                             (when (pos? (count style)) style))
-                    :rate (scalar->azure-percent (or (:rate command) (:rate config)))
-                    :pitch (scalar->azure-percent (or (:pitch command) (:pitch config)))})
+        (let [style (azure-style config command)
+              style-degree (cond
+                             (state/finite-number? (:styleDegree command)) (:styleDegree command)
+                             (state/finite-number? (:azureStyleDegree config)) (:azureStyleDegree config)
+                             :else nil)
+              body (cond-> {:text (:text command)
+                            :voice_name (azure-voice-name config command)
+                            :rate (scalar->azure-percent (or (:rate command) (:rate config)))
+                            :pitch (scalar->azure-pitch-percent (or (:pitch command) (:pitch config)))}
+                     style (assoc :style style)
+                     (some? style-degree) (assoc :style_degree style-degree))]
+          (post-json (str base "/api/azure-tts/synthesize") body))
         (js/Promise.reject (js-error "Azure backendUrl is not configured"))))))
 
 (defn extract-boundary-word

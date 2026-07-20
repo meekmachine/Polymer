@@ -15,7 +15,13 @@
    :retryDelayMs 100
    :minConfidence 0
    :agentFilteringEnabled true
-   :interruptDetectionEnabled true})
+   :interruptDetectionEnabled true
+   :requireAgentReferenceForInterruption true
+   :interruptionDebugLogging false
+   :interruptionVolumeThreshold 0.035
+   :interruptionReferenceScale 0.45
+   :interruptionReferenceOffset 0.015
+   :interruptionHoldMs 150})
 
 (defn finite-number?
   [value]
@@ -45,7 +51,17 @@
      :minConfidence (clamp 0 1 (number-or (:minConfidence input)
                                           (:minConfidence default-config)))
      :agentFilteringEnabled (boolean (:agentFilteringEnabled input))
-     :interruptDetectionEnabled (boolean (:interruptDetectionEnabled input))}))
+     :interruptDetectionEnabled (boolean (:interruptDetectionEnabled input))
+     :requireAgentReferenceForInterruption (boolean (:requireAgentReferenceForInterruption input))
+     :interruptionDebugLogging (boolean (:interruptionDebugLogging input))
+     :interruptionVolumeThreshold (clamp 0 1 (number-or (:interruptionVolumeThreshold input)
+                                                        (:interruptionVolumeThreshold default-config)))
+     :interruptionReferenceScale (clamp 0 4 (number-or (:interruptionReferenceScale input)
+                                                       (:interruptionReferenceScale default-config)))
+     :interruptionReferenceOffset (clamp 0 1 (number-or (:interruptionReferenceOffset input)
+                                                        (:interruptionReferenceOffset default-config)))
+     :interruptionHoldMs (int (clamp 0 2000 (number-or (:interruptionHoldMs input)
+                                                       (:interruptionHoldMs default-config))))}))
 
 (defn default-state
   [config]

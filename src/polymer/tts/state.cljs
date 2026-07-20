@@ -17,9 +17,11 @@
     (min maximum (max minimum candidate))))
 
 (defn string-or
-  "Keep string configuration values stable and avoid leaking nil into JS events."
+  "Keep non-blank string configuration values; treat nil/blank as missing."
   [value fallback]
-  (if (string? value) value fallback))
+  (if (and (string? value) (pos? (count (.trim value))))
+    value
+    fallback))
 
 (defn bool-or
   "Normalize optional booleans without treating false as missing."
@@ -51,12 +53,16 @@
    :azureDriftThresholdSec 0.04
    :azureCacheLimit 8
    :debug false
+   ;; none | displayMedia — experimental Web Speech barge-in reference capture.
+   :webSpeechReferenceMode "none"
    :providers nil})
 
 (defn normalize-config
   "Create the public, clamped TTS config map used by all agency decisions."
   [config]
-  (let [input (merge default-config (or config {}))]
+  (let [input (merge default-config (or config {}))
+        reference-mode (string-or (:webSpeechReferenceMode input)
+                                  (:webSpeechReferenceMode default-config))]
     {:engine (string-or (:engine input) (:engine default-config))
      :backendUrl (string-or (:backendUrl input) (:backendUrl default-config))
      :voiceName (string-or (:voiceName input) (:voiceName default-config))
@@ -74,6 +80,9 @@
      :azureDriftThresholdSec (clamp 0 1 (:azureDriftThresholdSec input) (:azureDriftThresholdSec default-config))
      :azureCacheLimit (int (clamp 0 64 (:azureCacheLimit input) (:azureCacheLimit default-config)))
      :debug (bool-or (:debug input) false)
+     :webSpeechReferenceMode (if (#{"none" "displayMedia"} reference-mode)
+                               reference-mode
+                               "none")
      :providers (:providers input)}))
 
 (defn default-state

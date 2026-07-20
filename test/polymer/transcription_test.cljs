@@ -12,11 +12,16 @@
 (deftest transcription-normalizes-config
   (let [agency (transcription/create-transcription-agency #js {:maxAlternatives 25
                                                               :maxRetries 99
-                                                              :minConfidence -1})
+                                                              :minConfidence -1
+                                                              :interruptionHoldMs 5000
+                                                              :requireAgentReferenceForInterruption false})
         snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
     (is (= 10 (get-in snapshot [:config :maxAlternatives])))
     (is (= 10 (get-in snapshot [:config :maxRetries])))
     (is (= 0 (get-in snapshot [:config :minConfidence])))
+    (is (= 2000 (get-in snapshot [:config :interruptionHoldMs])))
+    (is (false? (get-in snapshot [:config :requireAgentReferenceForInterruption])))
+    (is (true? (get-in snapshot [:config :interruptDetectionEnabled])))
     (.dispose ^js agency)))
 
 (deftest start-stop-emit-provider-lifecycle-requests
