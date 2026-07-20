@@ -79,7 +79,44 @@ async function main() {
     (message) => message.stream === 'events' && message.event?.type === 'animationSnippetScheduled',
   ));
 
+  worker.postMessage({
+    type: 'createGestureAgency',
+    id: 'gesture-a',
+    config: {
+      gestures: {
+        wave: {
+          id: 'wave',
+          name: 'Wave',
+          durationMs: 120,
+          bones: {
+            HAND_L: { rotation: [0, 0, 0.3826834323650898, 0.9238795325112867] },
+          },
+        },
+      },
+      emojiMappings: { '👋': 'wave' },
+    },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'gesture-a'
+      && message.stream === 'events'
+      && message.event?.type === 'ready',
+  ));
+
+  worker.postMessage({
+    type: 'dispatch',
+    id: 'gesture-a',
+    message: { agency: 'gesture', command: { type: 'playEmoji', emoji: '👋' } },
+  });
+
+  await waitFor(messages, () => messages.some(
+    (message) => message.id === 'gesture-a'
+      && message.stream === 'events'
+      && message.event?.type === 'gestureScheduled',
+  ));
+
   worker.postMessage({ type: 'dispose', id: 'character-a' });
+  worker.postMessage({ type: 'dispose', id: 'gesture-a' });
   await worker.terminate();
 }
 

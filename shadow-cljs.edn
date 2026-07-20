@@ -10,6 +10,7 @@
              :createEyeHeadTrackingAgency polymer.core/createEyeHeadTrackingAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency
              :createTTSAgency polymer.core/createTTSAgency
+             :createGestureAgency polymer.core/createGestureAgency
              :createProsodicAgency polymer.core/createProsodicAgency
              :createCharacterAgencies polymer.core/createCharacterAgencies}}
 
