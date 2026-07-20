@@ -107,11 +107,6 @@
              :CC4_BONES polymer.runtime.embody/CC4_BONES
              :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}}}
 
-  :worker
-  {:target :browser
-   :output-dir "dist/worker"
-   :modules {:agency-worker {:init-fn polymer.worker/init}}}
-
   :test
   {:target :node-test
    :output-to "dist/test.cjs"
