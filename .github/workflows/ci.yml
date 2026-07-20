@@ -26,5 +26,5 @@ jobs:
       - run: pnpm check:install-surface
       - run: pnpm check:architecture
       - run: pnpm build
-      - run: pnpm test
       - run: pnpm check:dist
+      - run: pnpm test
