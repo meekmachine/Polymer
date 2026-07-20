@@ -1,6 +1,7 @@
 (ns polymer.conversation-test
-  (:require [cljs.test :refer [deftest is testing]]
-            [polymer.conversation.agency :as conversation]))
+  (:require [cljs.test :refer [async deftest is testing]]
+            [polymer.conversation.agency :as conversation]
+            [polymer.conversation.service :as conversation-service]))
 
 (defn collect-events
   [agency]
@@ -119,3 +120,133 @@
                                :text "ignored"
                                :responseText "ignored"})
     (is (empty? @(:events events)))))
+
+(defn fake-tts
+  "TTS stub that exposes playback-start and reference-track hooks."
+  [calls]
+  (let [playback-start-listeners (atom #{})
+        reference-listeners (atom #{})
+        speak-resolve (atom nil)]
+    #js {:speak (fn [text]
+                  (swap! calls conj {:op "speak" :text text})
+                  (js/Promise.
+                   (fn [resolve _reject]
+                     (reset! speak-resolve resolve)
+                     (doseq [listener @playback-start-listeners]
+                       (listener)))))
+         :stop (fn []
+                 (swap! calls conj {:op "stop"})
+                 (when-let [resolve @speak-resolve]
+                   (reset! speak-resolve nil)
+                   (resolve #js {:interrupted true})))
+         :getPlaybackReferenceTrack (fn [] nil)
+         :onPlaybackStart (fn [listener]
+                            (swap! playback-start-listeners conj listener)
+                            (fn [] (swap! playback-start-listeners disj listener)))
+         :onPlaybackReferenceTrackChange (fn [listener]
+                                           (swap! reference-listeners conj listener)
+                                           (listener nil)
+                                           (fn [] (swap! reference-listeners disj listener)))}))
+
+(defn fake-transcription
+  "Transcription stub that records agent-speech notifications and can emit interruptions."
+  [calls]
+  (let [transcript-listeners (atom #{})
+        interruption-listeners (atom #{})
+        reference-track (atom nil)]
+    #js {:startListening (fn []
+                           (swap! calls conj {:op "startListening"})
+                           (js/Promise.resolve nil))
+         :stopListening (fn [] (swap! calls conj {:op "stopListening"}))
+         :prepareAgentSpeech (fn [text]
+                               (swap! calls conj {:op "prepareAgentSpeech" :text text}))
+         :notifyAgentSpeech (fn [text]
+                              (swap! calls conj {:op "notifyAgentSpeech" :text text}))
+         :notifyAgentSpeechEnd (fn []
+                                 (swap! calls conj {:op "notifyAgentSpeechEnd"}))
+         :setAgentAudioReferenceTrack (fn [track]
+                                        (reset! reference-track track)
+                                        (swap! calls conj {:op "setAgentAudioReferenceTrack"}))
+         :onTranscript (fn [listener]
+                         (swap! transcript-listeners conj listener)
+                         (fn [] (swap! transcript-listeners disj listener)))
+         :onInterruption (fn [listener]
+                           (swap! interruption-listeners conj listener)
+                           (fn [] (swap! interruption-listeners disj listener)))
+         :emitTranscript (fn [text final?]
+                           (doseq [listener @transcript-listeners]
+                             (listener text final?)))
+         :emitInterruption (fn [event]
+                             (doseq [listener @interruption-listeners]
+                               (listener event)))
+         :getReferenceTrack (fn [] @reference-track)}))
+
+(deftest conversation-service-audio-interruption-stops-tts
+  (async done
+    (let [tts-calls (atom [])
+          transcription-calls (atom [])
+          states (atom [])
+          tts (fake-tts tts-calls)
+          transcription (fake-transcription transcription-calls)
+          service (conversation-service/createConversationService
+                   tts
+                   transcription
+                   #js {:autoListen true
+                        :detectInterruptions true
+                        :minSpeakTime 0
+                        :allowTranscriptInterruptionFallback true}
+                   #js {:onStateChange (fn [state] (swap! states conj state))})]
+      (.start ^js service (fn []
+                            #js {:next (fn
+                                         ([] #js {:value "hello from agent" :done false})
+                                         ([_input] #js {:value nil :done true}))}))
+      (js/setTimeout
+       (fn []
+         (.emitInterruption ^js transcription #js {:timestamp (.now js/Date)
+                                                   :microphoneLevel 0.2
+                                                   :referenceLevel 0.01
+                                                   :requiredLevel 0.05})
+         (js/setTimeout
+          (fn []
+            (is (some #(= "stop" (:op %)) @tts-calls))
+            (is (some #(= "interrupted" %) @states))
+            (is (some #(= "notifyAgentSpeech" (:op %)) @transcription-calls))
+            (.dispose ^js service)
+            (done))
+          50))
+       50))))
+
+(deftest conversation-service-transcript-fallback-interrupts-agent
+  (async done
+    (let [tts-calls (atom [])
+          transcription-calls (atom [])
+          speech-events (atom [])
+          tts (fake-tts tts-calls)
+          transcription (fake-transcription transcription-calls)
+          service (conversation-service/createConversationService
+                   tts
+                   transcription
+                   #js {:autoListen true
+                        :detectInterruptions true
+                        :minSpeakTime 0
+                        :allowTranscriptInterruptionFallback true}
+                   #js {:onUserSpeech (fn [text final? interruption?]
+                                        (swap! speech-events conj
+                                               {:text text
+                                                :final final?
+                                                :interruption interruption?}))})]
+      (.start ^js service (fn []
+                            #js {:next (fn
+                                         ([] #js {:value "please wait while I talk" :done false})
+                                         ([_input] #js {:value nil :done true}))}))
+      (js/setTimeout
+       (fn []
+         (.emitTranscript ^js transcription "stop please" true)
+         (js/setTimeout
+          (fn []
+            (is (some #(= "stop" (:op %)) @tts-calls))
+            (is (some #(and (:interruption %) (= "stop please" (:text %))) @speech-events))
+            (.dispose ^js service)
+            (done))
+          50))
+       50))))

@@ -806,6 +806,8 @@ export interface TTSConfig {
   azureDriftThresholdSec?: number;
   azureCacheLimit?: number;
   debug?: boolean;
+  /** Experimental Web Speech barge-in reference: none | displayMedia */
+  webSpeechReferenceMode?: 'none' | 'displayMedia';
   providers?: Record<string, unknown>;
 }
 
@@ -1736,6 +1738,7 @@ export type PolymerDomainEvent =
   | { type: 'ttsSpeechStarted'; agency: 'tts'; engine: string; name: string; startedAt: number }
   | { type: 'ttsSpeechStopped'; agency: 'tts'; reason: string; stoppedAt: number }
   | { type: 'ttsSpeechEnded'; agency: 'tts'; endedAt: number }
+  | { type: 'ttsPlaybackReferenceChanged'; agency: 'tts'; available: boolean; at: number }
   | {
       type: 'ttsWordBoundary';
       agency: 'tts';
@@ -1971,6 +1974,10 @@ export interface TTSAgency {
   speak(text: string): void;
   stop(): void;
   reset(): void;
+  /** Live agent playback track for mic-vs-reference barge-in (host API). */
+  getPlaybackReferenceTrack(): MediaStreamTrack | null;
+  onPlaybackReferenceTrackChange(listener: (track: MediaStreamTrack | null) => void): () => void;
+  preparePlaybackReference(): Promise<'unavailable' | 'requesting' | 'available' | 'denied' | 'failed' | 'no-audio' | 'ended'>;
   dispose(): void;
 }
 

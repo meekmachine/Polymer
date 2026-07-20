@@ -9,6 +9,12 @@
 ;; Important: the generator (LoomLarge AI Chat) owns LLM replies. The orphan
 ;; agency inside this adapter must not auto-respond / wait on a missing
 ;; conversation-provider, or turn-taking freezes after the first user utterance.
+;;
+;; Interrupt parity with Latticework:
+;; - Audio barge-in via transcription.onInterruption
+;; - Optional transcript fallback via allowTranscriptInterruptionFallback
+;; - Ignore non-interrupt finals while the agent is still speaking
+;; - Sync TTS playback reference track into transcription for AEC barge-in
 
 (defn data-map [value]
   (cond
@@ -75,7 +81,9 @@
         flow-atom (atom nil)
         disposed? (atom false)
         unsubscribers (atom [])
-        playback-unsub (atom nil)]
+        playback-unsub (atom nil)
+        agent-speech-active? (atom false)
+        pending-interrupted-transcript (atom nil)]
     (letfn [(dispatch! [command]
               (js-call agency "dispatch" (clj->js command)))
             (set-state! [state]
@@ -97,6 +105,9 @@
               (when-let [unsubscribe @playback-unsub]
                 (unsubscribe)
                 (reset! playback-unsub nil)))
+            (sync-agent-audio-reference-track! []
+              (let [track (or (js-call tts "getPlaybackReferenceTrack") nil)]
+                (js-call transcription "setAgentAudioReferenceTrack" track)))
             (start-listening! []
               (when-not @disposed?
                 (set-speaking! false)
@@ -117,16 +128,49 @@
                                 (notify-error! error)
                                 nil))))
                 (promise-resolve nil)))
+            (stop-speaking-behaviors! []
+              (set-speaking! false)
+              (js-call (prosodic) "stopTalking"))
+            (can-interrupt-agent? []
+              (and (:detectInterruptions @config-atom)
+                   (not (:isInterrupted @context))
+                   (= "agentSpeaking" (:state @context))
+                   (some? (:speakStartTime @context))
+                   (>= (- (now-ms) (:speakStartTime @context))
+                       (:minSpeakTime @config-atom))))
+            (handle-interruption! [source event]
+              (when (can-interrupt-agent?)
+                (js/console.log (str "[ConversationService] Handling interruption from " source))
+                (swap! context assoc :isInterrupted true)
+                (dispatch! {:type "interrupt"
+                            :reason source
+                            :event (data-map event)})
+                (js-call tts "stop")
+                (stop-speaking-behaviors!)
+                (set-state! "interrupted")
+                (js-call callbacks "onUserSpeech" "" true true)))
             (finish-agent-speech! []
               (clear-playback-unsub!)
-              (set-speaking! false)
-              (js-call (prosodic) "stopTalking")
+              (reset! agent-speech-active? false)
+              (stop-speaking-behaviors!)
               (js-call transcription "notifyAgentSpeechEnd")
-              (if (:autoListen @config-atom)
-                (start-listening!)
-                (set-state! "idle")))
+              (if-let [pending @pending-interrupted-transcript]
+                (do
+                  (reset! pending-interrupted-transcript nil)
+                  (submit-user-input! pending))
+                (cond
+                  (:isInterrupted @context)
+                  (start-listening!)
+
+                  (:autoListen @config-atom)
+                  (start-listening!)
+
+                  :else
+                  (set-state! "idle"))))
             (speak-agent-text! [text]
               (let [utterance (str text)]
+                (reset! agent-speech-active? true)
+                (reset! pending-interrupted-transcript nil)
                 (swap! context assoc
                        :lastAgentSpeech utterance
                        :speakStartTime nil
@@ -135,6 +179,7 @@
                             :text utterance
                             :source "conversationService"})
                 (js-call callbacks "onAgentUtterance" utterance)
+                (sync-agent-audio-reference-track!)
                 (js-call transcription "prepareAgentSpeech" utterance)
                 (set-listening! false)
                 (set-speaking! true)
@@ -150,6 +195,7 @@
                                                                (fn []
                                                                  (when-not @disposed?
                                                                    (swap! context assoc :speakStartTime (now-ms))
+                                                                   (sync-agent-audio-reference-track!)
                                                                    (js-call transcription "notifyAgentSpeech" utterance))))]
                                  (reset! playback-unsub unsubscribe))
                                (js-call tts "speak" utterance))))
@@ -159,8 +205,9 @@
                            (fn [error]
                              (when-not @disposed?
                                (clear-playback-unsub!)
-                               (set-speaking! false)
-                               (js-call (prosodic) "stopTalking")
+                               (reset! agent-speech-active? false)
+                               (stop-speaking-behaviors!)
+                               (js-call transcription "notifyAgentSpeechEnd")
                                (set-state! "idle")
                                (notify-error! error)))))))
             (handle-yield! [yielded]
@@ -195,22 +242,25 @@
                   (stop-listening!)
                   (run-flow! utterance true))))
             (transcript-handler [text is-final]
-              (js-call callbacks "onUserSpeech" text is-final false)
-              (when is-final
-                (submit-user-input! text)))
+              (when (and (:allowTranscriptInterruptionFallback @config-atom)
+                         (can-interrupt-agent?))
+                (handle-interruption! "transcript" #js {:source "transcript"
+                                                        :timestamp (now-ms)
+                                                        :text text}))
+              (let [is-interruption (or (:isInterrupted @context)
+                                        (= "interrupted" (:state @context)))]
+                (js-call callbacks "onUserSpeech" text is-final is-interruption)
+                (when is-final
+                  (cond
+                    @agent-speech-active?
+                    (if is-interruption
+                      (reset! pending-interrupted-transcript text)
+                      (js/console.debug "[ConversationService] Ignoring final transcript during uninterrupted agent speech:" text))
+
+                    :else
+                    (submit-user-input! text)))))
             (interruption-handler [event]
-              (when (and (:detectInterruptions @config-atom)
-                         (= "agentSpeaking" (:state @context))
-                         (>= (- (now-ms) (or (:speakStartTime @context) 0))
-                             (:minSpeakTime @config-atom)))
-                (swap! context assoc :isInterrupted true)
-                (dispatch! {:type "interrupt" :reason "userSpeech" :event (data-map event)})
-                (js-call tts "stop")
-                (set-speaking! false)
-                (js-call (prosodic) "stopTalking")
-                (set-state! "interrupted")
-                (js-call callbacks "onUserSpeech" "" true true)
-                (start-listening!)))]
+              (handle-interruption! "audio" event))]
       (when-let [unsubscribe (js-call transcription "onTranscript" transcript-handler)]
         (swap! unsubscribers conj unsubscribe))
       (when-let [unsubscribe (js-call transcription "onInterruption" interruption-handler)]
@@ -232,10 +282,12 @@
            :stop (fn []
                    (when-not @disposed?
                      (clear-playback-unsub!)
+                     (reset! agent-speech-active? false)
+                     (reset! pending-interrupted-transcript nil)
                      (js-call tts "stop")
                      (stop-listening!)
-                     (set-speaking! false)
-                     (js-call (prosodic) "stopTalking")
+                     (js-call transcription "notifyAgentSpeechEnd")
+                     (stop-speaking-behaviors!)
                      (dispatch! {:type "stop" :reason "manual"})
                      (set-state! "idle")))
            :getState (fn [] (clj->js @context))
@@ -252,8 +304,11 @@
                         (doseq [unsubscribe @unsubscribers]
                           (unsubscribe))
                         (reset! unsubscribers [])
+                        (reset! agent-speech-active? false)
+                        (reset! pending-interrupted-transcript nil)
                         (js-call tts "stop")
                         (js-call transcription "stopListening")
+                        (js-call transcription "notifyAgentSpeechEnd")
                         (set-speaking! false)
                         (set-listening! false)
                         (js-call (prosodic) "stopTalking")
