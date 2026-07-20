@@ -137,6 +137,24 @@
     ((:unsubscribe events))
     (.dispose ^js system)))
 
+(deftest character-network-routes-conversation-cancel-to-prosodic-and-tts
+  (let [system (polymer/createCharacterAgencies
+                #js {:tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}})
+        events (collect-events system)]
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "start"}})
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "interrupt"
+                                             :reason "barge-in"}})
+    (is (some #(and (= "conversation.cancelRequested" (:type %))
+                    (= "barge-in" (:reason %)))
+              @(:events events)))
+    (is (some #(and (= "prosodicConversationFact" (:type %))
+                    (= "conversation.cancelRequested" (:conversationType %)))
+              @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
 (deftest character-network-routes-hair-events-without-host-message-bus
   (let [system (polymer/createCharacterAgencies nil)
         events (collect-events system)]

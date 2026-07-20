@@ -125,8 +125,7 @@
 
                       ("conversation.userUtterance"
                        "conversation.agentUtterance"
-                       "conversation.requestResponse"
-                       "conversation.cancelRequested")
+                       "conversation.requestResponse")
                       (let [observed-at (state/now-ms)]
                         (swap! state-atom state/record-conversation-fact payload observed-at)
                         (emit-event {:type "prosodicConversationFact"
@@ -135,6 +134,21 @@
                                      :text (:text payload)
                                      :turnId (:turnId payload)
                                      :observedAt observed-at}))
+
+                      "conversation.cancelRequested"
+                      (let [observed-at (state/now-ms)
+                            reason (or (:reason payload) "conversation-cancel")]
+                        (swap! state-atom state/record-conversation-fact payload observed-at)
+                        (emit-event {:type "prosodicConversationFact"
+                                     :agency "prosodic"
+                                     :conversationType (:type payload)
+                                     :text (:text payload)
+                                     :turnId (:turnId payload)
+                                     :observedAt observed-at})
+                        ;; Match the GOAP plan: cancel clears active prosodic
+                        ;; gestures so Conversation interrupts do not leave
+                        ;; brow/head snippets running after TTS stops.
+                        (remove-active! reason))
 
                       ("speechStopped" "stop")
                       (stop-local! (or (:reason payload) "requested"))
