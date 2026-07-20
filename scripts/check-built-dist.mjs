@@ -42,6 +42,7 @@ if (!fs.existsSync(distPath)) {
       'initEmbodyCore',
       'EMBODY_CORE_ABI_VERSION',
       'createHairPhysicsSolver',
+      'createRuntimeCore',
     ];
 
     for (const name of requiredExports) {

@@ -128,6 +128,7 @@
              :composeTemplateSkeletonFitTransform polymer.runtime.embody-wasm/composeTemplateSkeletonFitTransform
              :defaultHairPhysicsConfigValues polymer.runtime.embody-wasm/defaultHairPhysicsConfigValues
              :createHairPhysicsSolver polymer.runtime.embody-wasm/createHairPhysicsSolver
+             :createRuntimeCore polymer.runtime.embody-wasm/createRuntimeCore
              :EMBODY_CORE_ABI_VERSION polymer.runtime.embody-wasm/EMBODY_CORE_ABI_VERSION
              :PACKED_MORPH_FRAME_DELTA_STRIDE polymer.runtime.embody-wasm/PACKED_MORPH_FRAME_DELTA_STRIDE
              :HAIR_CONFIG_STRIDE polymer.runtime.embody-wasm/HAIR_CONFIG_STRIDE

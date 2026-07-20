@@ -48,6 +48,7 @@ export declare function composeTemplateSkeletonFitTransform(
 ): Float32Array;
 export declare function defaultHairPhysicsConfigValues(): Float32Array;
 export declare function createHairPhysicsSolver(configValues?: Float32Array): WasmHairPhysicsSolver;
+export declare function createRuntimeCore(visemeSlotCount: number): WasmRuntimeCore;
 export declare const EMBODY_CORE_ABI_VERSION: number;
 export declare const PACKED_MORPH_FRAME_DELTA_STRIDE: number;
 export declare const HAIR_CONFIG_STRIDE: number;
@@ -64,6 +65,20 @@ export interface WasmHairPhysicsSolver {
   get_config(): Float32Array;
   get_state(): Float32Array;
   reset(): void;
+  free?: () => void;
+}
+
+export interface WasmRuntimeCore {
+  load_au_morph_bindings(values: Float32Array): void;
+  load_viseme_morph_bindings(values: Float32Array): void;
+  set_mixed_aus(ids: Uint32Array): void;
+  set_au(id: number, value: number, balance: number): void;
+  get_au(id: number): number;
+  set_au_mix_weight(id: number, weight: number): void;
+  set_viseme(index: number, value: number): void;
+  set_viseme_slot_count(count: number): void;
+  clear(): void;
+  evaluate_morph_frame_delta(): Float32Array;
   free?: () => void;
 }
 
@@ -100,6 +115,7 @@ export interface EmbodyCoreWasmModule {
   ): Float32Array;
   default_hair_physics_config_values(): Float32Array;
   HairPhysicsSolver: new (configValues: Float32Array) => WasmHairPhysicsSolver;
+  RuntimeCore?: new (visemeSlotCount: number) => WasmRuntimeCore;
 }
 
 export {

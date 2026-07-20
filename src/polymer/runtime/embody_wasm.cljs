@@ -148,6 +148,18 @@
 
 (def createHairPhysicsSolver create-hair-physics-solver)
 
+(defn create-runtime-core
+  "Construct the Wasm live morph RuntimeCore (AU/viseme state -> packed
+  morph FrameDelta rows). Load bindings with load_au_morph_bindings /
+  load_viseme_morph_bindings before evaluating."
+  [viseme-slot-count]
+  (let [Ctor (aget (get-core) "RuntimeCore")]
+    (when-not Ctor
+      (throw (js/Error. "Embody Wasm module does not export RuntimeCore")))
+    (new Ctor viseme-slot-count)))
+
+(def createRuntimeCore create-runtime-core)
+
 ;; Re-export ABI constants from the JS wasm entry for consumers that need them
 ;; before init completes.
 (def EMBODY_CORE_ABI_VERSION (or (.-EMBODY_CORE_ABI_VERSION wasm) 1))
