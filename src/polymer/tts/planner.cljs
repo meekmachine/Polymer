@@ -142,9 +142,11 @@
   goals are attempted."
   [tts-state payload]
   (case (:type payload)
+    ;; configure must not cancel in-flight voice loads: hosts dispatch
+    ;; configure continuously (sliders, engine toggles) and would race the
+    ;; voice request into a permanent "checking" state. Only reset cancels.
     "configure"
-    [(command-action "cancel-voice-loads" {})
-     (command-action "configure" {:config (:config payload)})]
+    [(command-action "configure" {:config (:config payload)})]
 
     "loadVoices"
     [(command-action "load-voices"

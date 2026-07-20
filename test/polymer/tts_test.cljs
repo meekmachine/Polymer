@@ -131,6 +131,10 @@
            (map :op (planner/plan-command active-state speak-command))))
     (is (= [{:op "load-voices" :engine "webSpeech"}]
            (planner/plan-command idle-state load-command)))
+    ;; configure must not cancel voice loads: hosts dispatch configure while
+    ;; azure/webSpeech voice requests are in flight.
+    (is (= ["configure"]
+           (map :op (planner/plan-command idle-state {:type "configure" :config {}}))))
     (is (= ["advance-session" "cancel-voice-loads" "stop-active-session" "reset"]
            (map :op (planner/plan-command active-state reset-command))))))
 
