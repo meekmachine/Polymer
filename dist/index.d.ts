@@ -1,4 +1,118 @@
-import type { Embody } from '@lovelace_lol/embody';
+import type { Embody, EmbodyRuntime } from '@lovelace_lol/embody';
+
+export {
+  Embody,
+  BLENDING_MODES,
+  THREE_BLENDING_MODES,
+  collectMorphMeshes,
+  analyzeModel,
+  extractModelData,
+  getPreset,
+  validateMappings,
+  extendCharacterConfigWithPreset,
+  extractProfileOverrides,
+  mergeCharacterRegionsByName,
+  applyAUBoneBindingUpdate,
+  applyBilateralAxisBindingUpdate,
+  applyBoneAxisBindingUpdate,
+  buildBoneAuOptions,
+  classifyAuAsJointControl,
+  createBilateralBoneAxisAu,
+  createBoneAxisAu,
+  DEFAULT_AXIS_TO_CHANNEL,
+  DEFAULT_BONE_MAX_DEGREES,
+  ensureBilateralBoneNodeKeys,
+  ensureBoneNodeKey,
+  findNodeKeyForBone,
+  formatAxisDirectionLabel,
+  formatAxisLabel,
+  getAUBoneBindingState,
+  getAxisFromChannel,
+  getBilateralAxisBindingState,
+  getBoneAxisBindingState,
+  inferChiralBoneNamePair,
+  inferEyeControlFamily,
+  inferEyeControlScope,
+  isJointControlAuInfo,
+  isMaxDegreesOnlyAxisBindingUpdate,
+  JOINT_CONTROL_SECTION,
+  resolveBoneAxisChannel,
+  resolveBoneNameForNodeKey,
+  resolveContinuumDisplayLabel,
+  stripConfiguredBoneAffixes,
+  computeCameraRelativeGazeOffset,
+  detectAnnotationLaterality,
+  fuzzyNameMatch,
+  getDefaultAnnotationLaterality,
+  getMeshNamesForAUProfile,
+  getModelLocalOrbitAngle,
+  getSemanticHorizontalSign,
+  getSemanticHorizontalSignForSide,
+  getWorldDirectionForCameraAngle,
+  hasLeftRightMorphs,
+  isMixedAU,
+  passesMarkerCameraAngleGate,
+  resolveBoneNames,
+  resolveFaceCenter,
+  resolveRegionCameraAngle,
+  resolveRegionVisibilityCameraAngle,
+  toWorldDirection,
+  CC4_BONES,
+  VISEME_KEYS,
+} from '@lovelace_lol/embody';
+
+export type {
+  AUBoneBindingState,
+  AUInfo,
+  AnimationClipInfo,
+  AnimationInfo,
+  AnnotationLaterality,
+  BilateralAxisBindingState,
+  BilateralAxisDirectionScaleState,
+  BilateralAxisScopeBindingState,
+  BilateralBoneAxisScope,
+  BoneAxisBindingState,
+  BoneAxisBindingUpdate,
+  BoneAxisDirection,
+  BoneAxisDirectionScale,
+  BoneAxisKey,
+  BoneBinding,
+  BoneControlFamily,
+  BoneControlScope,
+  BoneInfo,
+  CameraRelativeGazeOffset,
+  CameraRelativeGazeOptions,
+  CharacterConfig,
+  CharacterRegistry,
+  ChiralBoneNamePair,
+  CompositeRotation,
+  CreatedBoneAxisAu,
+  ExpandAnimation,
+  ExpandedRegionState,
+  FallbackConfig,
+  LineConfig,
+  LineCurve,
+  LineStyle,
+  Embody,
+  EmbodyRuntime,
+  MarkerGroup,
+  MarkerStyle,
+  MarkerStyleOverrides,
+  MeshInfo,
+  ModelAnalysisReport,
+  ModelData,
+  MorphTargetsBySide,
+  NamedDirection,
+  PresetType,
+  Profile,
+  Region,
+  RotationAxis,
+  RotationChannel,
+  TrackInfo,
+  TransitionHandle,
+  ValidationResult,
+  VisemeSlot,
+} from '@lovelace_lol/embody';
 
 export interface BlinkState {
   agency: 'blink';
@@ -144,20 +258,43 @@ export interface GazeCancelRequest {
 }
 
 export interface EyeHeadTrackingConfig {
+  gazeMode?: 'engine' | 'legacy' | 'experimental';
   enabled?: boolean;
   eyeTrackingEnabled?: boolean;
+  eyeSaccadeSpeed?: number;
+  eyeSmoothPursuit?: boolean;
+  eyeBlinkRate?: number;
   headTrackingEnabled?: boolean;
   headFollowEyes?: boolean;
+  headFollowDelay?: number;
+  headSpeed?: number;
+  lookAtSpeaker?: boolean;
+  idleVariation?: boolean;
+  idleVariationInterval?: number;
   eyeIntensity?: number;
+  eyeBlendWeight?: number;
   headIntensity?: number;
+  headBlendWeight?: number;
   headRoll?: number;
   eyePriority?: number;
   headPriority?: number;
   snippetPriority?: number;
   transitionDurationMs?: number;
+  agencyTransitionDuration?: number;
   returnToCenterDurationMs?: number;
+  returnToNeutralEnabled?: boolean;
+  returnToNeutralDelay?: number;
+  returnToNeutralDuration?: number;
   coalesceMs?: number;
   replaceExisting?: boolean;
+  webcamTrackingEnabled?: boolean;
+  webcamLookAtUser?: boolean;
+  webcamActivationInterval?: number;
+  mouthSyncEnabled?: boolean;
+  engine?: Embody | EmbodyRuntime | unknown;
+  cameraController?: unknown;
+  animationAgency?: AnimationService | unknown;
+  useAnimationAgency?: boolean;
 }
 
 export interface EyeHeadTrackingState {
@@ -269,7 +406,7 @@ export interface AnimationState {
 
 export interface AnimationAgencyConfig {
   runtime?: PolymerAnimationRuntime;
-  engine?: Embody;
+  engine?: Embody | EmbodyRuntime;
   runtimeConfig?: Record<string, unknown>;
 }
 
@@ -585,6 +722,259 @@ export type ProsodicDispatch =
     }
   | { type: 'blinkFast'; sourceAgency?: string; plan?: Record<string, unknown> }
   | { type: 'stop'; reason?: string }
+  | { type: 'reset' };
+
+export interface ConversationConfig {
+  autoRespond?: boolean;
+  maxHistory?: number;
+  responseSource?: string;
+  ttsAgency?: string;
+  interruptionMode?: string;
+  autoListen?: boolean;
+  detectInterruptions?: boolean;
+  minSpeakTime?: number;
+  allowTranscriptInterruptionFallback?: boolean;
+  eyeHeadTracking?: EyeHeadTrackingService | unknown;
+  prosodicService?: unknown;
+}
+
+export interface ConversationHistoryEntry {
+  role: 'user' | 'agent' | string;
+  text: string;
+  source?: string;
+  at?: number;
+  turnId?: string | null;
+}
+
+export interface ConversationState {
+  agency: 'conversation';
+  status: string;
+  started: boolean;
+  turnId: string | null;
+  history: ConversationHistoryEntry[];
+  context: Record<string, unknown>;
+  pendingResponse: Record<string, unknown> | null;
+  lastUserText: string | null;
+  lastAgentText: string | null;
+  lastEvent: Record<string, unknown> | null;
+  interrupted: boolean;
+  startedCount: number;
+  stoppedCount: number;
+  userUtteranceCount: number;
+  agentUtteranceCount: number;
+  responseRequestCount: number;
+  ttsRequestCount: number;
+  cancelCount: number;
+  config: Required<ConversationConfig>;
+}
+
+export type ConversationDispatch =
+  | { type: 'configure'; config: ConversationConfig }
+  | { type: 'start' }
+  | { type: 'stop'; reason?: string }
+  | { type: 'reset' }
+  | { type: 'cancel' | 'interrupt'; reason?: string }
+  | { type: 'transcript.final' | 'transcriptFinal' | 'userUtterance'; text?: string; transcript?: string; utterance?: string; responseText?: string; agentText?: string; source?: string }
+  | { type: 'agentUtterance' | 'responseReady'; text?: string; utterance?: string; responseText?: string; agentText?: string; source?: string }
+  | { type: 'tts.status'; status: string };
+
+export interface TranscriptionConfig {
+  provider?: string;
+  lang?: string;
+  continuous?: boolean;
+  interimResults?: boolean;
+  maxAlternatives?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  minConfidence?: number;
+  agentFilteringEnabled?: boolean;
+  interruptDetectionEnabled?: boolean;
+  requireAgentReferenceForInterruption?: boolean;
+  interruptionDebugLogging?: boolean;
+  interruptionVolumeThreshold?: number;
+  interruptionReferenceScale?: number;
+  interruptionReferenceOffset?: number;
+  interruptionHoldMs?: number;
+}
+
+export interface TranscriptionState {
+  agency: 'transcription';
+  status: string;
+  active: boolean;
+  sessionId: string | null;
+  sequence: number;
+  currentTranscript: string | null;
+  isFinal: boolean;
+  lastPartial: Record<string, unknown> | null;
+  lastFinal: Record<string, unknown> | null;
+  lastError: string | null;
+  lastEvent: Record<string, unknown> | null;
+  retryCount: number;
+  startedCount: number;
+  stoppedCount: number;
+  partialCount: number;
+  finalCount: number;
+  errorCount: number;
+  config: Required<TranscriptionConfig>;
+}
+
+export type TranscriptionDispatch =
+  | { type: 'configure'; config: TranscriptionConfig }
+  | { type: 'start' }
+  | { type: 'stop' | 'cancel'; reason?: string }
+  | { type: 'reset' }
+  | { type: 'providerPartial' | 'partialTranscript' | 'providerFinal' | 'finalTranscript'; text?: string; transcript?: string; confidence?: number; source?: string }
+  | { type: 'providerError'; message?: string; error?: string };
+
+export interface HairColorConfig {
+  name?: string;
+  baseColor?: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+}
+
+export interface HairPhysicsConfig {
+  enabled?: boolean;
+  stiffness?: number;
+  damping?: number;
+  inertia?: number;
+  gravity?: number;
+  responseScale?: number;
+  idleSwayAmount?: number;
+  idleSwaySpeed?: number;
+  windStrength?: number;
+  windDirectionX?: number;
+  windDirectionZ?: number;
+  windTurbulence?: number;
+  windFrequency?: number;
+  idleClipDurationMs?: number;
+  impulseClipDurationMs?: number;
+  coalesceMs?: number;
+}
+
+export type HairColor = Required<HairColorConfig>;
+
+export interface HairPhysicsRuntimeConfig {
+  stiffness: number;
+  damping: number;
+  inertia: number;
+  gravity: number;
+  responseScale: number;
+  idleSwayAmount: number;
+  idleSwaySpeed: number;
+  windStrength: number;
+  windDirectionX: number;
+  windDirectionZ: number;
+  windTurbulence: number;
+  windFrequency: number;
+  idleClipDuration: number;
+  impulseClipDuration: number;
+}
+
+export type HairPhysicsUIConfig = HairPhysicsRuntimeConfig & {
+  enabled: boolean;
+};
+
+export interface HairObjectRef {
+  name: string;
+  isEyebrow?: boolean;
+  isMesh?: boolean;
+}
+
+export interface HairConfig {
+  physics?: HairPhysicsConfig;
+  hairColor?: HairColorConfig;
+  eyebrowColor?: HairColorConfig;
+  showOutline?: boolean;
+  outlineColor?: string;
+  outlineOpacity?: number;
+  objects?: HairObjectRef[];
+  parts?: Record<string, unknown>;
+}
+
+export interface HairState {
+  agency: 'hair';
+  status: string;
+  hairColor: Required<HairColorConfig>;
+  eyebrowColor: Required<HairColorConfig>;
+  showOutline: boolean;
+  outlineColor: string;
+  outlineOpacity: number;
+  objects: HairObjectRef[];
+  parts: Record<string, unknown>;
+  physics: Required<HairPhysicsConfig>;
+  lastMotion: Record<string, unknown> | null;
+  lastRuntimeRequest: Record<string, unknown> | null;
+  lastEvent: Record<string, unknown> | null;
+  motionCount: number;
+  runtimeRequestCount: number;
+  resetCount: number;
+  config: Required<Omit<HairConfig, 'physics' | 'hairColor' | 'eyebrowColor' | 'objects'>> & {
+    physics: Required<HairPhysicsConfig>;
+    hairColor: Required<HairColorConfig>;
+    eyebrowColor: Required<HairColorConfig>;
+    objects: HairObjectRef[];
+  };
+}
+
+export type HairDispatch =
+  | { type: 'configure'; config: HairConfig }
+  | { type: 'registerObjects'; objects: HairObjectRef[] }
+  | { type: 'motionFact'; velocity?: GazeTarget; delta?: GazeTarget; x?: number; y?: number; z?: number }
+  | { type: 'reset' };
+
+export interface CameraContextConfig {
+  coalesceMs?: number;
+  staleAfterMs?: number;
+  epsilon?: number;
+  yawWeight?: number;
+  pitchWeight?: number;
+}
+
+export interface PolymerVector3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface PolymerQuaternion {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface CameraContextState {
+  agency: 'cameraContext';
+  status: string;
+  cameraPosition: PolymerVector3 | null;
+  targetPosition: PolymerVector3 | null;
+  modelQuaternion: PolymerQuaternion;
+  relativeOffset: Required<GazeTarget>;
+  lastUpdatedAt: number | null;
+  lastPublishedAt: number | null;
+  lastFact: Record<string, unknown> | null;
+  lastPlan: Record<string, unknown> | null;
+  lastInvalidation: Record<string, unknown> | null;
+  stale: boolean;
+  invalidated: boolean;
+  updateCount: number;
+  publishedCount: number;
+  config: Required<CameraContextConfig>;
+}
+
+export type CameraContextDispatch =
+  | { type: 'configure'; config: CameraContextConfig }
+  | {
+      type: 'updateCamera';
+      facts?: Record<string, unknown>;
+      cameraPosition?: PolymerVector3;
+      targetPosition?: PolymerVector3;
+      modelQuaternion?: PolymerQuaternion;
+      source?: string;
+    }
+  | { type: 'publishCameraFacts' }
+  | { type: 'invalidateStale'; reason?: string }
   | { type: 'reset' };
 
 export type LipSyncSchedulerQueueEntry =
@@ -1238,7 +1628,24 @@ export type PolymerDomainEvent =
       scheduledAt: number;
     }
   | { type: 'prosodicStopped'; agency: 'prosodic'; reason: string; stoppedAt: number }
-  | { type: 'ready'; agency: 'character' | 'blink' | 'animation' | 'gaze' | 'eyeHeadTracking' | 'lipSync' | 'tts' | 'gesture' | 'prosodic' | 'conversation' | 'transcription' | 'hair' | 'cameraContext' }
+  | { type: string; agency: 'conversation' | 'transcription' | 'hair' | 'cameraContext'; [key: string]: unknown }
+  | {
+      type: 'ready';
+      agency:
+        | 'character'
+        | 'blink'
+        | 'animation'
+        | 'gaze'
+        | 'eyeHeadTracking'
+        | 'lipSync'
+        | 'tts'
+        | 'gesture'
+        | 'prosodic'
+        | 'conversation'
+        | 'transcription'
+        | 'hair'
+        | 'cameraContext';
+    }
   | { type: 'error'; agency: string; message: string };
 
 export type PolymerStatusEvent = PolymerDomainEvent;
@@ -1544,6 +1951,10 @@ export interface CharacterAgencySnapshot {
   tts: TTSState;
   lipSync: LipSyncState;
   prosodic: ProsodicState;
+  conversation: ConversationState;
+  transcription: TranscriptionState;
+  hair: HairState;
+  cameraContext: CameraContextState;
   animation: AnimationState;
 }
 
@@ -1559,6 +1970,10 @@ export type CharacterAgencyDispatch =
   | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'lipSync'; command: LipSyncDispatch }
   | { agency: 'prosodic'; command: ProsodicDispatch }
+  | { agency: 'conversation'; command: ConversationDispatch }
+  | { agency: 'transcription'; command: TranscriptionDispatch }
+  | { agency: 'hair'; command: HairDispatch }
+  | { agency: 'cameraContext'; command: CameraContextDispatch }
   | { agency: 'animation'; command: AnimationDispatch };
 
 export interface CharacterAgencies {
@@ -1579,6 +1994,10 @@ export interface CharacterAgencies {
   agency(name: 'tts'): TTSAgency;
   agency(name: 'lipSync'): LipSyncAgency;
   agency(name: 'prosodic'): ProsodicAgency;
+  agency(name: 'conversation'): ConversationAgency;
+  agency(name: 'transcription'): TranscriptionAgency;
+  agency(name: 'hair'): HairAgency;
+  agency(name: 'cameraContext'): CameraContextAgency;
   agency(name: string): unknown | null;
   subscribeInput(listener: (event: { type: 'command'; agency: string; message: CharacterAgencyDispatch }) => void): () => void;
   subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
@@ -1591,6 +2010,456 @@ export interface CharacterAgencies {
   subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   dispose(): void;
 }
+
+export type CurvePoint = PolymerSnippetKeyframe;
+export type EasingType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'easeInOutCubic';
+export type MixerLoopMode = 'repeat' | 'once' | 'pingpong';
+export type SnippetCategoryKey =
+  | 'emotionAnimationsList'
+  | 'speakingAnimationsList'
+  | 'visemeAnimationsList'
+  | 'eyeHeadTrackingAnimationsList';
+
+export interface AIExpressionInterpretationMetadata {
+  emotion?: string;
+  title?: string;
+  description?: string;
+  explanation?: string;
+  notesByAu?: Record<string, string>;
+  summary?: string;
+  phases?: Array<{ title: string; description: string }>;
+  aus?: Record<string, number>;
+  characterDetailsUsed?: string[];
+  eyeNote?: string | null;
+  headNote?: string | null;
+  pacingNote?: string | null;
+  handoffNote?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AIExpressionSnippetMetadata {
+  description?: string;
+  interpretation?: AIExpressionInterpretationMetadata;
+  source?: string;
+  prompt?: string;
+  [key: string]: unknown;
+}
+
+export interface Snippet {
+  name?: string;
+  au?: Array<{ id: string | number; t?: number; v?: number; time?: number; intensity?: number; inherit?: boolean }>;
+  viseme?: Array<{ key: string | number; t?: number; v?: number; time?: number; intensity?: number; inherit?: boolean }>;
+  curves?: Record<string, CurvePoint[]>;
+  channels?: PolymerSnippetChannel[];
+  isPlaying?: boolean;
+  loop?: boolean;
+  maxTime?: number;
+  duration?: number;
+  snippetCategory?: 'auSnippet' | 'visemeSnippet' | 'eyeHeadTracking' | 'combined' | 'default' | string;
+  snippetPriority?: number;
+  snippetPlaybackRate?: number;
+  snippetIntensityScale?: number;
+  snippetBlendMode?: 'replace' | 'additive';
+  snippetJawScale?: number;
+  autoVisemeJaw?: boolean;
+  snippetBalance?: number;
+  snippetBalanceMap?: Record<string, number>;
+  snippetEasing?: EasingType;
+  aiExpressionMetadata?: AIExpressionSnippetMetadata;
+  [key: string]: unknown;
+}
+
+export interface NormalizedSnippet extends Snippet {
+  name: string;
+  curves: Record<string, CurvePoint[]>;
+  isPlaying: boolean;
+  loop: boolean;
+  aiExpressionMetadata?: AIExpressionSnippetMetadata;
+  loopIteration: number;
+  loopDirection: 1 | -1;
+  lastLoopTime: number;
+  snippetPlaybackRate: number;
+  snippetIntensityScale: number;
+  snippetCategory: 'auSnippet' | 'visemeSnippet' | 'eyeHeadTracking' | 'combined' | 'default' | string;
+  snippetPriority: number;
+  snippetBlendMode: 'replace' | 'additive';
+  snippetJawScale: number;
+  autoVisemeJaw?: boolean;
+  snippetBalance: number;
+  snippetBalanceMap: Record<string, number>;
+  snippetEasing: EasingType;
+  mixerChannel?: string;
+  mixerBlendMode?: 'replace' | 'additive';
+  mixerWeight?: number;
+  mixerFadeDurationMs?: number;
+  mixerWarpDurationMs?: number;
+  mixerTimeScale?: number;
+  mixerLoopMode?: MixerLoopMode;
+  mixerRepeatCount?: number;
+  mixerClampWhenFinished?: boolean;
+  mixerAdditive?: boolean;
+  mixerReverse?: boolean;
+  currentTime: number;
+  startWallTime: number;
+  duration: number;
+  cursor: Record<string, number>;
+}
+
+export interface SnippetUIState {
+  name: string;
+  isPlaying: boolean;
+  loop: boolean;
+  loopMode: MixerLoopMode;
+  reverse: boolean;
+  repeatCount?: number;
+  loopIteration?: number;
+  loopDirection?: 1 | -1;
+  currentTime: number;
+  duration: number;
+  playbackRate: number;
+  intensityScale: number;
+  blendMode: 'replace' | 'additive';
+  balance: number;
+  category: string;
+  easing: EasingType;
+}
+
+export interface BakedClipChannelInfo {
+  channel: string;
+  trackCount: number;
+  playable: boolean;
+  blendMode?: 'replace' | 'additive';
+}
+
+export interface BakedClipInfo {
+  name: string;
+  duration: number;
+  channels?: BakedClipChannelInfo[];
+}
+
+export interface BakedAnimationUIState {
+  name: string;
+  source: 'baked';
+  time: number;
+  currentTime: number;
+  duration: number;
+  speed: number;
+  playbackRate: number;
+  weight: number;
+  intensityScale: number;
+  isPlaying: boolean;
+  isPaused: boolean;
+  loop: boolean;
+  loopMode: MixerLoopMode;
+  reverse: boolean;
+  repeatCount?: number;
+  requestedBlendMode: 'replace' | 'additive';
+  blendMode: 'replace' | 'additive';
+  balance: number;
+  category: 'baked';
+  easing: EasingType;
+  channels: BakedClipChannelInfo[];
+}
+
+export type AnimationEvent =
+  | { type: 'SNIPPET_ADDED'; snippetName: string; timestamp: number }
+  | { type: 'SNIPPET_REMOVED'; snippetName: string; timestamp: number }
+  | { type: 'SNIPPET_PLAY_STATE_CHANGED'; snippetName: string; isPlaying: boolean; timestamp: number }
+  | { type: 'SNIPPET_UPDATED'; snippetName: string; timestamp: number }
+  | { type: 'SNIPPET_LOOPED'; snippetName: string; iteration: number; localTime: number; timestamp: number }
+  | { type: 'SNIPPET_COMPLETED'; snippetName: string; timestamp: number }
+  | { type: 'KEYFRAME_COMPLETED'; snippetName: string; keyframeIndex: number; totalKeyframes: number; currentTime: number; duration: number; timestamp: number }
+  | { type: 'SNIPPET_PARAMS_CHANGED'; snippetName: string; params: Record<string, unknown>; timestamp: number }
+  | { type: 'GLOBAL_PLAYBACK_CHANGED'; state: 'playing' | 'paused' | 'stopped'; timestamp: number }
+  | { type: 'SNIPPET_SEEKED'; snippetName: string; time: number; timestamp: number }
+  | { type: 'BAKED_CLIPS_LOADED'; clips: BakedClipInfo[]; timestamp: number }
+  | { type: 'BAKED_ANIMATION_STARTED'; clipName: string; state: BakedAnimationUIState; timestamp: number }
+  | { type: 'BAKED_ANIMATION_STOPPED'; clipName: string; timestamp: number }
+  | { type: 'BAKED_ANIMATION_PAUSED'; clipName: string; timestamp: number }
+  | { type: 'BAKED_ANIMATION_RESUMED'; clipName: string; timestamp: number }
+  | { type: 'BAKED_ANIMATION_COMPLETED'; clipName: string; timestamp: number }
+  | { type: 'BAKED_ANIMATION_PROGRESS'; clipName: string; time: number; duration: number; timestamp: number }
+  | { type: 'BAKED_ANIMATION_PARAMS_CHANGED'; clipName: string; params: Record<string, unknown>; timestamp: number };
+
+export interface AnimationSubscription {
+  unsubscribe(): void;
+}
+
+export interface AnimationObservable<T> {
+  subscribe(listener: (value: T) => void): AnimationSubscription;
+}
+
+export interface AnimationEventEmitter {
+  events: AnimationObservable<AnimationEvent>;
+  setSnippetAccessor(getSnippets: () => NormalizedSnippet[]): void;
+  getSnippets(): SnippetUIState[];
+  getRawSnippets(): NormalizedSnippet[];
+  getRawSnippet(name: string): NormalizedSnippet | null;
+  getSnippet(name: string): SnippetUIState | null;
+  getGlobalState(): 'playing' | 'paused' | 'stopped';
+  emitSnippetAdded(snippetName: string): void;
+  emitSnippetRemoved(snippetName: string): void;
+  emitPlayStateChanged(snippetName: string, isPlaying: boolean): void;
+  emitSnippetUpdated(snippetName: string): void;
+  emitSnippetLooped(data: { snippetName: string; iteration: number; localTime: number }): void;
+  emitSnippetCompleted(snippetName: string): void;
+  emitKeyframeCompleted(data: { snippetName: string; keyframeIndex: number; totalKeyframes: number; currentTime: number; duration: number }): void;
+  emitGlobalPlaybackChanged(state: 'playing' | 'paused' | 'stopped'): void;
+  emitSnippetSeeked(snippetName: string, time: number): void;
+  emitParamsChanged(snippetName: string, params: Record<string, unknown>): void;
+  emitBakedClipsLoaded(clips: BakedClipInfo[]): void;
+  emitBakedAnimationStarted(clipName: string, state: BakedAnimationUIState): void;
+  emitBakedAnimationStopped(clipName: string): void;
+  emitBakedAnimationPaused(clipName: string): void;
+  emitBakedAnimationResumed(clipName: string): void;
+  emitBakedAnimationCompleted(clipName: string): void;
+  emitBakedAnimationProgress(clipName: string, time: number, duration: number): void;
+  emitBakedAnimationParamsChanged(clipName: string, params: Record<string, unknown>): void;
+  getBakedClips(): BakedClipInfo[];
+  getPlayingBakedAnimations(): BakedAnimationUIState[];
+  getBakedAnimationState(clipName: string): BakedAnimationUIState | null;
+  updateBakedAnimationState(clipName: string, state: BakedAnimationUIState): void;
+}
+
+export interface AnimationService {
+  loadFromJSON(data: Snippet | NormalizedSnippet): string;
+  updateSnippet(data: Snippet | NormalizedSnippet): string;
+  schedule(data: Snippet | NormalizedSnippet, opts?: { startInSec?: number; startAtSec?: number; offsetSec?: number; priority?: number; autoPlay?: boolean }): string;
+  remove(name: string): void;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  enable(name: string, on?: boolean): boolean;
+  seek(name: string, offsetSec: number): boolean;
+  getState(): { context: { animations: NormalizedSnippet[] } };
+  getScheduleSnapshot(): Array<{ name: string; enabled: boolean; startsAt: number; offset: number; localTime: number; duration: number; loop: boolean; priority: number; playbackRate: number; intensityScale: number }>;
+  getCurrentValue(auId: string): number;
+  readonly playing: boolean;
+  isPlaying(): boolean;
+  loadFromLocal(key: string, cat?: string, prio?: number): string | null;
+  setSnippetPlaybackRate(name: string, rate: number): void;
+  setSnippetIntensityScale(name: string, scale: number): void;
+  setSnippetBlendMode(name: string, mode: 'replace' | 'additive'): void;
+  setSnippetBalance(name: string, balance: number): void;
+  setSnippetEasing(name: string, easing: EasingType): void;
+  setSnippetPriority(name: string, priority: number): void;
+  setSnippetLoopMode(name: string, mode: MixerLoopMode): void;
+  setSnippetRepeatCount(name: string, repeatCount?: number): void;
+  setSnippetReverse(name: string, reverse: boolean): void;
+  setSnippetPlaying(name: string, nextPlaying: boolean): boolean;
+  setSnippetTime(name: string, tSec: number): void;
+  setSnippetLoopState(name: string, iteration: number, localTime?: number): void;
+  pauseSnippet(name: string): boolean;
+  resumeSnippet(name: string): boolean;
+  restartSnippet(name: string): boolean;
+  stopSnippet(name: string): boolean;
+  onTransition(cb: (snapshot: { context: { animations: NormalizedSnippet[] } }) => void): () => void;
+  dispose(): void;
+  debug(): void;
+  setBakedAnimationEngine(engine: Embody | EmbodyRuntime): void;
+  playBakedAnimation(clipName: string, options?: Record<string, unknown>): unknown;
+  stopBakedAnimation(clipName: string): void;
+  pauseBakedAnimation(clipName: string): void;
+  resumeBakedAnimation(clipName: string): void;
+  setBakedAnimationSpeed(clipName: string, speed: number): void;
+  setBakedAnimationWeight(clipName: string, weight: number): void;
+  setBakedAnimationLoop(clipName: string, loop: boolean): void;
+  setBakedAnimationLoopMode(clipName: string, mode: MixerLoopMode): void;
+  setBakedAnimationRepeatCount(clipName: string, repeatCount?: number): void;
+  setBakedAnimationReverse(clipName: string, reverse: boolean): void;
+  setBakedAnimationBlendMode(clipName: string, mode: 'replace' | 'additive'): void;
+  setBakedAnimationBalance(clipName: string, balance: number): void;
+  setBakedAnimationEasing(clipName: string, easing: EasingType): void;
+  seekBakedAnimation(clipName: string, time: number): boolean;
+  canSeekBakedAnimation(): boolean;
+  stopAllBakedAnimations(): void;
+  getBakedClips(): BakedClipInfo[];
+  getPlayingBakedAnimations(): BakedAnimationUIState[];
+}
+
+export interface EyeHeadTrackingRuntimeState {
+  eyeStatus: 'idle' | 'tracking' | 'lagging';
+  headStatus: 'idle' | 'tracking' | 'lagging';
+  currentGaze: GazeTarget;
+  targetGaze: GazeTarget;
+  eyeIntensity: number;
+  lastBlinkTime: number | null;
+  headIntensity: number;
+  headFollowTimer: number | null;
+  isSpeaking: boolean;
+  isListening: boolean;
+  returnToNeutralTimer: number | null;
+  lastGazeUpdateTime: number;
+  mode?: string;
+}
+
+export interface EyeHeadTrackingCallbacks {
+  onEyeStart?: () => void;
+  onEyeStop?: () => void;
+  onHeadStart?: () => void;
+  onHeadStop?: () => void;
+  onGazeChange?: (target: GazeTarget) => void;
+  onBlink?: () => void;
+  onError?: (error: Error) => void;
+}
+
+export interface EyeHeadTrackingMachineContext {
+  config: EyeHeadTrackingConfig;
+  mode: 'manual' | 'mouse' | 'webcam' | string;
+  target: GazeTarget;
+  lastApplied: GazeTarget;
+  status: {
+    eye: 'idle' | 'tracking' | 'lagging';
+    head: 'idle' | 'tracking' | 'lagging';
+  };
+}
+
+export interface EyeHeadTrackingService {
+  start(): void;
+  stop(): void;
+  setGazeTarget(target: GazeTarget): void;
+  resetToNeutral(durationMs?: number): void;
+  blink(): void;
+  setSpeaking(isSpeaking: boolean): void;
+  setListening(isListening: boolean): void;
+  setEyeBlendWeight(value: number): void;
+  setHeadBlendWeight(value: number): void;
+  updateConfig(config: Partial<EyeHeadTrackingConfig>): void;
+  getState(): EyeHeadTrackingRuntimeState;
+  getMachineContext(): EyeHeadTrackingMachineContext | null;
+  getSnippets(): { eye: Map<string, unknown>; head: Map<string, unknown> };
+  setMode(mode: 'manual' | 'mouse' | 'webcam' | string): void;
+  getMode(): 'manual' | 'mouse' | 'webcam' | string;
+  subscribeToWebcam(callback: (detected: boolean, landmarks?: Array<{ x: number; y: number }>) => void): () => void;
+  getWebcamVideoElement(): HTMLVideoElement | null;
+  isWebcamActive(): boolean;
+  dispose(): void;
+}
+
+export interface BoundaryEvent {
+  word: string;
+  index: number;
+  timestamp: number;
+  speaker: 'user' | 'agent';
+}
+
+export interface InterruptionEvent {
+  timestamp: number;
+  microphoneLevel: number;
+  referenceLevel: number;
+  requiredLevel: number;
+}
+
+export interface TranscriptionCallbacks {
+  onTranscript?: (transcript: string, isFinal: boolean) => void;
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: (error: Error) => void;
+  onBoundary?: (event: BoundaryEvent) => void;
+  onInterruption?: (event: InterruptionEvent) => void;
+}
+
+export interface AgentSpeechEvent {
+  type: 'AGENT_SCRIPT' | 'AGENT_START' | 'WORD' | 'END' | 'AGENT_DONE' | 'PLAYBACK_ENDED';
+  words?: string[];
+  word?: string;
+  index?: number;
+  phrase?: string;
+}
+
+export interface TranscriptionService {
+  startListening(): Promise<void>;
+  stopListening(): void;
+  handleAgentSpeech(event: AgentSpeechEvent): void;
+  prepareAgentSpeech(text: string): void;
+  notifyAgentSpeech(text: string): void;
+  notifyAgentSpeechEnd(): void;
+  setAgentAudioReferenceTrack(track: MediaStreamTrack | null): void;
+  onBoundary(listener: (event: BoundaryEvent) => void): () => void;
+  onTranscript(listener: (transcript: string, isFinal: boolean) => void): () => void;
+  onInterruption(listener: (event: InterruptionEvent) => void): () => void;
+  getState(): TranscriptionState;
+  updateConfig(config: Partial<TranscriptionConfig>): void;
+  dispose(): void;
+}
+
+export type ConversationStateName = 'idle' | 'agentSpeaking' | 'interrupted' | 'userSpeaking' | 'processing';
+
+export interface ConversationCallbacks {
+  onUserSpeech?: (transcript: string, isFinal: boolean, isInterruption: boolean) => void;
+  onAgentUtterance?: (text: string) => void;
+  onStateChange?: (state: ConversationStateName) => void;
+  onError?: (error: Error) => void;
+}
+
+export type ConversationFlow = Generator<string | Promise<string>, string | void, string>;
+
+export interface ConversationService {
+  start(flowGenerator: () => ConversationFlow): void;
+  stop(): void;
+  getState(): {
+    state: ConversationStateName;
+    lastUserSpeech?: string | null;
+    lastAgentSpeech?: string | null;
+    isInterrupted?: boolean;
+    speakStartTime?: number | null;
+  };
+  submitUserInput(text: string): void;
+  addSubscriptionCleanup?(unsubscribe: () => void): void;
+  receiveTranscript?(text: string, isFinal: boolean): void;
+  receiveAudioInterruption?(event: InterruptionEvent): void;
+  dispose(): void;
+}
+
+export declare class HairService {
+  constructor(engine?: Embody | EmbodyRuntime | unknown);
+  registerObjects(objects: unknown[]): void;
+  send(event: unknown): void;
+  getState(): HairState;
+  subscribe(callback: (state: HairState) => void): () => void;
+  animateHairMorph(morphKey: string, targetValue: number, durationMs?: number): void;
+  setHairMorph(morphKey: string, value: number): void;
+  getAvailableHairMorphs(): string[];
+  setPhysicsEnabled(enabled: boolean): void;
+  isPhysicsEnabled(): boolean;
+  updatePhysicsConfig(updates: Partial<HairPhysicsRuntimeConfig>): void;
+  getPhysicsConfig(): HairPhysicsUIConfig;
+  dispose(): void;
+}
+
+export interface ResolvedSnippetEntry {
+  name: string;
+  data: Record<string, unknown>;
+  source: 'localStorage' | 'bundled';
+  storageKey: string;
+}
+
+export const animationEventEmitter: AnimationEventEmitter;
+export const snippetList$: AnimationObservable<string[]>;
+export function snippetState$(snippetName: string): AnimationObservable<SnippetUIState | null>;
+export function snippetTime$(snippetName: string): AnimationObservable<number>;
+export const globalPlaybackState$: AnimationObservable<'playing' | 'paused' | 'stopped'>;
+export const bakedClipList$: AnimationObservable<BakedClipInfo[]>;
+export const playingBakedAnimations$: AnimationObservable<BakedAnimationUIState[]>;
+export const bakedAnimationProgress$: AnimationObservable<AnimationEvent>;
+export function bakedAnimationState$(clipName: string): AnimationObservable<BakedAnimationUIState | null>;
+export function createAnimationService(engine: Embody | EmbodyRuntime): AnimationService;
+export function createEyeHeadTrackingService(config?: EyeHeadTrackingConfig, callbacks?: EyeHeadTrackingCallbacks): EyeHeadTrackingService;
+export function createTranscriptionService(config?: TranscriptionConfig, callbacks?: TranscriptionCallbacks): TranscriptionService;
+export function createConversationService(tts: { speak(text: string): Promise<unknown>; stop(): void }, transcription: TranscriptionService, config?: ConversationConfig, callbacks?: ConversationCallbacks): ConversationService;
+export const HAIR_COLOR_PRESETS: Record<string, HairColor>;
+export const DEFAULT_HAIR_PHYSICS_CONFIG: HairPhysicsRuntimeConfig;
+export const DEFAULT_HAIR_PHYSICS_ENABLED: boolean;
+export const DEFAULT_EYE_HEAD_CONFIG: Required<Pick<EyeHeadTrackingConfig, 'gazeMode' | 'eyeTrackingEnabled' | 'headTrackingEnabled' | 'headFollowEyes' | 'eyeIntensity' | 'headIntensity' | 'returnToNeutralEnabled' | 'returnToNeutralDelay' | 'returnToNeutralDuration' | 'useAnimationAgency'>>;
+export const DEFAULT_ANIMATION_KEYS: Record<string, string>;
+export const EYE_AUS: Record<string, number>;
+export const HEAD_AUS: Record<string, number>;
+export function getBundledSnippetNames(listKey: SnippetCategoryKey): string[];
+export function getStoredSnippetNames(listKey: SnippetCategoryKey, storage?: Pick<Storage, 'getItem' | 'removeItem'>): string[];
+export function getAvailableSnippetNames(listKey: SnippetCategoryKey, storage?: Pick<Storage, 'getItem' | 'removeItem'>): string[];
+export function resolveSnippetEntry(listKey: SnippetCategoryKey, name: string, storage?: Pick<Storage, 'getItem' | 'removeItem'>): Promise<ResolvedSnippetEntry | null>;
+export function preloadAllSnippets(): void;
+export function clearPreloadedSnippets(storage?: Pick<Storage, 'getItem' | 'removeItem'>): void;
 
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
@@ -1616,5 +2485,9 @@ export function createCharacterAgencies(config?: {
   tts?: TTSConfig;
   lipSync?: LipSyncConfig;
   prosodic?: ProsodicConfig;
+  conversation?: ConversationConfig;
+  transcription?: TranscriptionConfig;
+  hair?: HairConfig;
+  cameraContext?: CameraContextConfig;
   animation?: AnimationAgencyConfig;
 }): CharacterAgencies;

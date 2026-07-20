@@ -16,8 +16,17 @@
 
 (defn create-scheduler [{:keys [state-atom emit-event record-plan!]}]
   (let [auto-timer (atom nil)
+        queue (atom [])
         disposed? (atom false)]
-    (letfn [(emit-plan! [plan snippet-data next-delay-ms]
+    (letfn [(enqueue! [entry]
+              (let [queued (assoc entry
+                                  :agency "blink"
+                                  :queueIndex (count @queue)
+                                  :queuedAt (.now js/Date))]
+                (swap! queue conj queued)
+                queued))
+
+            (emit-plan! [plan snippet-data next-delay-ms]
               ;; Domain events describe what Blink decided. They are not
               ;; imperative requests. Other agencies can listen to them without
               ;; causing side effects.
@@ -39,6 +48,10 @@
               (when-not @disposed?
                 (let [plan (planner/make-plan @state-atom reason options random-value now-ms)
                       snippet-data (snippet/build-blink-snippet plan)]
+                  (enqueue! {:type "blinkScheduled"
+                             :reason reason
+                             :snippetName (:name snippet-data)
+                             :burstCount (:burstCount plan)})
                   (record-plan! plan)
                   ;; Blink requests animation as data. The Polymer agency
                   ;; network routes it to Animation instead of letting Blink
@@ -70,6 +83,8 @@
       {:trigger trigger!
        :refresh-auto (fn [] (schedule-next-auto! 0))
        :stop (fn [] (clear-timeout! auto-timer))
+       :queue (fn [] @queue)
        :dispose (fn []
                   (reset! disposed? true)
-                  (clear-timeout! auto-timer))})))
+                  (clear-timeout! auto-timer)
+                  (reset! queue []))})))

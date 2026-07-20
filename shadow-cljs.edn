@@ -2,10 +2,41 @@
  :dependencies []
  :builds
  {:npm
-  {:target :node-library
-   :output-to "dist/index.js"
-   :exports {:createBlinkAgency polymer.core/createBlinkAgency
+  {:target :esm
+   :output-dir "dist"
+   :js-options {:js-provider :import}
+   :modules {:index
+             {:exports {:createBlinkAgency polymer.core/createBlinkAgency
              :createAnimationAgency polymer.core/createAnimationAgency
+             :createAnimationService polymer.core/createAnimationService
+             :createEyeHeadTrackingService polymer.core/createEyeHeadTrackingService
+             :createTranscriptionService polymer.core/createTranscriptionService
+             :createConversationService polymer.core/createConversationService
+             :HairService polymer.core/HairService
+             :TranscriptionService polymer.core/TranscriptionService
+             :ConversationService polymer.core/ConversationService
+             :HAIR_COLOR_PRESETS polymer.core/HAIR_COLOR_PRESETS
+             :DEFAULT_HAIR_PHYSICS_CONFIG polymer.core/DEFAULT_HAIR_PHYSICS_CONFIG
+             :DEFAULT_HAIR_PHYSICS_ENABLED polymer.core/DEFAULT_HAIR_PHYSICS_ENABLED
+             :DEFAULT_EYE_HEAD_CONFIG polymer.core/DEFAULT_EYE_HEAD_CONFIG
+             :DEFAULT_ANIMATION_KEYS polymer.core/DEFAULT_ANIMATION_KEYS
+             :EYE_AUS polymer.core/EYE_AUS
+             :HEAD_AUS polymer.core/HEAD_AUS
+             :animationEventEmitter polymer.core/animationEventEmitter
+             :snippetList$ polymer.core/snippetList$
+             :snippetState$ polymer.core/snippetState$
+             :snippetTime$ polymer.core/snippetTime$
+             :globalPlaybackState$ polymer.core/globalPlaybackState$
+             :bakedClipList$ polymer.core/bakedClipList$
+             :playingBakedAnimations$ polymer.core/playingBakedAnimations$
+             :bakedAnimationProgress$ polymer.core/bakedAnimationProgress$
+             :bakedAnimationState$ polymer.core/bakedAnimationState$
+             :getBundledSnippetNames polymer.core/getBundledSnippetNames
+             :getStoredSnippetNames polymer.core/getStoredSnippetNames
+             :getAvailableSnippetNames polymer.core/getAvailableSnippetNames
+             :resolveSnippetEntry polymer.core/resolveSnippetEntry
+             :preloadAllSnippets polymer.core/preloadAllSnippets
+             :clearPreloadedSnippets polymer.core/clearPreloadedSnippets
              :createGazeAgency polymer.core/createGazeAgency
              :createEyeHeadTrackingAgency polymer.core/createEyeHeadTrackingAgency
              :createLipSyncAgency polymer.core/createLipSyncAgency
@@ -16,7 +47,65 @@
              :createTranscriptionAgency polymer.core/createTranscriptionAgency
              :createHairAgency polymer.core/createHairAgency
              :createCameraContextAgency polymer.core/createCameraContextAgency
-             :createCharacterAgencies polymer.core/createCharacterAgencies}}
+             :createCharacterAgencies polymer.core/createCharacterAgencies
+             :Embody polymer.runtime.embody/Embody
+             :BLENDING_MODES polymer.runtime.embody/BLENDING_MODES
+             :THREE_BLENDING_MODES polymer.runtime.embody/THREE_BLENDING_MODES
+             :collectMorphMeshes polymer.runtime.embody/collectMorphMeshes
+             :analyzeModel polymer.runtime.embody/analyzeModel
+             :extractModelData polymer.runtime.embody/extractModelData
+             :getPreset polymer.runtime.embody/getPreset
+             :validateMappings polymer.runtime.embody/validateMappings
+             :extendCharacterConfigWithPreset polymer.runtime.embody/extendCharacterConfigWithPreset
+             :extractProfileOverrides polymer.runtime.embody/extractProfileOverrides
+             :mergeCharacterRegionsByName polymer.runtime.embody/mergeCharacterRegionsByName
+             :applyAUBoneBindingUpdate polymer.runtime.embody/applyAUBoneBindingUpdate
+             :applyBilateralAxisBindingUpdate polymer.runtime.embody/applyBilateralAxisBindingUpdate
+             :applyBoneAxisBindingUpdate polymer.runtime.embody/applyBoneAxisBindingUpdate
+             :buildBoneAuOptions polymer.runtime.embody/buildBoneAuOptions
+             :classifyAuAsJointControl polymer.runtime.embody/classifyAuAsJointControl
+             :createBilateralBoneAxisAu polymer.runtime.embody/createBilateralBoneAxisAu
+             :createBoneAxisAu polymer.runtime.embody/createBoneAxisAu
+             :DEFAULT_AXIS_TO_CHANNEL polymer.runtime.embody/DEFAULT_AXIS_TO_CHANNEL
+             :DEFAULT_BONE_MAX_DEGREES polymer.runtime.embody/DEFAULT_BONE_MAX_DEGREES
+             :ensureBilateralBoneNodeKeys polymer.runtime.embody/ensureBilateralBoneNodeKeys
+             :ensureBoneNodeKey polymer.runtime.embody/ensureBoneNodeKey
+             :findNodeKeyForBone polymer.runtime.embody/findNodeKeyForBone
+             :formatAxisDirectionLabel polymer.runtime.embody/formatAxisDirectionLabel
+             :formatAxisLabel polymer.runtime.embody/formatAxisLabel
+             :getAUBoneBindingState polymer.runtime.embody/getAUBoneBindingState
+             :getAxisFromChannel polymer.runtime.embody/getAxisFromChannel
+             :getBilateralAxisBindingState polymer.runtime.embody/getBilateralAxisBindingState
+             :getBoneAxisBindingState polymer.runtime.embody/getBoneAxisBindingState
+             :inferChiralBoneNamePair polymer.runtime.embody/inferChiralBoneNamePair
+             :inferEyeControlFamily polymer.runtime.embody/inferEyeControlFamily
+             :inferEyeControlScope polymer.runtime.embody/inferEyeControlScope
+             :isJointControlAuInfo polymer.runtime.embody/isJointControlAuInfo
+             :isMaxDegreesOnlyAxisBindingUpdate polymer.runtime.embody/isMaxDegreesOnlyAxisBindingUpdate
+             :JOINT_CONTROL_SECTION polymer.runtime.embody/JOINT_CONTROL_SECTION
+             :resolveBoneAxisChannel polymer.runtime.embody/resolveBoneAxisChannel
+             :resolveBoneNameForNodeKey polymer.runtime.embody/resolveBoneNameForNodeKey
+             :resolveContinuumDisplayLabel polymer.runtime.embody/resolveContinuumDisplayLabel
+             :stripConfiguredBoneAffixes polymer.runtime.embody/stripConfiguredBoneAffixes
+             :computeCameraRelativeGazeOffset polymer.runtime.embody/computeCameraRelativeGazeOffset
+             :detectAnnotationLaterality polymer.runtime.embody/detectAnnotationLaterality
+             :fuzzyNameMatch polymer.runtime.embody/fuzzyNameMatch
+             :getDefaultAnnotationLaterality polymer.runtime.embody/getDefaultAnnotationLaterality
+             :getMeshNamesForAUProfile polymer.runtime.embody/getMeshNamesForAUProfile
+             :getModelLocalOrbitAngle polymer.runtime.embody/getModelLocalOrbitAngle
+             :getSemanticHorizontalSign polymer.runtime.embody/getSemanticHorizontalSign
+             :getSemanticHorizontalSignForSide polymer.runtime.embody/getSemanticHorizontalSignForSide
+             :getWorldDirectionForCameraAngle polymer.runtime.embody/getWorldDirectionForCameraAngle
+             :hasLeftRightMorphs polymer.runtime.embody/hasLeftRightMorphs
+             :isMixedAU polymer.runtime.embody/isMixedAU
+             :passesMarkerCameraAngleGate polymer.runtime.embody/passesMarkerCameraAngleGate
+             :resolveBoneNames polymer.runtime.embody/resolveBoneNames
+             :resolveFaceCenter polymer.runtime.embody/resolveFaceCenter
+             :resolveRegionCameraAngle polymer.runtime.embody/resolveRegionCameraAngle
+             :resolveRegionVisibilityCameraAngle polymer.runtime.embody/resolveRegionVisibilityCameraAngle
+             :toWorldDirection polymer.runtime.embody/toWorldDirection
+             :CC4_BONES polymer.runtime.embody/CC4_BONES
+             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}}}
 
   :worker
   {:target :browser
@@ -25,5 +114,5 @@
 
   :test
   {:target :node-test
-   :output-to "dist/test.js"
+   :output-to "dist/test.cjs"
    :ns-regexp "polymer\\..*-test$"}}}
