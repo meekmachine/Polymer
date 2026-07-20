@@ -28,14 +28,17 @@
     "check:install-surface": "node scripts/check-git-install-surface.mjs",
     "check:architecture": "node scripts/check-agency-architecture.mjs",
     "check:dist": "node scripts/check-built-dist.mjs",
-    "clean": "rm -rf .shadow-cljs dist/test.js dist/test.cjs",
-    "prepublishOnly": "pnpm test && pnpm build && pnpm check:dist"
+    "clean": "rm -rf .shadow-cljs dist/test.js dist/test.cjs"
   },
   "dependencies": {
     "@lovelace_lol/embody": "git+https://github.com/meekmachine/embody.git#5441990775d07bef50f38547d41c0349e0fda3f1"
   },
   "devDependencies": {
     "shadow-cljs": "^2.28.23"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meekmachine/Polymer.git"
   },
   "packageManager": "pnpm@10.25.0"
 }

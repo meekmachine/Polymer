@@ -1,0 +1,59 @@
+name: Continuous Release (pkg.pr.new)
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: pkg-pr-new-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  publish:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm check:dist
+
+      - name: Publish preview package
+        id: publish
+        continue-on-error: true
+        run: pnpm dlx pkg-pr-new publish --no-compact
+
+      - name: Warn if pkg.pr.new is unavailable
+        if: steps.publish.outcome == 'failure'
+        run: |
+          echo "::warning::pkg.pr.new publish failed. Install the GitHub App at https://github.com/apps/pkg-pr-new on meekmachine/Polymer, then re-run this job. LoomLarge Depends-on links will fall back to git SHA until then."
