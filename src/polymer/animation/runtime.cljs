@@ -39,7 +39,13 @@
                      :setSnippetTime (fn [clip-name offset-sec]
                                        (or (call-js engine "setSnippetTime" clip-name offset-sec)
                                            (call-js engine "seekSnippet" clip-name offset-sec)
-                                           (call-js engine "seek" clip-name offset-sec)))
+                                           (call-js engine "seek" clip-name offset-sec)
+                                           ;; Embody's facade exposes seekAnimation and
+                                           ;; returns undefined; report success explicitly
+                                           ;; so drift correction is not treated as failed.
+                                           (when (js-method engine "seekAnimation")
+                                             (call-js engine "seekAnimation" clip-name offset-sec)
+                                             true)))
                      :cleanupSnippet (fn [clip-name]
                                        (or (call-js engine "cleanupSnippet" clip-name)
                                            (call-js engine "stopAnimation" clip-name)))
@@ -118,7 +124,11 @@
   (let [normalized-offset (max 0 (or offset-sec 0))]
     (or (when handle
           (or (call-js handle "setTime" normalized-offset)
-              (call-js handle "seek" normalized-offset)))
+              (call-js handle "seek" normalized-offset)
+              ;; Embody clip handles expose seekTo and return undefined.
+              (when (js-method handle "seekTo")
+                (call-js handle "seekTo" normalized-offset)
+                true)))
         (when runtime
           (or (call-js runtime "setSnippetTime" name normalized-offset)
               (call-js runtime "seekSnippet" name normalized-offset)

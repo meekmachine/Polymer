@@ -114,10 +114,31 @@
                   (emit-error! "Animation agency requires an animation runtime or engine"))
                 snippet))
 
+            (reschedule-cleanup-after-seek! [name source-agency offset-sec]
+              ;; The completion cleanup timer was armed for the snippet's full
+              ;; duration at start. A seek moves the clip clock, so the timer
+              ;; must track the remaining timeline or a backward-corrected clip
+              ;; (e.g. lip sync chasing a lagging voice) is removed mid-play.
+              (let [entry (get @handles name)
+                    summary (get-in @state-atom [:scheduled name])
+                    max-time (:maxTime summary)]
+                (when (and entry
+                           summary
+                           (not (:loop summary))
+                           (state/finite-number? max-time))
+                  (clear-cleanup! name)
+                  (let [remaining-ms (max 0 (* 1000 (- max-time (or offset-sec 0))))
+                        timer (js/setTimeout
+                               #(emit-remove-if-current! name source-agency "completed" (:token entry))
+                               (+ remaining-ms cleanup-buffer-ms))]
+                    (swap! cleanup-timers assoc name {:timer timer
+                                                      :token (:token entry)})))))
+
             (seek-snippet! [{:keys [sourceAgency name offsetSec]}]
               (if (runtime/seek-snippet! runtime (handle-for name) name offsetSec)
                 (let [seeked-at (state/now-ms)]
                   (swap! state-atom state/record-seek name sourceAgency seeked-at offsetSec)
+                  (reschedule-cleanup-after-seek! name sourceAgency offsetSec)
                   (emit-event {:type "animationSnippetSeeked"
                                :agency "animation"
                                :sourceAgency sourceAgency

@@ -823,10 +823,83 @@
                                   :word "world"
                                   :wordIndex 1
                                   :observedElapsedSec 0.95}})
+    ;; Web Speech has no audio clock; its estimated timeline is the part that
+    ;; drifts. The boundary means the voice is at "world" now, so the clip must
+    ;; seek to the word's start inside the snippet (~0.42s), not to the wall
+    ;; clock (0.95s) where the freely-running clip already is.
     (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
       (is seek-call)
-      (is (> (:offsetSec seek-call) 0.85))
-      (is (< (:offsetSec seek-call) 0.9)))
+      (is (> (:offsetSec seek-call) 0.30))
+      (is (< (:offsetSec seek-call) 0.55)))
+    (.dispose ^js system)))
+
+(deftest LipSync-seek-falls-back-to-embody-handle-seekTo
+  ;; Embody clip handles expose seekTo (returning undefined), not setTime/seek.
+  (let [calls (atom [])
+        runtime #js {:playTypedSnippet
+                     (fn [snippet _options]
+                       #js {:clipName (aget snippet "name")
+                            :seekTo (fn [offset-sec]
+                                      (swap! calls conj {:method "seekTo"
+                                                         :offsetSec offset-sec})
+                                      js/undefined)
+                            :stop (fn [] nil)
+                            :finished (js/Promise.resolve nil)})}
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime runtime}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "startText"
+                                  :name "voice:seekto"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "audioStarted"
+                                  :name "voice:seekto"
+                                  :audioTimeSec 0.2}})
+    (is (some #(= "seekTo" (:method %)) @calls))
+    (is (some #(= "animationSnippetSeeked" (:type %)) @(:events events)))
+    (is (not-any? #(and (= "error" (:type %))
+                        (re-find #"could not seek" (or (:message %) "")))
+                  @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest LipSync-seek-falls-back-to-embody-engine-seekAnimation
+  ;; The Embody facade exposes seekAnimation(clipName, time) returning
+  ;; undefined; the engine adapter must treat it as a successful seek.
+  (let [calls (atom [])
+        engine #js {:playTypedSnippet
+                    (fn [snippet _options]
+                      #js {:clipName (aget snippet "name")
+                           :stop (fn [] nil)
+                           :finished (js/Promise.resolve nil)})
+                    :seekAnimation
+                    (fn [name offset-sec]
+                      (swap! calls conj {:method "seekAnimation"
+                                         :name name
+                                         :offsetSec offset-sec})
+                      js/undefined)}
+        system (polymer/createCharacterAgencies #js {:animation #js {:engine engine}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "startText"
+                                  :name "voice:seekanimation"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "audioStarted"
+                                  :name "voice:seekanimation"
+                                  :audioTimeSec 0.2}})
+    (is (some #(= "seekAnimation" (:method %)) @calls))
+    (is (some #(= "animationSnippetSeeked" (:type %)) @(:events events)))
+    (is (not-any? #(and (= "error" (:type %))
+                        (re-find #"could not seek" (or (:message %) "")))
+                  @(:events events)))
+    ((:unsubscribe events))
     (.dispose ^js system)))
 
 (deftest LipSync-can-receive-provider-word-timings-after-start

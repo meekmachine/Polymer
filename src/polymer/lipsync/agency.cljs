@@ -361,7 +361,17 @@
                       threshold (get-in current [:config :wordDriftThresholdSec])
                       name (:snippetName current)]
                   (when (and expected name drift-sec (> (js/Math.abs drift-sec) threshold))
-                    (let [target-sec (min (:maxTime current) (max 0 elapsed-sec))
+                    ;; Azure timelines are authored in audio time, so the audio
+                    ;; clock (observed elapsed) is where the clip should be. Web
+                    ;; Speech has no audio clock and its text-estimated timeline
+                    ;; is the drifting part: the boundary tells us the voice is
+                    ;; at this word NOW, so the clip belongs at the word's start
+                    ;; inside the snippet, not at the wall clock.
+                    (let [web-speech? (= "webSpeech" (:source current))
+                          target-sec (min (:maxTime current)
+                                          (max 0 (if web-speech?
+                                                   (:startSec expected)
+                                                   elapsed-sec)))
                           corrected-at (state/now-ms)]
                       (swap! state-atom state/record-sync-correction name target-sec corrected-at)
                       (emit-event {:type "lipSyncSyncDrift"
@@ -375,7 +385,14 @@
                                    :targetSec target-sec
                                    :correctedAt corrected-at})
                       (when-let [s @agency-scheduler]
-                        ((:seek s) name target-sec "word-boundary-drift")))))))
+                        ((:seek s) name target-sec "word-boundary-drift")
+                        ;; The local finish timer was armed on wall time when the
+                        ;; snippet started. After a correction the remaining
+                        ;; timeline is (maxTime - target), so re-arm the timer or
+                        ;; a lagging voice gets its mouth stopped mid-utterance.
+                        (when (state/finite-number? (:maxTime current))
+                          ((:schedule-finished s)
+                           (max 0 (- (:maxTime current) target-sec))))))))))
 
             (handle-audio-started! [payload]
               ;; The host owns audio playback. This command tells LipSync when
