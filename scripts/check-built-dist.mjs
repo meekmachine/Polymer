@@ -44,6 +44,8 @@ if (!fs.existsSync(distPath)) {
       'loadCharacterModel',
       'normalizeDefaultCharacterLightingSettings',
       'DEFAULT_CHARACTER_LIGHTING_PRESET_IDS',
+      'CHARACTER_SCENE_TYPES',
+      'DEFAULT_CHARACTER_SCENE_TYPE_ID',
     ];
 
     for (const name of requiredExports) {

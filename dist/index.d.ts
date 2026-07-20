@@ -79,6 +79,9 @@ export {
   DEFAULT_CHARACTER_LIGHTING_PRESETS,
   DEFAULT_CHARACTER_LIGHTING_SETTINGS,
   normalizeDefaultCharacterLightingSettings,
+  CHARACTER_SCENE_TYPES,
+  CHARACTER_SCENE_TYPE_IDS,
+  DEFAULT_CHARACTER_SCENE_TYPE_ID,
 } from '@lovelace_lol/embody';
 
 export type {
@@ -89,6 +92,8 @@ export type {
   CharacterModelLoadOptions,
   CharacterModelLoadResult,
   CharacterModelTransform,
+  CharacterSceneTypeDefinition,
+  CharacterSceneTypeId,
   DefaultCharacterLightingController,
   DefaultCharacterLightingPresetId,
   DefaultCharacterLightingSettings,

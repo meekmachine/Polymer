@@ -102,6 +102,18 @@ const agencies = createCharacterAgencies({
 });
 ```
 
+Named scene types (`studio`, `showcase`, `inspection`, `void`) bundle
+background, lighting preset, and shadow-plane defaults; enumerate them via
+`CHARACTER_SCENE_TYPES` / `CHARACTER_SCENE_TYPE_IDS`:
+
+```js
+const host = await createCharacterHost({
+  container,
+  character: { modelUrl: '/characters/jonathan.glb' },
+  scene: { type: 'showcase' },
+});
+```
+
 Advanced path — inject an existing Three.js scene:
 
 ```js

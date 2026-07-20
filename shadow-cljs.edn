@@ -126,7 +126,10 @@
              :DEFAULT_CHARACTER_LIGHTING_PRESET_IDS polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_PRESET_IDS
              :DEFAULT_CHARACTER_LIGHTING_PRESETS polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_PRESETS
              :DEFAULT_CHARACTER_LIGHTING_SETTINGS polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_SETTINGS
-             :normalizeDefaultCharacterLightingSettings polymer.runtime.embody/normalizeDefaultCharacterLightingSettings}}}}
+             :normalizeDefaultCharacterLightingSettings polymer.runtime.embody/normalizeDefaultCharacterLightingSettings
+             :CHARACTER_SCENE_TYPES polymer.runtime.embody/CHARACTER_SCENE_TYPES
+             :CHARACTER_SCENE_TYPE_IDS polymer.runtime.embody/CHARACTER_SCENE_TYPE_IDS
+             :DEFAULT_CHARACTER_SCENE_TYPE_ID polymer.runtime.embody/DEFAULT_CHARACTER_SCENE_TYPE_ID}}}}
 
   :test
   {:target :node-test
