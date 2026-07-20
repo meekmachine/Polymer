@@ -101,6 +101,102 @@ High-frequency runtime progress should stay inside the responsible agency and
 its scheduler/effector path. It should not be exported as host application state
 that changes every frame.
 
+## Agency Society Config (`agencySociety`)
+
+Character temperament and discourse wiring are authored as an **`agencySociety`**
+document (stored on the host character profile, seeded by Polymer’s
+`DEFAULT_AGENCY_SOCIETY`). Design discussion:
+https://github.com/meekmachine/Polymer/discussions/59 — tracking epic #60.
+
+This is **not** a central brain. It is loadable parameters over the Society of
+Mind graph: who may talk to whom, how much a receiver trusts a stream, and
+agency-local priors. Behavior still emerges from peer discourse.
+
+### Layers
+
+| Layer | Stored on | Meaning |
+|-------|-----------|---------|
+| Topology (`edges`) | Profile | Who may send which message `type` to whom; `required` cores cannot be removed |
+| Edge `credit` | Profile | How much the **receiver** trusts that stream in its local value function |
+| Agency `priors` | Profile | Nodal tendencies (e.g. gesture `shyness`) independent of one edge |
+| Stream `activation` | Runtime message | How “on” / salient this signal is right now |
+| CB5T / persona pack | Profile | Trait gains that multiply many priors/credits at once |
+| K-lines | Profile / memory | Snapshots of societies that scored well; reactivated as overlays |
+
+Local scoring (conceptual):
+
+```text
+contribution ≈ activation × credit × priorGain × (CB5T / K-line overlay)
+```
+
+Each agency owns a **local value function**. A character-level rollup (e.g.
+weighted Σ of local satisfactions) is a **readout / K-line learning signal only**.
+Agencies must not optimize a global commander score.
+
+### Schema (profile subtree)
+
+```json
+{
+  "version": 1,
+  "agencies": {
+    "<name>": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    }
+  },
+  "edges": [
+    {
+      "id": "tts.lipSync.command",
+      "from": "tts",
+      "type": "lipSync.command",
+      "to": "lipSync",
+      "required": true,
+      "enabled": true,
+      "credit": 1.0
+    }
+  ],
+  "kLines": [],
+  "cb5t": { "E": 0.5, "N": 0.5, "C": 0.5, "A": 0.5, "O": 0.5 },
+  "personaPackId": null,
+  "characterRollup": { "type": "weightedSum" }
+}
+```
+
+- **`configure`**: operational knobs already used by agencies (frequency,
+  coalesceMs, …).
+- **`priors`**: temperament / policy gains (0–1 preferred where possible).
+- **`required: true`**: Animation (sole apply gate), Transcription, TTS, LipSync,
+  Conversation discourse paths, and (future) the audio perceptor. Hosts must
+  refuse delete/disable of required agencies/edges.
+- Hair today is in the agency set but has **no** agency→agency edges (host
+  runtime side lane) until explicitly wired.
+
+### Boot and multi-instance
+
+- Hosts fetch `agencySociety` from the character profile (Firestore SoT;
+  optional localStorage cache), then call `createCharacterAgencies` with
+  per-agency params and the society document.
+- Apply config at **create / remount** time. Profile PATCH updates storage;
+  remount recreates the society (no live hot-rewire in v1).
+- Each `createCharacterAgencies` call must own isolated mutable state (see
+  multi-instance isolation work). Do not share module-level animation or
+  agency config across characters.
+
+### Latticework porting gate
+
+Foundation schema/seed/multi-instance may land in parallel with Latticework →
+Polymer agency ports. Per-agency prior behavior and CB5T packs should wait
+until the relevant agency’s Latticework parity issue is done (or waived), so
+personality knobs are not tuned against incomplete ports.
+
+### Default seed
+
+`DEFAULT_AGENCY_SOCIETY` / `polymer.society/default-agency-society` mirrors the
+current `polymer.character` router. When routes change, update the seed in the
+same PR.
+
 ## ClojureScript Style
 
 Use pure functions for state transitions, planner scoring, goal selection,

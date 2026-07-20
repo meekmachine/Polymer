@@ -2468,6 +2468,7 @@ export function createConversationService(tts: { speak(text: string): Promise<un
 export const HAIR_COLOR_PRESETS: Record<string, HairColor>;
 export const DEFAULT_HAIR_PHYSICS_CONFIG: HairPhysicsRuntimeConfig;
 export const DEFAULT_HAIR_PHYSICS_ENABLED: boolean;
+export const DEFAULT_AGENCY_SOCIETY: AgencySociety;
 export const DEFAULT_EYE_HEAD_CONFIG: Required<Pick<EyeHeadTrackingConfig, 'gazeMode' | 'eyeTrackingEnabled' | 'headTrackingEnabled' | 'headFollowEyes' | 'eyeIntensity' | 'headIntensity' | 'returnToNeutralEnabled' | 'returnToNeutralDelay' | 'returnToNeutralDuration' | 'useAnimationAgency'>>;
 export const DEFAULT_ANIMATION_KEYS: Record<string, string>;
 export const EYE_AUS: Record<string, number>;
@@ -2478,6 +2479,47 @@ export function getAvailableSnippetNames(listKey: SnippetCategoryKey, storage?: 
 export function resolveSnippetEntry(listKey: SnippetCategoryKey, name: string, storage?: Pick<Storage, 'getItem' | 'removeItem'>): Promise<ResolvedSnippetEntry | null>;
 export function preloadAllSnippets(): void;
 export function clearPreloadedSnippets(storage?: Pick<Storage, 'getItem' | 'removeItem'>): void;
+
+export interface AgencySocietyAgencyEntry {
+  required?: boolean;
+  enabled?: boolean;
+  priors?: Record<string, number | string | boolean>;
+  configure?: Record<string, unknown>;
+}
+
+export interface AgencySocietyEdge {
+  id: string;
+  from: string;
+  type: string;
+  to: string;
+  required?: boolean;
+  enabled?: boolean;
+  credit?: number;
+  match?: Record<string, unknown>;
+}
+
+export interface AgencySocietyKLine {
+  id: string;
+  description?: string;
+  snapshot?: {
+    credits?: Record<string, number>;
+    priors?: Record<string, Record<string, number | string | boolean>>;
+    configure?: Record<string, Record<string, unknown>>;
+    agencies?: string[];
+  };
+  activateEdges?: string[];
+  gainOverlay?: Record<string, number>;
+}
+
+export interface AgencySociety {
+  version: number;
+  agencies: Record<string, AgencySocietyAgencyEntry>;
+  edges: AgencySocietyEdge[];
+  kLines?: AgencySocietyKLine[];
+  cb5t?: { E?: number; N?: number; C?: number; A?: number; O?: number };
+  personaPackId?: string | null;
+  characterRollup?: { type: 'sum' | 'weightedSum'; weights?: Record<string, number> };
+}
 
 export function createBlinkAgency(config?: BlinkAgencyConfig): BlinkAgency;
 export function createAnimationAgency(config?: AnimationAgencyConfig): AnimationAgency;
@@ -2508,4 +2550,6 @@ export function createCharacterAgencies(config?: {
   hair?: HairConfig;
   cameraContext?: CameraContextConfig;
   animation?: AnimationAgencyConfig;
+  /** Optional society wiring / priors seed (see AgencySociety). */
+  agencySociety?: AgencySociety;
 }): CharacterAgencies;

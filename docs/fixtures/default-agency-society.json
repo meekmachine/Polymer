@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "agencies": {
+    "animation": {
+      "required": true,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "blink": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "gaze": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "eyeHeadTracking": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "gesture": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "cameraContext": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "transcription": {
+      "required": true,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "conversation": {
+      "required": true,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "hair": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "tts": {
+      "required": true,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "lipSync": {
+      "required": true,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    },
+    "prosodic": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
+    }
+  },
+  "edges": [
+    {
+      "id": "cameraContext.camera.fact→gaze",
+      "from": "cameraContext",
+      "type": "camera.fact",
+      "to": "gaze",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "cameraContext.camera.stale→gaze",
+      "from": "cameraContext",
+      "type": "camera.stale",
+      "to": "gaze",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "gaze.eyeHeadTracking.requestGaze→eyeHeadTracking",
+      "from": "gaze",
+      "type": "eyeHeadTracking.requestGaze",
+      "to": "eyeHeadTracking",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "gaze.eyeHeadTracking.requestReset→eyeHeadTracking",
+      "from": "gaze",
+      "type": "eyeHeadTracking.requestReset",
+      "to": "eyeHeadTracking",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "gaze.eyeHeadTracking.requestCancel→eyeHeadTracking",
+      "from": "gaze",
+      "type": "eyeHeadTracking.requestCancel",
+      "to": "eyeHeadTracking",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "blink.animation.requestScheduleSnippet→animation",
+      "from": "blink",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "eyeHeadTracking.animation.requestScheduleSnippet→animation",
+      "from": "eyeHeadTracking",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "eyeHeadTracking.animation.requestRemoveSnippet→animation",
+      "from": "eyeHeadTracking",
+      "type": "animation.requestRemoveSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "gesture.animation.requestScheduleSnippet→animation",
+      "from": "gesture",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "gesture.animation.requestRemoveSnippet→animation",
+      "from": "gesture",
+      "type": "animation.requestRemoveSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "lipSync.animation.requestScheduleSnippet→animation",
+      "from": "lipSync",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "lipSync.animation.requestRemoveSnippet→animation",
+      "from": "lipSync",
+      "type": "animation.requestRemoveSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "lipSync.animation.requestSeekSnippet→animation",
+      "from": "lipSync",
+      "type": "animation.requestSeekSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "prosodic.animation.requestScheduleSnippet→animation",
+      "from": "prosodic",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "prosodic.animation.requestRemoveSnippet→animation",
+      "from": "prosodic",
+      "type": "animation.requestRemoveSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "blink.signal.blink-fast→prosodic",
+      "from": "blink",
+      "type": "signal.blink-fast",
+      "to": "prosodic",
+      "required": false,
+      "enabled": true,
+      "credit": 1,
+      "match": {
+        "signal": "blink-fast"
+      }
+    },
+    {
+      "id": "transcription.transcription.final→conversation",
+      "from": "transcription",
+      "type": "transcription.final",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "transcription.transcription.interruption→conversation",
+      "from": "transcription",
+      "type": "transcription.interruption",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.tts.requestSpeak→tts",
+      "from": "conversation",
+      "type": "tts.requestSpeak",
+      "to": "tts",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.cancelRequested→tts",
+      "from": "conversation",
+      "type": "conversation.cancelRequested",
+      "to": "tts",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.lipSync.command→lipSync",
+      "from": "tts",
+      "type": "lipSync.command",
+      "to": "lipSync",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsStatusChanged→conversation",
+      "from": "tts",
+      "type": "ttsStatusChanged",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsStatusChanged→transcription",
+      "from": "tts",
+      "type": "ttsStatusChanged",
+      "to": "transcription",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStarted→prosodic",
+      "from": "tts",
+      "type": "ttsSpeechStarted",
+      "to": "prosodic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStarted→transcription",
+      "from": "tts",
+      "type": "ttsSpeechStarted",
+      "to": "transcription",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStarted→conversation",
+      "from": "tts",
+      "type": "ttsSpeechStarted",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsWordBoundary→prosodic",
+      "from": "tts",
+      "type": "ttsWordBoundary",
+      "to": "prosodic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStopped→prosodic",
+      "from": "tts",
+      "type": "ttsSpeechStopped",
+      "to": "prosodic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStopped→transcription",
+      "from": "tts",
+      "type": "ttsSpeechStopped",
+      "to": "transcription",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStopped→conversation",
+      "from": "tts",
+      "type": "ttsSpeechStopped",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechEnded→prosodic",
+      "from": "tts",
+      "type": "ttsSpeechEnded",
+      "to": "prosodic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechEnded→transcription",
+      "from": "tts",
+      "type": "ttsSpeechEnded",
+      "to": "transcription",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechEnded→conversation",
+      "from": "tts",
+      "type": "ttsSpeechEnded",
+      "to": "conversation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    }
+  ],
+  "kLines": [],
+  "cb5t": {
+    "E": 0.5,
+    "N": 0.5,
+    "C": 0.5,
+    "A": 0.5,
+    "O": 0.5
+  },
+  "personaPackId": null,
+  "characterRollup": {
+    "type": "weightedSum"
+  }
+}

@@ -48,6 +48,7 @@
              :createHairAgency polymer.core/createHairAgency
              :createCameraContextAgency polymer.core/createCameraContextAgency
              :createCharacterAgencies polymer.core/createCharacterAgencies
+             :DEFAULT_AGENCY_SOCIETY polymer.core/DEFAULT_AGENCY_SOCIETY
              :Embody polymer.runtime.embody/Embody
              :BLENDING_MODES polymer.runtime.embody/BLENDING_MODES
              :THREE_BLENDING_MODES polymer.runtime.embody/THREE_BLENDING_MODES

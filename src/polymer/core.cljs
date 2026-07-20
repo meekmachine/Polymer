@@ -16,7 +16,10 @@
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
             [polymer.transcription.agency :as transcription]
-            [polymer.transcription.service :as transcription-service]))
+            [polymer.transcription.service :as transcription-service]
+            [polymer.society :as society]))
+
+(def DEFAULT_AGENCY_SOCIETY society/DEFAULT_AGENCY_SOCIETY)
 
 ;; Public JavaScript entry points.
 ;;

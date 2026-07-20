@@ -50,6 +50,18 @@ scheduler responsibilities, stream routing, and side-effect placement.
 - Keep comments useful and concrete. Explain boundaries and non-obvious
   scheduler or planning decisions; do not comment every obvious line.
 
+## Agency Society (`agencySociety`)
+
+- Character discourse wiring and temperament params live in `agencySociety`
+  (see `docs/agency-architecture.md`). Seed: `DEFAULT_AGENCY_SOCIETY`.
+- Keep edge `credit` and agency `priors` as separate knobs. Do not add a central
+  personality agency that schedules Embody or owns dialog.
+- Character-level VF rollup is observational only; local VFs stay agency-owned.
+- When changing `polymer.character` routes, update `polymer.society` seed in the
+  same PR.
+- Per-agency prior behavior should follow Latticework → Polymer parity for that
+  agency (epic #60) unless an issue explicitly waives the gate.
+
 ## Pull Requests
 
 - Keep PRs scoped to the agency or architecture layer being changed.
