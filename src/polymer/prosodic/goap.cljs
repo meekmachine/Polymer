@@ -2,8 +2,8 @@
   (:require [polymer.prosodic.state :as state]))
 
 ;; Prosodic GOAP stays intentionally local. It answers whether a speech/blink
-;; fact should become a gesture plan. It does not build snippets, mutate state,
-;; or talk to Animation.
+;; or conversation fact should become a gesture plan. It does not build
+;; snippets, mutate state, or talk to Animation.
 
 (def supported-command-types
   #{"configure"
@@ -21,27 +21,38 @@
 (defn command-goal [command world]
   (let [type (:type command)
         word (state/clean-word (:word command))
-        word-index (int (state/number-or (:wordIndex command) (:wordIndex world)))]
+        word-index (int (state/number-or (:wordIndex command) (:wordIndex world)))
+        last-conversation (:lastConversationFact world)]
     {:type type
      :enabled (get-in world [:config :enabled])
      :speaking (:speaking world)
      :word word
      :wordIndex word-index
      :hasWord (boolean word)
-     :blinkFastReady (state/blink-fast-cue-ready? world (state/now-ms))}))
+     :blinkFastReady (state/blink-fast-cue-ready? world (state/now-ms))
+     :lastConversationType (:type last-conversation)
+     :conversationSuppressed? (= "conversation.cancelRequested"
+                                 (:type last-conversation))}))
 
 (defn word-gesture-kind [goal config]
-  ;; This mirrors the previous TTS-panel rhythm, but as data owned by Prosodic:
-  ;; emphasis at phrase starts, a head nod mid-phrase, and a small contemplate
-  ;; cue just after that. Later prosody can replace this local policy without
-  ;; changing host application code.
-  (let [cycle (:speechGestureEvery config)
-        mod-value (mod (:wordIndex goal) cycle)]
-    (cond
-      (= mod-value 0) "emphasis"
-      (= mod-value 3) "nod"
-      (= mod-value 4) "contemplate"
-      :else nil)))
+  ;; Local policy: speech cadence, biased by recent conversation context.
+  ;; Cancel suppresses gestures until speechStarted clears the fact.
+  (when-not (:conversationSuppressed? goal)
+    (let [cycle (:speechGestureEvery config)
+          mod-value (mod (:wordIndex goal) cycle)
+          conv (:lastConversationType goal)]
+      (cond
+        (and (= "conversation.userUtterance" conv)
+             (or (= mod-value 0) (= mod-value 1)))
+        "emphasis"
+
+        (= "conversation.requestResponse" conv)
+        (when (or (= mod-value 0) (= mod-value 4)) "contemplate")
+
+        (= mod-value 0) "emphasis"
+        (= mod-value 3) "nod"
+        (= mod-value 4) "contemplate"
+        :else nil))))
 
 (defn failure-step [goal]
   (cond
@@ -64,7 +75,8 @@
     [failure]
     (case (:type goal)
       "configure" [{:op "apply-config"}]
-      "speechStarted" [{:op "record-speech-start"}]
+      "speechStarted" [{:op "clear-conversation-suppress"}
+                       {:op "record-speech-start"}]
       "speechStopped" [{:op "remove-active-gestures"}
                        {:op "record-speech-stop"}]
       "stop" [{:op "remove-active-gestures"}
@@ -74,9 +86,15 @@
       "blinkFast" [{:op "record-blink-fast-cue"}
                    {:op "build-gesture-snippet" :gesture "blink-fast"}
                    {:op "schedule-animation"}]
-      ("conversation.userUtterance"
-       "conversation.agentUtterance"
-       "conversation.requestResponse")
+      "conversation.userUtterance"
+      [{:op "record-conversation-fact"}
+       {:op "build-gesture-snippet" :gesture "contemplate"}
+       {:op "schedule-animation"}]
+      "conversation.agentUtterance"
+      [{:op "record-conversation-fact"}
+       {:op "build-gesture-snippet" :gesture "nod"}
+       {:op "schedule-animation"}]
+      "conversation.requestResponse"
       [{:op "record-conversation-fact"}]
       "conversation.cancelRequested" [{:op "record-conversation-fact"}
                                       {:op "remove-active-gestures"}]
@@ -85,7 +103,9 @@
                         {:op "build-gesture-snippet" :gesture gesture}
                         {:op "schedule-animation"}]
                        [{:op "record-word-boundary"}
-                        {:op "ignore" :reason "no-gesture-for-word"}]))))
+                        {:op "ignore" :reason (if (:conversationSuppressed? goal)
+                                                "conversation-cancelled"
+                                                "no-gesture-for-word")}]))))
 
 (defn plan-ok? [steps]
   (not= "fail" (:op (first steps))))

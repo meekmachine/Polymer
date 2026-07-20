@@ -83,9 +83,8 @@
                          :at observed-at})))
 
 (defn record-conversation-fact [state fact observed-at]
-  ;; Conversation facts are local context for prosodic planning. This first
-  ;; policy records them without scheduling a gesture; later prosody can use the
-  ;; same stream input to bias emphasis, hesitation, gaze pressure, or timing.
+  ;; Conversation facts are local planning context. GOAP may schedule a gesture
+  ;; from the same fact and later word boundaries can bias off lastConversationFact.
   (-> state
       (assoc :lastConversationFact (assoc fact :observedAt observed-at)
              :lastEvent {:type "prosodicConversationFact"
@@ -93,6 +92,12 @@
                          :text (:text fact)
                          :at observed-at})
       (update :conversationFactCount inc)))
+
+(defn clear-conversation-suppress [state]
+  ;; speechStarted ends cancel-driven gesture suppression.
+  (cond-> state
+    (= "conversation.cancelRequested" (get-in state [:lastConversationFact :type]))
+    (assoc :lastConversationFact nil)))
 
 (defn record-schedule [state snippet-name gesture-kind scheduled-at]
   (-> state

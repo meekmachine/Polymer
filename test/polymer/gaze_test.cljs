@@ -79,6 +79,28 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest gaze-owns-conversation-attention-policy
+  (let [agency (polymer/createGazeAgency #js {:smoothFactor 1
+                                              :coalesceMs 0
+                                              :minDelta 0})
+        events (collect-events agency)]
+    (.dispatch ^js agency #js {:type "conversation.userUtterance"
+                               :text "hello"
+                               :turnId "t1"})
+    (let [request (first (request-events @(:events events)))]
+      (is (= "conversation-user" (:label request)))
+      (is (= "conversation" (:source request)))
+      (is (= {:x 0 :y 0.08 :z 0} (:target request)))
+      (is (true? (:eyeEnabled request)))
+      (is (false? (:headEnabled request))))
+    (.dispatch ^js agency #js {:type "conversation.cancelRequested"
+                               :reason "barge-in"})
+    (is (some #(and (= "eyeHeadTracking.requestCancel" (:type %))
+                    (= "barge-in" (:reason %)))
+              @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest gaze-coalesces-overlapping-target-requests
   (async done
          (let [agency (polymer/createGazeAgency #js {:smoothFactor 1

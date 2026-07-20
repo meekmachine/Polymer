@@ -146,6 +146,36 @@
     (when (seq normalized)
       (apply max-key :score normalized))))
 
+(def conversation-attention-policy
+  ;; Gaze owns conversation look-intent policy. The character network only
+  ;; forwards conversation.* facts; it must not invent geometry or options.
+  {"conversation.userUtterance" {:target {:x 0 :y 0.08 :z 0}
+                                 :priority 0.25
+                                 :confidence 0.5
+                                 :label "conversation-user"
+                                 :options {:eyeEnabled true
+                                           :headEnabled false}}
+   "conversation.agentUtterance" {:target {:x 0 :y 0.04 :z 0}
+                                  :priority 0.2
+                                  :confidence 0.4
+                                  :label "conversation-agent"
+                                  :options {:eyeEnabled true
+                                            :headEnabled false}}})
+
+(defn conversation-attention-command
+  [command]
+  (let [payload (data-map command)
+        type (:type payload)
+        policy (get conversation-attention-policy type)]
+    (when policy
+      {:type "attention.fact"
+       :source "conversation"
+       :turnId (:turnId payload)
+       :text (:text payload)
+       :options (:options policy)
+       :targets [(assoc (select-keys policy [:target :priority :confidence :label])
+                        :source "conversation")]})))
+
 (defn command-target
   [command]
   (let [payload (data-map command)
@@ -153,6 +183,10 @@
     (case type
       "attention.fact"
       (choose-attention-target payload)
+
+      ("conversation.userUtterance" "conversation.agentUtterance")
+      (when-let [attention (conversation-attention-command payload)]
+        (choose-attention-target attention))
 
       "camera.fact"
       (when-let [offset (:relativeOffset payload)]
