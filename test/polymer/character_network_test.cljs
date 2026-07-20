@@ -70,10 +70,14 @@
     (.dispose ^js system)))
 
 (deftest character-network-routes-transcription-to-conversation
-  (let [system (polymer/createCharacterAgencies nil)
+  (let [system (polymer/createCharacterAgencies #js {:gaze #js {:smoothFactor 1
+                                                               :coalesceMs 0}})
         events (collect-events system)]
     (.dispatch ^js system #js {:agency "conversation"
                                :command #js {:type "start"}})
+    (.dispatch ^js system #js {:agency "gaze"
+                               :command #js {:type "setTarget"
+                                             :target #js {:x 0.5 :y -0.2}}})
     (.dispatch ^js system #js {:agency "transcription"
                                :command #js {:type "start"}})
     (.dispatch ^js system #js {:agency "transcription"
@@ -86,6 +90,13 @@
                       (= "hello character" (:text %)))
                 @(:events events)))
       (is (some #(= "conversation.requestResponse" (:type %))
+                @(:events events)))
+      (is (some #(and (= "prosodicConversationFact" (:type %))
+                      (= "conversation.userUtterance" (:conversationType %)))
+                @(:events events)))
+      (is (some #(and (= "eyeHeadTracking.requestGaze" (:type %))
+                      (= "conversation" (:source %))
+                      (= "conversation-user" (:label %)))
                 @(:events events)))
       (is (= 1 (get-in snapshot [:conversation :userUtteranceCount]))))
     ((:unsubscribe events))
@@ -110,6 +121,12 @@
     (let [snapshot (js->clj (.snapshot ^js system) :keywordize-keys true)]
       (is (some #(and (= "tts.requestSpeak" (:type %))
                       (= "agent answer" (:text %)))
+                @(:events events)))
+      (is (some #(and (= "conversation.agentUtterance" (:type %))
+                      (= "agent answer" (:text %)))
+                @(:events events)))
+      (is (some #(and (= "prosodicConversationFact" (:type %))
+                      (= "conversation.agentUtterance" (:conversationType %)))
                 @(:events events)))
       (is (some #(= "ttsSpeechStarted" (:type %))
                 @(:events events)))

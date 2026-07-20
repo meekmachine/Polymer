@@ -19,6 +19,8 @@
    :activeSnippets []
    :scheduledCount 0
    :removedCount 0
+   :conversationFactCount 0
+   :lastConversationFact nil
    :lastGesture nil
    :lastBlinkFastCueAt 0
    :config default-config
@@ -79,6 +81,18 @@
                          :word word
                          :wordIndex word-index
                          :at observed-at})))
+
+(defn record-conversation-fact [state fact observed-at]
+  ;; Conversation facts are local context for prosodic planning. This first
+  ;; policy records them without scheduling a gesture; later prosody can use the
+  ;; same stream input to bias emphasis, hesitation, gaze pressure, or timing.
+  (-> state
+      (assoc :lastConversationFact (assoc fact :observedAt observed-at)
+             :lastEvent {:type "prosodicConversationFact"
+                         :conversationType (:type fact)
+                         :text (:text fact)
+                         :at observed-at})
+      (update :conversationFactCount inc)))
 
 (defn record-schedule [state snippet-name gesture-kind scheduled-at]
   (-> state

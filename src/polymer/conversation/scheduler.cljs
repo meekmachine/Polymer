@@ -95,7 +95,14 @@
                                        :targetAgency "conversation-provider")))
 
                   "record-agent-utterance"
-                  (swap! state-atom state/record-agent-utterance (:text step) now (:source step))
+                  (do
+                    (swap! state-atom state/record-agent-utterance (:text step) now (:source step))
+                    (emit-event {:type "conversation.agentUtterance"
+                                 :agency "conversation"
+                                 :text (:text step)
+                                 :source (:source step)
+                                 :turnId (:turnId @state-atom)
+                                 :at now}))
 
                   "request-tts"
                   (request-tts! step now)

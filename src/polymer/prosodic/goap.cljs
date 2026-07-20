@@ -11,6 +11,10 @@
     "speechStopped"
     "wordBoundary"
     "blinkFast"
+    "conversation.userUtterance"
+    "conversation.agentUtterance"
+    "conversation.requestResponse"
+    "conversation.cancelRequested"
     "stop"
     "reset"})
 
@@ -70,6 +74,12 @@
       "blinkFast" [{:op "record-blink-fast-cue"}
                    {:op "build-gesture-snippet" :gesture "blink-fast"}
                    {:op "schedule-animation"}]
+      ("conversation.userUtterance"
+       "conversation.agentUtterance"
+       "conversation.requestResponse")
+      [{:op "record-conversation-fact"}]
+      "conversation.cancelRequested" [{:op "record-conversation-fact"}
+                                      {:op "remove-active-gestures"}]
       "wordBoundary" (if-let [gesture (word-gesture-kind goal config)]
                        [{:op "record-word-boundary"}
                         {:op "build-gesture-snippet" :gesture gesture}

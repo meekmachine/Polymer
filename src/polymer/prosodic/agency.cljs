@@ -123,6 +123,19 @@
                           (swap! state-atom state/record-blink-fast-cue now)
                           (schedule-gesture! "blink-fast" {:trigger "blink-fast"})))
 
+                      ("conversation.userUtterance"
+                       "conversation.agentUtterance"
+                       "conversation.requestResponse"
+                       "conversation.cancelRequested")
+                      (let [observed-at (state/now-ms)]
+                        (swap! state-atom state/record-conversation-fact payload observed-at)
+                        (emit-event {:type "prosodicConversationFact"
+                                     :agency "prosodic"
+                                     :conversationType (:type payload)
+                                     :text (:text payload)
+                                     :turnId (:turnId payload)
+                                     :observedAt observed-at}))
+
                       ("speechStopped" "stop")
                       (stop-local! (or (:reason payload) "requested"))
 

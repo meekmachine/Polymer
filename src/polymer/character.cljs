@@ -187,12 +187,64 @@
 
             (route-conversation-event! [event]
               (case (:type event)
+                "conversation.userUtterance"
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "conversation.userUtterance"
+                                       :sourceAgency "conversation"
+                                       :text (:text event)
+                                       :source (:source event)
+                                       :turnId (:turnId event)}))
+                  (.dispatch ^js gaze-agency
+                             (clj->js {:type "attention.fact"
+                                       :source "conversation"
+                                       :targets [{:target {:x 0 :y 0.08 :z 0}
+                                                  :source "conversation"
+                                                  :priority 0.25
+                                                  :confidence 0.5
+                                                  :label "conversation-user"}]
+                                       :options {:eyeEnabled true
+                                                 :headEnabled false}})))
+
+                "conversation.agentUtterance"
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "conversation.agentUtterance"
+                                       :sourceAgency "conversation"
+                                       :text (:text event)
+                                       :source (:source event)
+                                       :turnId (:turnId event)}))
+                  (.dispatch ^js gaze-agency
+                             (clj->js {:type "attention.fact"
+                                       :source "conversation"
+                                       :targets [{:target {:x 0 :y 0.04 :z 0}
+                                                  :source "conversation"
+                                                  :priority 0.2
+                                                  :confidence 0.4
+                                                  :label "conversation-agent"}]
+                                       :options {:eyeEnabled true
+                                                 :headEnabled false}})))
+
+                "conversation.requestResponse"
+                (.dispatch ^js prosodic-agency
+                           (clj->js {:type "conversation.requestResponse"
+                                     :sourceAgency "conversation"
+                                     :text (:text event)
+                                     :requestId (:requestId event)
+                                     :turnId (:turnId event)}))
+
                 "tts.requestSpeak"
                 (.dispatch ^js tts-agency (clj->js (:command event)))
 
                 "conversation.cancelRequested"
-                (.dispatch ^js tts-agency (clj->js {:type "stop"
-                                                    :reason (:reason event)}))
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js {:type "conversation.cancelRequested"
+                                       :sourceAgency "conversation"
+                                       :reason (:reason event)
+                                       :turnId (:turnId event)}))
+                  (.dispatch ^js tts-agency (clj->js {:type "stop"
+                                                      :reason (:reason event)})))
 
                 nil))
 
