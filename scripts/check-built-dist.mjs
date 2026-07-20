@@ -1,9 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
 const distPath = path.join(root, 'dist', 'index.js');
+const trackedDistArtifacts = [
+  'dist/index.d.ts',
+  'dist/index.js',
+  'dist/worker/agency-worker.js',
+  'dist/worker/manifest.edn',
+];
 const errors = [];
 
 function fail(message) {
@@ -47,6 +54,23 @@ if (!fs.existsSync(distPath)) {
       }
     }
   }
+}
+
+const diff = spawnSync('git', ['diff', '--exit-code', '--', ...trackedDistArtifacts], {
+  cwd: root,
+  encoding: 'utf8',
+});
+
+if (diff.status !== 0) {
+  const changed = spawnSync('git', ['diff', '--name-only', '--', ...trackedDistArtifacts], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  const changedFiles = changed.stdout.trim();
+  fail(
+    'Built dist artifacts are stale. Run `pnpm build` and commit the generated dist files.'
+      + (changedFiles ? ` Changed files:\n${changedFiles}` : '')
+  );
 }
 
 if (errors.length > 0) {
