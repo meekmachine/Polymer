@@ -76,6 +76,46 @@ The host supplies the gesture library and may observe streams for diagnostics,
 but Gesture's own scheduler is responsible for replacement, cancellation, and
 completion cleanup before Animation owns the runtime side effect.
 
+## Character host (Embody scene + model loading)
+
+Polymer re-exports Embody's character host so LoomLarge and other hosts can set
+up a character without depending on Embody directly.
+
+Default path — pass a container element and a character URL:
+
+```js
+import {
+  createCharacterHost,
+  createCharacterAgencies,
+} from '@lovelace_lol/polymer';
+
+const host = await createCharacterHost({
+  container: document.getElementById('viewport'),
+  character: {
+    modelUrl: '/characters/jonathan.glb',
+    presetType: 'cc4',
+  },
+});
+
+const agencies = createCharacterAgencies({
+  animation: { engine: host.engine },
+});
+```
+
+Advanced path — inject an existing Three.js scene:
+
+```js
+const host = await createCharacterHost({
+  container: mountEl,
+  character: { modelUrl: '/characters/jonathan.glb', presetType: 'cc4' },
+  external: { scene, renderer, camera },
+});
+```
+
+Polymer stays agency-oriented: it does not own the render loop. Use
+`createCharacterHost` / `loadCharacterModel` for scene+model setup, then inject
+`host.engine` into `createCharacterAgencies`.
+
 ## Git Install Contract
 
 Polymer Git-SHA consumers should import checked-in JavaScript artifacts from

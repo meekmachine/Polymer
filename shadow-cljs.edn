@@ -113,7 +113,18 @@
              :getHumanoidSkeletonTemplateBoneNames polymer.runtime.embody/getHumanoidSkeletonTemplateBoneNames
              :createValidationSkeletonFromHumanoidTemplate polymer.runtime.embody/createValidationSkeletonFromHumanoidTemplate
              :computeHumanoidSkeletonTemplateRestBounds polymer.runtime.embody/computeHumanoidSkeletonTemplateRestBounds
-             :extractHumanoidSkeletonTemplateFromModel polymer.runtime.embody/extractHumanoidSkeletonTemplateFromModel}}}}
+             :extractHumanoidSkeletonTemplateFromModel polymer.runtime.embody/extractHumanoidSkeletonTemplateFromModel
+             :createCharacterHost polymer.runtime.embody/createCharacterHost
+             :createDefaultCharacterScene polymer.runtime.embody/createDefaultCharacterScene
+             :createDefaultCharacterLighting polymer.runtime.embody/createDefaultCharacterLighting
+             :createShadowPlane polymer.runtime.embody/createShadowPlane
+             :loadCharacterModel polymer.runtime.embody/loadCharacterModel
+             :parseCharacterModel polymer.runtime.embody/parseCharacterModel
+             :applyCharacterModelTransform polymer.runtime.embody/applyCharacterModelTransform
+             :disposeCharacterModel polymer.runtime.embody/disposeCharacterModel
+             :DEFAULT_CHARACTER_LIGHTING_PRESET_ID polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_PRESET_ID
+             :DEFAULT_CHARACTER_LIGHTING_PRESETS polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_PRESETS
+             :DEFAULT_CHARACTER_LIGHTING_SETTINGS polymer.runtime.embody/DEFAULT_CHARACTER_LIGHTING_SETTINGS}}}}
 
   :test
   {:target :node-test

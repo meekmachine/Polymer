@@ -66,6 +66,17 @@ export {
   createValidationSkeletonFromHumanoidTemplate,
   computeHumanoidSkeletonTemplateRestBounds,
   extractHumanoidSkeletonTemplateFromModel,
+  createCharacterHost,
+  createDefaultCharacterScene,
+  createDefaultCharacterLighting,
+  createShadowPlane,
+  loadCharacterModel,
+  parseCharacterModel,
+  applyCharacterModelTransform,
+  disposeCharacterModel,
+  DEFAULT_CHARACTER_LIGHTING_PRESET_ID,
+  DEFAULT_CHARACTER_LIGHTING_PRESETS,
+  DEFAULT_CHARACTER_LIGHTING_SETTINGS,
 } from '@lovelace_lol/embody';
 
 export type {

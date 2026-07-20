@@ -39,6 +39,9 @@ if (!fs.existsSync(distPath)) {
       'detectAnnotationLaterality',
       'resolveBoneNames',
       'Embody',
+      'createCharacterHost',
+      'createDefaultCharacterScene',
+      'loadCharacterModel',
     ];
 
     for (const name of requiredExports) {
