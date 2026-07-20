@@ -75,8 +75,10 @@ export {
   applyCharacterModelTransform,
   disposeCharacterModel,
   DEFAULT_CHARACTER_LIGHTING_PRESET_ID,
+  DEFAULT_CHARACTER_LIGHTING_PRESET_IDS,
   DEFAULT_CHARACTER_LIGHTING_PRESETS,
   DEFAULT_CHARACTER_LIGHTING_SETTINGS,
+  normalizeDefaultCharacterLightingSettings,
 } from '@lovelace_lol/embody';
 
 export type {

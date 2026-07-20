@@ -87,5 +87,7 @@
 (def applyCharacterModelTransform (.-applyCharacterModelTransform embody))
 (def disposeCharacterModel (.-disposeCharacterModel embody))
 (def DEFAULT_CHARACTER_LIGHTING_PRESET_ID (.-DEFAULT_CHARACTER_LIGHTING_PRESET_ID embody))
+(def DEFAULT_CHARACTER_LIGHTING_PRESET_IDS (.-DEFAULT_CHARACTER_LIGHTING_PRESET_IDS embody))
 (def DEFAULT_CHARACTER_LIGHTING_PRESETS (.-DEFAULT_CHARACTER_LIGHTING_PRESETS embody))
 (def DEFAULT_CHARACTER_LIGHTING_SETTINGS (.-DEFAULT_CHARACTER_LIGHTING_SETTINGS embody))
+(def normalizeDefaultCharacterLightingSettings (.-normalizeDefaultCharacterLightingSettings embody))
