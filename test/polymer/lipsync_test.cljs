@@ -1100,6 +1100,38 @@
     (is (nil? (get curves "32")))
     (is (nil? (get curves "26")))))
 
+(deftest jali-exclusive-handoff-ramps-instead-of-snapping
+  ;; When the winning morph changes, the outgoing morph must ramp out and the
+  ;; incoming morph must ramp in around a midpoint zero pose. A ~1ms attack on
+  ;; the incoming morph reads as a visual pop once the runtime interpolates.
+  (let [curves {"1" [{:time 0 :intensity 0}
+                     {:time 0.04 :intensity 0.9}
+                     {:time 0.10 :intensity 0.9}
+                     {:time 0.14 :intensity 0}]
+                "3" [{:time 0.08 :intensity 0}
+                     {:time 0.12 :intensity 0.85}
+                     {:time 0.20 :intensity 0.85}
+                     {:time 0.24 :intensity 0}]}
+        limited (lip/limit-concurrent-lip-activation curves)
+        curve-a (get limited "1")
+        curve-b (get limited "3")
+        both-active (filter (fn [time]
+                              (and (> (lip/sample-curve-at curve-a time) 0.01)
+                                   (> (lip/sample-curve-at curve-b time) 0.01)))
+                            (range 0 0.24 0.002))
+        ramp-in (first (keep-indexed
+                        (fn [idx frame]
+                          (when (and (pos? idx)
+                                     (> (:intensity frame) 0.05)
+                                     (<= (:intensity (get curve-b (dec idx))) 0.01))
+                            (- (:time frame) (:time (get curve-b (dec idx))))))
+                        curve-b))]
+    (is (seq curve-a))
+    (is (seq curve-b))
+    (is (empty? both-active))
+    (is (some? ramp-in))
+    (is (>= ramp-in 0.004))))
+
 (deftest jali-exclusive-viseme-morphs-even-with-jaw-and-tongue
   (let [snippet (build-text-fixture "hello world" {:jawScale 1 :tongueScale 1})
         viseme-channels (channels-of-type snippet "viseme")

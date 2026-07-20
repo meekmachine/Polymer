@@ -8,23 +8,13 @@
 ;; emits sparse viseme/lip AU curves only. Jaw and tongue stay in their own
 ;; planners; snippet assembly composes the three.
 
-(def labiodental-contact-au "32")
-(def labiodental-press-au "24")
 (def intensity-eps 0.001)
 (def envelope-shoulder-ratio 0.55)
 (def envelope-shoulder-intensity 0.62)
 (def lip-dominant-cap 1)
-;; Exclusive viseme morphs: at any sample only one mouth-shape morph may be
-;; active. Jaw (bone) and tongue (AU) stay independent and may run alongside.
-(def exclusive-active-threshold 0.05)
 (def plosive-preclose-sec 0.028)
 (def plosive-hold-sec 0.022)
 (def plosive-release-sec 0.018)
-;; Labiodental contact AUs stack on the same mouth as F_V. Keep them off by
-;; default so F_V remains a single readable morph; jaw/tongue still move freely.
-(def emit-labiodental-au-overlays? false)
-(def labiodental-contact-peak 0.24)
-(def labiodental-press-peak 0.12)
 
 ;; Keep carry/anticipation short. Longer overlap was the main reason multiple
 ;; viseme morphs stayed lit and washed shape contrast.
@@ -280,45 +270,6 @@
        deduplicate-curve
        vec))
 
-(defn build-labiodental-au-curve [event peak intensity]
-  (let [start-sec (/ (:offsetMs event) 1000)
-        duration-sec (/ (:durationMs event) 1000)
-        end-sec (+ start-sec duration-sec)
-        attack-sec (min 0.024 (* duration-sec 0.35))
-        release-sec (min 0.034 (* duration-sec 0.40))
-        hold-end-sec (max (+ start-sec attack-sec)
-                          (- end-sec release-sec))]
-    (scale-curve-intensity
-     [{:time start-sec :intensity 0}
-      {:time (+ start-sec attack-sec) :intensity peak}
-      {:time hold-end-sec :intensity peak}
-      {:time end-sec :intensity 0}]
-     intensity)))
-
-(defn build-labiodental-curves [events config]
-  ;; F_V is already a mouth morph. Emitting AU24/AU32 on top stacked a second
-  ;; (and third) mouth morph and flattened labiodental contrast. Keep overlays
-  ;; behind an explicit flag for rigs that need them without F_V.
-  (if-not emit-labiodental-au-overlays?
-    {}
-    (reduce (fn [curves event]
-              (if (and (labiodental-event? event) (not (pause-event? event)))
-                (let [intensity (event-intensity event config)]
-                  (-> curves
-                      (update labiodental-contact-au
-                              #(merge-curves (or % [])
-                                             (build-labiodental-au-curve event
-                                                                         labiodental-contact-peak
-                                                                         intensity)))
-                      (update labiodental-press-au
-                              #(merge-curves (or % [])
-                                             (build-labiodental-au-curve event
-                                                                         labiodental-press-peak
-                                                                         intensity)))))
-                curves))
-            {}
-            events)))
-
 (defn update-last-frame-time [curve f]
   (let [frames (vec curve)
         idx (dec (count frames))]
@@ -430,7 +381,9 @@
 (defn limit-concurrent-lip-activation [curves]
   ;; Viseme slots 0-14 are mouth morphs. Never leave two of them lit, and never
   ;; let linear keyframe interpolation recreate a dual-morph blend between
-  ;; samples: when the winner changes, insert an all-zero handoff sample first.
+  ;; samples: when the winner changes, insert an all-zero handoff sample at the
+  ;; midpoint so the old morph ramps out over the first half of the gap and the
+  ;; new morph ramps in over the second half instead of snapping in ~1ms.
   (let [lip-keys (vec (keys curves))]
     (if (<= (count lip-keys) 1)
       curves
@@ -439,7 +392,7 @@
           curves
           (let [zero-pose (into {} (map (fn [key] [key 0]) lip-keys))
                 {:keys [frames]}
-                (reduce (fn [{:keys [frames prev-winner]} time]
+                (reduce (fn [{:keys [frames prev-winner prev-time]} time]
                           (let [values (mapv (fn [key]
                                                {:key key
                                                 :visemeId (js/parseInt key 10)
@@ -448,11 +401,19 @@
                                              lip-keys)
                                 active (->> (into [] (filter #(> (:value %) intensity-eps)) values)
                                             (sort (fn [a b]
+                                                    ;; Higher value wins. Bilabial closure gets a
+                                                    ;; small edge so vowels cannot smear through a
+                                                    ;; P/B hold; the previous winner gets a small
+                                                    ;; edge so near-ties do not flutter between
+                                                    ;; morphs sample-to-sample.
                                                     (let [score (fn [entry]
                                                                   (+ (:value entry)
                                                                      (if (= (:visemeId entry)
                                                                             (:B_M_P visemes/canonical-visemes))
                                                                        0.02
+                                                                       0)
+                                                                     (if (= (:key entry) prev-winner)
+                                                                       0.03
                                                                        0)))]
                                                       (compare (score b) (score a)))))
                                             vec)
@@ -460,15 +421,18 @@
                                 pose (if winner
                                        (assoc zero-pose winner (:value (first active)))
                                        zero-pose)
-                                handoff? (and prev-winner winner (not= prev-winner winner))
-                                handoff-time (when handoff?
-                                               (rounded-sample-time (max 0 (- time 0.001))))
-                                frames-a (if handoff?
+                                handoff-time (when (and prev-winner winner (not= prev-winner winner)
+                                                        prev-time)
+                                               (let [mid (rounded-sample-time (/ (+ prev-time time) 2))]
+                                                 (when (and (> mid prev-time) (< mid time))
+                                                   mid)))
+                                frames-a (if handoff-time
                                            (conj frames {:time handoff-time :pose zero-pose})
                                            frames)]
                             {:frames (conj frames-a {:time time :pose pose})
-                             :prev-winner (or winner prev-winner)}))
-                        {:frames [] :prev-winner nil}
+                             :prev-winner (or winner prev-winner)
+                             :prev-time time}))
+                        {:frames [] :prev-winner nil :prev-time nil}
                         sample-times)
                 by-key (reduce (fn [result frame]
                                  (reduce (fn [acc key]
@@ -531,11 +495,14 @@
           (range (count events))))
 
 (defn build-lip-curves
-  "Plan lip/viseme curves plus labiodental AU overlays. Pure; no jaw/tongue."
+  "Plan exclusive viseme morph curves. Pure; no jaw/tongue.
+  F/V lip contact is carried by the F_V morph alone; stacking AU24/AU32
+  overlays on top re-created the dual-morph blend this planner removes."
   [events config]
-  (let [viseme-curves (-> (build-raw-viseme-curves events config)
-                          (apply-coarticulation events)
-                          limit-concurrent-lip-activation
-                          reduce-lip-keys)
-        labiodental-curves (build-labiodental-curves events config)]
-    (merge viseme-curves labiodental-curves)))
+  (->> (-> (build-raw-viseme-curves events config)
+           (apply-coarticulation events)
+           limit-concurrent-lip-activation
+           reduce-lip-keys)
+       ;; Exclusivity can suppress a weak morph entirely; drop it instead of
+       ;; emitting a channel with no keyframes.
+       (into {} (filter (fn [[_key curve]] (seq curve))))))
