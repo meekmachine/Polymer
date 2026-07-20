@@ -333,12 +333,13 @@
         bilabial-in-five (viseme-channel five (:B_M_P visemes/canonical-visemes))
         bilabial-in-pop (viseme-channel pop-man (:B_M_P visemes/canonical-visemes))]
     (is labiodental)
-    (is labiodental-contact)
-    (is labiodental-press)
+    ;; F_V is a single mouth morph. Contact/press AUs are intentionally off so
+    ;; they cannot stack a second mouth morph on top of F_V.
+    (is (nil? labiodental-contact))
+    (is (nil? labiodental-press))
     (is (nil? bilabial-in-five))
     (is bilabial-in-pop)
     (is (>= (channel-max-intensity labiodental) 0.8))
-    (is (>= (channel-max-intensity labiodental-contact) 0.20))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
     (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
 
@@ -374,7 +375,7 @@
     (is oh-channel)
     (is ee-channel)
     (is (>= (channel-max-intensity oh-channel) 0.85))
-    (is (>= (channel-max-intensity ee-channel) 0.85))
+    (is (>= (channel-max-intensity ee-channel) 0.75))
     (is (<= (local-peak-count jaw) 1))
     (is (every? #(> (:intensity %) 0.20) jaw-frames-during-diphthong))))
 
@@ -392,7 +393,7 @@
     (is ae-channel)
     (is ee-channel)
     (is (>= (channel-max-intensity ae-channel) 0.75))
-    (is (>= (channel-max-intensity ee-channel) 0.80))
+    (is (>= (channel-max-intensity ee-channel) 0.75))
     (is (<= (local-peak-count jaw) 1))))
 
 (deftest LipSync-jaw-planner-keeps-one-arc-through-provider-diphthong
@@ -608,7 +609,8 @@
         closure-value (snippet/sample-curve-at (get curves closure-key) 0.004)
         secondary-value (snippet/sample-curve-at (get curves secondary-key) 0.004)]
     (is (>= closure-value 0.55))
-    (is (<= secondary-value 0.04))))
+    ;; Exclusive morph policy: a second mouth-shape morph must not stay lit.
+    (is (<= secondary-value 0.02))))
 
 (deftest LipSync-jaw-activation-is-independent-from-viseme-morphs
   (let [built (snippet/build-lipsync-snippet
@@ -1025,17 +1027,20 @@
         mumbled (build-text-fixture "hello" {:speechStyle "mumbled" :lipScale 1 :jawScale 1})
         emphasized (build-text-fixture "hello" {:speechStyle "emphasized" :lipScale 1 :jawScale 1})
         soft-lips (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 0.4 :jawScale 1})
-        base-lip (channel-max-intensity (viseme-channel base (:Ah visemes/canonical-visemes)))
-        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:Ah visemes/canonical-visemes)))
-        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:Ah visemes/canonical-visemes)))
-        soft-lip (channel-max-intensity (viseme-channel soft-lips (:Ah visemes/canonical-visemes)))
+        ;; EE has peak headroom under 1.0 so style/scale gains remain visible.
+        base-lip (channel-max-intensity (viseme-channel base (:EE visemes/canonical-visemes)))
+        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:EE visemes/canonical-visemes)))
+        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:EE visemes/canonical-visemes)))
+        soft-lip (channel-max-intensity (viseme-channel soft-lips (:EE visemes/canonical-visemes)))
         base-jaw (channel-max-intensity (jaw-channel base))
-        mumbled-jaw (channel-max-intensity (jaw-channel mumbled))]
+        mumbled-jaw (channel-max-intensity (jaw-channel mumbled))
+        emphasized-jaw (channel-max-intensity (jaw-channel emphasized))]
     (is (> base-lip 0))
     (is (< mumbled-lip (* base-lip 0.55)))
     (is (> emphasized-lip base-lip))
     (is (< soft-lip (* base-lip 0.55)))
     (is (< mumbled-jaw (* base-jaw 0.55)))
+    (is (> emphasized-jaw base-jaw))
     (is (= "mumbled" (get-in mumbled [:metadata :speechStyle])))))
 
 (deftest jali-audio-features-scale-jaw-and-lip-without-changing-structure
@@ -1092,5 +1097,28 @@
                 events
                 {:intensity 1 :lipScale 1 :speechStyle "conversational"})]
     (is (seq (get curves (str (:F_V visemes/canonical-visemes)))))
-    (is (seq (get curves "32")))
+    (is (nil? (get curves "32")))
     (is (nil? (get curves "26")))))
+
+(deftest jali-exclusive-viseme-morphs-even-with-jaw-and-tongue
+  (let [snippet (build-text-fixture "hello world" {:jawScale 1 :tongueScale 1})
+        viseme-channels (channels-of-type snippet "viseme")
+        jaw (jaw-channel snippet)
+        sample-times (range 0 (:maxTime snippet) 0.02)
+        dual-morph-samples
+        (filter (fn [time]
+                  (> (count (filter #(> (sample-channel % time) 0.05) viseme-channels))
+                     1))
+                sample-times)
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        ee (viseme-channel snippet (:EE visemes/canonical-visemes))
+        oh (viseme-channel snippet (:Oh visemes/canonical-visemes))]
+    (is (empty? dual-morph-samples))
+    (is jaw)
+    ;; Jaw/tongue may move with the single winning mouth morph.
+    (is (> (channel-max-intensity jaw) 0.1))
+    ;; Peak contrast should remain readable across vowel families.
+    (when (and ah ee)
+      (is (>= (channel-max-intensity ah) (+ (channel-max-intensity ee) 0.08))))
+    (when (and oh ee)
+      (is (>= (channel-max-intensity oh) (+ (channel-max-intensity ee) 0.05))))))

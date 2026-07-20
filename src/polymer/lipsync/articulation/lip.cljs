@@ -13,32 +13,32 @@
 (def intensity-eps 0.001)
 (def envelope-shoulder-ratio 0.55)
 (def envelope-shoulder-intensity 0.62)
-(def lip-total-activation-cap 1.05)
 (def lip-dominant-cap 1)
-(def lip-secondary-ratio 0.30)
-(def lip-secondary-cap 0.22)
-(def closure-dominance-threshold 0.55)
-(def closure-secondary-cap 0.035)
+;; Exclusive viseme morphs: at any sample only one mouth-shape morph may be
+;; active. Jaw (bone) and tongue (AU) stay independent and may run alongside.
+(def exclusive-active-threshold 0.05)
 (def plosive-preclose-sec 0.028)
 (def plosive-hold-sec 0.022)
 (def plosive-release-sec 0.018)
+;; Labiodental contact AUs stack on the same mouth as F_V. Keep them off by
+;; default so F_V remains a single readable morph; jaw/tongue still move freely.
+(def emit-labiodental-au-overlays? false)
 (def labiodental-contact-peak 0.24)
 (def labiodental-press-peak 0.12)
 
-;; Class-specific coarticulation amounts. Uniform smoothing reads as mushy
-;; speech; JALI is class-constrained instead.
+;; Keep carry/anticipation short. Longer overlap was the main reason multiple
+;; viseme morphs stayed lit and washed shape contrast.
 (def coarticulation-by-class
   {:bilabial {:carrySec 0 :anticipateSec 0}
-   :labiodental {:carrySec 0.004 :anticipateSec 0.008}
-   :sibilant {:carrySec 0.004 :anticipateSec 0.006}
-   :fricative {:carrySec 0.006 :anticipateSec 0.008}
-   :vowel {:carrySec 0.010 :anticipateSec 0.014}
-   :liquid {:carrySec 0.012 :anticipateSec 0.014}
-   :glide {:carrySec 0.014 :anticipateSec 0.018}
-   :lip-heavy {:carrySec 0.022 :anticipateSec 0.028}
-   :tongue {:carrySec 0.006 :anticipateSec 0.008}
-   :default {:carrySec 0.008 :anticipateSec 0.010}})
-
+   :labiodental {:carrySec 0.002 :anticipateSec 0.004}
+   :sibilant {:carrySec 0.002 :anticipateSec 0.003}
+   :fricative {:carrySec 0.002 :anticipateSec 0.004}
+   :vowel {:carrySec 0.004 :anticipateSec 0.006}
+   :liquid {:carrySec 0.004 :anticipateSec 0.006}
+   :glide {:carrySec 0.006 :anticipateSec 0.008}
+   :lip-heavy {:carrySec 0.010 :anticipateSec 0.012}
+   :tongue {:carrySec 0.002 :anticipateSec 0.003}
+   :default {:carrySec 0.003 :anticipateSec 0.004}})
 (def vowel-visemes
   #{(:AE visemes/canonical-visemes)
     (:Ah visemes/canonical-visemes)
@@ -139,8 +139,9 @@
     :else :default))
 
 (defn envelope-profile [event-or-viseme-id]
-  ;; Closures stay crisp, lip-heavy sounds anticipate longer, sibilants stay
-  ;; narrow/light, and vowels remain rounder. Timings are visual, not acoustic.
+  ;; Peak contrast matters once only one morph can win: open Ah/AE must read
+  ;; differently from narrow EE/Ih, rounded Oh/W, and light sibilants. Timings
+  ;; are visual, not acoustic.
   (let [viseme-id (if (map? event-or-viseme-id)
                     (:visemeId event-or-viseme-id)
                     event-or-viseme-id)
@@ -148,23 +149,26 @@
         planner-class (if event (lip-planner-class event) (viseme-class viseme-id))]
     (cond
       (= planner-class :bilabial) {:attackSec 0.004 :releaseSec 0.006 :peak 1.0}
-      (= planner-class :lip-heavy) {:attackSec 0.042 :releaseSec 0.052 :peak 0.96}
-      (= planner-class :labiodental) {:attackSec 0.024 :releaseSec 0.034 :peak 0.86}
-      (= planner-class :sibilant) {:attackSec 0.020 :releaseSec 0.028 :peak 0.64}
+      (= planner-class :lip-heavy) {:attackSec 0.038 :releaseSec 0.048 :peak 0.98}
+      (= planner-class :labiodental) {:attackSec 0.022 :releaseSec 0.032 :peak 0.94}
+      (= planner-class :sibilant) {:attackSec 0.018 :releaseSec 0.026 :peak 0.52}
+      (= viseme-id (:Ah visemes/canonical-visemes)) {:attackSec 0.034 :releaseSec 0.044 :peak 1.0}
+      (= viseme-id (:AE visemes/canonical-visemes)) {:attackSec 0.032 :releaseSec 0.042 :peak 0.98}
       (= viseme-id (:Oh visemes/canonical-visemes)) {:attackSec 0.036 :releaseSec 0.046 :peak 0.96}
-      (= viseme-id (:EE visemes/canonical-visemes)) {:attackSec 0.030 :releaseSec 0.038 :peak 0.94}
-      (= viseme-id (:Ih visemes/canonical-visemes)) {:attackSec 0.028 :releaseSec 0.036 :peak 0.88}
-      (= viseme-id (:Th visemes/canonical-visemes)) {:attackSec 0.024 :releaseSec 0.034 :peak 0.78}
-      (= viseme-id (:Ch_J visemes/canonical-visemes)) {:attackSec 0.026 :releaseSec 0.036 :peak 0.80}
-      (= viseme-id (:K_G_H_NG visemes/canonical-visemes)) {:attackSec 0.022 :releaseSec 0.032 :peak 0.68}
-      (= viseme-id (:T_L_D_N visemes/canonical-visemes)) {:attackSec 0.026 :releaseSec 0.036 :peak 0.80}
-      (= planner-class :vowel) {:attackSec 0.032 :releaseSec 0.042 :peak 0.92}
-      (= planner-class :fricative) {:attackSec 0.024 :releaseSec 0.034 :peak 0.72}
-      (= planner-class :tongue) {:attackSec 0.026 :releaseSec 0.036 :peak 0.76}
-      (= planner-class :liquid) {:attackSec 0.030 :releaseSec 0.038 :peak 0.82}
-      (= planner-class :glide) {:attackSec 0.034 :releaseSec 0.044 :peak 0.86}
-      :else {:attackSec 0.026 :releaseSec 0.034 :peak 0.86})))
-
+      (= viseme-id (:EE visemes/canonical-visemes)) {:attackSec 0.028 :releaseSec 0.036 :peak 0.82}
+      (= viseme-id (:Ih visemes/canonical-visemes)) {:attackSec 0.026 :releaseSec 0.034 :peak 0.70}
+      (= viseme-id (:Er visemes/canonical-visemes)) {:attackSec 0.030 :releaseSec 0.038 :peak 0.66}
+      (= viseme-id (:Th visemes/canonical-visemes)) {:attackSec 0.022 :releaseSec 0.032 :peak 0.68}
+      (= viseme-id (:Ch_J visemes/canonical-visemes)) {:attackSec 0.024 :releaseSec 0.034 :peak 0.74}
+      (= viseme-id (:K_G_H_NG visemes/canonical-visemes)) {:attackSec 0.020 :releaseSec 0.030 :peak 0.42}
+      (= viseme-id (:T_L_D_N visemes/canonical-visemes)) {:attackSec 0.024 :releaseSec 0.034 :peak 0.58}
+      (= viseme-id (:R visemes/canonical-visemes)) {:attackSec 0.028 :releaseSec 0.036 :peak 0.72}
+      (= planner-class :vowel) {:attackSec 0.032 :releaseSec 0.042 :peak 0.90}
+      (= planner-class :fricative) {:attackSec 0.022 :releaseSec 0.032 :peak 0.68}
+      (= planner-class :tongue) {:attackSec 0.024 :releaseSec 0.034 :peak 0.58}
+      (= planner-class :liquid) {:attackSec 0.028 :releaseSec 0.036 :peak 0.72}
+      (= planner-class :glide) {:attackSec 0.032 :releaseSec 0.040 :peak 0.88}
+      :else {:attackSec 0.026 :releaseSec 0.034 :peak 0.80})))
 (defn event-intensity [event config]
   (state/number-or (:plannedLipIntensity event)
                    (modulation/event-lip-intensity event config)))
@@ -292,23 +296,28 @@
      intensity)))
 
 (defn build-labiodental-curves [events config]
-  (reduce (fn [curves event]
-            (if (and (labiodental-event? event) (not (pause-event? event)))
-              (let [intensity (event-intensity event config)]
-                (-> curves
-                    (update labiodental-contact-au
-                            #(merge-curves (or % [])
-                                           (build-labiodental-au-curve event
-                                                                       labiodental-contact-peak
-                                                                       intensity)))
-                    (update labiodental-press-au
-                            #(merge-curves (or % [])
-                                           (build-labiodental-au-curve event
-                                                                       labiodental-press-peak
-                                                                       intensity)))))
-              curves))
-          {}
-          events))
+  ;; F_V is already a mouth morph. Emitting AU24/AU32 on top stacked a second
+  ;; (and third) mouth morph and flattened labiodental contrast. Keep overlays
+  ;; behind an explicit flag for rigs that need them without F_V.
+  (if-not emit-labiodental-au-overlays?
+    {}
+    (reduce (fn [curves event]
+              (if (and (labiodental-event? event) (not (pause-event? event)))
+                (let [intensity (event-intensity event config)]
+                  (-> curves
+                      (update labiodental-contact-au
+                              #(merge-curves (or % [])
+                                             (build-labiodental-au-curve event
+                                                                         labiodental-contact-peak
+                                                                         intensity)))
+                      (update labiodental-press-au
+                              #(merge-curves (or % [])
+                                             (build-labiodental-au-curve event
+                                                                         labiodental-press-peak
+                                                                         intensity)))))
+                curves))
+            {}
+            events)))
 
 (defn update-last-frame-time [curve f]
   (let [frames (vec curve)
@@ -402,17 +411,6 @@
         (swap! times conj (rounded-sample-time (/ (+ start end) 2)))))
     (->> @times sort vec)))
 
-(defn fit-secondary-activation [active adjusted budget]
-  (let [secondary (vec (rest active))
-        secondary-sum (transduce (map :value) + 0 secondary)]
-    (if (or (empty? secondary) (<= secondary-sum budget))
-      adjusted
-      (let [scale (/ budget secondary-sum)]
-        (reduce (fn [result entry]
-                  (assoc result (:key entry) (* (:value entry) scale)))
-                adjusted
-                secondary)))))
-
 (defn trim-inactive-padding [curve]
   (let [frames (vec curve)
         first-active (first (keep-indexed (fn [idx frame]
@@ -430,46 +428,58 @@
         (subvec frames start (inc end))))))
 
 (defn limit-concurrent-lip-activation [curves]
+  ;; Viseme slots 0-14 are mouth morphs. Never leave two of them lit, and never
+  ;; let linear keyframe interpolation recreate a dual-morph blend between
+  ;; samples: when the winner changes, insert an all-zero handoff sample first.
   (let [lip-keys (vec (keys curves))]
     (if (<= (count lip-keys) 1)
       curves
       (let [sample-times (collect-lip-sample-times curves)]
         (if (empty? sample-times)
           curves
-          (let [normalized (reduce (fn [result time]
-                                     (let [values (mapv (fn [key]
-                                                          {:key key
-                                                           :visemeId (js/parseInt key 10)
-                                                           :value (state/clamp 0 lip-dominant-cap
-                                                                               (sample-curve-at (get curves key) time))})
-                                                        lip-keys)
-                                           active (->> (into [] (filter #(> (:value %) intensity-eps)) values)
-                                                       (sort-by :value >)
-                                                       vec)
-                                           adjusted-a (into {} (map (fn [entry] [(:key entry) (:value entry)]) values))
-                                           adjusted-b (if (> (count active) 1)
-                                                        (let [dominant (first active)]
-                                                          (if (and (= (:visemeId dominant) (:B_M_P visemes/canonical-visemes))
-                                                                   (>= (:value dominant) closure-dominance-threshold))
-                                                            (fit-secondary-activation active adjusted-a closure-secondary-cap)
-                                                            (let [total (transduce (map :value) + 0 active)]
-                                                              (if (> total lip-total-activation-cap)
-                                                                (let [budget (max 0
-                                                                                  (min (- lip-total-activation-cap (:value dominant))
-                                                                                       (* (:value dominant) lip-secondary-ratio)
-                                                                                       lip-secondary-cap))]
-                                                                  (fit-secondary-activation active adjusted-a budget))
-                                                                adjusted-a))))
-                                                        adjusted-a)]
-                                       (reduce (fn [acc key]
-                                                 (update acc key conj {:time time
-                                                                       :intensity (get adjusted-b key 0)}))
-                                               result
-                                               lip-keys)))
-                                   (into {} (map (fn [key] [key []]) lip-keys))
-                                   sample-times)]
+          (let [zero-pose (into {} (map (fn [key] [key 0]) lip-keys))
+                {:keys [frames]}
+                (reduce (fn [{:keys [frames prev-winner]} time]
+                          (let [values (mapv (fn [key]
+                                               {:key key
+                                                :visemeId (js/parseInt key 10)
+                                                :value (state/clamp 0 lip-dominant-cap
+                                                                    (sample-curve-at (get curves key) time))})
+                                             lip-keys)
+                                active (->> (into [] (filter #(> (:value %) intensity-eps)) values)
+                                            (sort (fn [a b]
+                                                    (let [score (fn [entry]
+                                                                  (+ (:value entry)
+                                                                     (if (= (:visemeId entry)
+                                                                            (:B_M_P visemes/canonical-visemes))
+                                                                       0.02
+                                                                       0)))]
+                                                      (compare (score b) (score a)))))
+                                            vec)
+                                winner (when (seq active) (:key (first active)))
+                                pose (if winner
+                                       (assoc zero-pose winner (:value (first active)))
+                                       zero-pose)
+                                handoff? (and prev-winner winner (not= prev-winner winner))
+                                handoff-time (when handoff?
+                                               (rounded-sample-time (max 0 (- time 0.001))))
+                                frames-a (if handoff?
+                                           (conj frames {:time handoff-time :pose zero-pose})
+                                           frames)]
+                            {:frames (conj frames-a {:time time :pose pose})
+                             :prev-winner (or winner prev-winner)}))
+                        {:frames [] :prev-winner nil}
+                        sample-times)
+                by-key (reduce (fn [result frame]
+                                 (reduce (fn [acc key]
+                                           (update acc key conj {:time (:time frame)
+                                                                 :intensity (get (:pose frame) key 0)}))
+                                         result
+                                         lip-keys))
+                               (into {} (map (fn [key] [key []]) lip-keys))
+                               frames)]
             (into {} (map (fn [key]
-                            [key (-> normalized
+                            [key (-> by-key
                                      (get key)
                                      deduplicate-curve
                                      trim-inactive-padding
