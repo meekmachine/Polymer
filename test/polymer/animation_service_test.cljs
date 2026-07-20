@@ -10,6 +10,17 @@
     {:events events
      :unsubscribe #(.unsubscribe subscription)}))
 
+(defn cljs-filter-operator [predicate]
+  (fn [source]
+    #js {:subscribe
+         (fn [listener]
+           (.subscribe source
+                       (fn [event]
+                         (when (predicate event)
+                           (if (fn? listener)
+                             (listener event)
+                             (.call (aget listener "next") listener event))))))}))
+
 (defn make-snippet-engine [calls]
   #js {:playSnippet
        (fn [snippet options]
@@ -89,6 +100,18 @@
               @calls))
     ((:unsubscribe events))
     (.dispose ^js service)))
+
+(deftest animation-event-port-supports-pipe-and-subscriber-objects
+  (let [emitter ^js polymer/animationEventEmitter
+        events-port ^js (aget emitter "events")
+        received (atom [])
+        piped ^js (.pipe events-port
+                         (cljs-filter-operator #(= "SNIPPET_ADDED" (aget % "type"))))
+        emit-snippet-added ^js (aget emitter "emitSnippetAdded")
+        subscription (.subscribe piped #js {:next #(swap! received conj (js->clj % :keywordize-keys true))})]
+    (.call emit-snippet-added emitter "pipe:test")
+    (is (= ["pipe:test"] (mapv :snippetName @received)))
+    (.unsubscribe subscription)))
 
 (deftest animation-service-delegates-baked-clips-to-embody-engine
   (let [calls (atom [])
