@@ -31,7 +31,7 @@
     "clean": "rm -rf .shadow-cljs dist/test.js dist/test.cjs"
   },
   "dependencies": {
-    "@lovelace_lol/embody": "github:meekmachine/embody#91ad32630509a9e34ae225f8913512746aad3490"
+    "@lovelace_lol/embody": "github:meekmachine/embody#b0b1ceeb59179fb6221099db1fa40a0fb2ecb9fe"
   },
   "devDependencies": {
     "shadow-cljs": "^2.28.23"

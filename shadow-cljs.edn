@@ -129,7 +129,31 @@
              :normalizeDefaultCharacterLightingSettings polymer.runtime.embody/normalizeDefaultCharacterLightingSettings
              :CHARACTER_SCENE_TYPES polymer.runtime.embody/CHARACTER_SCENE_TYPES
              :CHARACTER_SCENE_TYPE_IDS polymer.runtime.embody/CHARACTER_SCENE_TYPE_IDS
-             :DEFAULT_CHARACTER_SCENE_TYPE_ID polymer.runtime.embody/DEFAULT_CHARACTER_SCENE_TYPE_ID}}}}
+             :DEFAULT_CHARACTER_SCENE_TYPE_ID polymer.runtime.embody/DEFAULT_CHARACTER_SCENE_TYPE_ID
+             :initEmbodyCore polymer.runtime.embody-wasm/initEmbodyCore
+             :isEmbodyCoreReady polymer.runtime.embody-wasm/isEmbodyCoreReady
+             :getEmbodyCore polymer.runtime.embody-wasm/getEmbodyCore
+             :coreAbiVersion polymer.runtime.embody-wasm/coreAbiVersion
+             :packMorphFrameDelta polymer.runtime.embody-wasm/packMorphFrameDelta
+             :solveBilateralValues polymer.runtime.embody-wasm/solveBilateralValues
+             :solveMorphBatch polymer.runtime.embody-wasm/solveMorphBatch
+             :solveAxisQuaternion polymer.runtime.embody-wasm/solveAxisQuaternion
+             :analyzeMeshProportions polymer.runtime.embody-wasm/analyzeMeshProportions
+             :solveTemplateSkeletonFit polymer.runtime.embody-wasm/solveTemplateSkeletonFit
+             :composeTemplateFitAdjustment polymer.runtime.embody-wasm/composeTemplateFitAdjustment
+             :composeTemplateSkeletonFitTransform polymer.runtime.embody-wasm/composeTemplateSkeletonFitTransform
+             :defaultHairPhysicsConfigValues polymer.runtime.embody-wasm/defaultHairPhysicsConfigValues
+             :createHairPhysicsSolver polymer.runtime.embody-wasm/createHairPhysicsSolver
+             :createRuntimeCore polymer.runtime.embody-wasm/createRuntimeCore
+             :EMBODY_CORE_ABI_VERSION polymer.runtime.embody-wasm/EMBODY_CORE_ABI_VERSION
+             :PACKED_MORPH_FRAME_DELTA_STRIDE polymer.runtime.embody-wasm/PACKED_MORPH_FRAME_DELTA_STRIDE
+             :HAIR_CONFIG_STRIDE polymer.runtime.embody-wasm/HAIR_CONFIG_STRIDE
+             :HAIR_STATE_STRIDE polymer.runtime.embody-wasm/HAIR_STATE_STRIDE
+             :HAIR_HEAD_STATE_STRIDE polymer.runtime.embody-wasm/HAIR_HEAD_STATE_STRIDE
+             :HAIR_MORPH_OUTPUT_STRIDE polymer.runtime.embody-wasm/HAIR_MORPH_OUTPUT_STRIDE
+             :MESH_PROPORTIONS_STRIDE polymer.runtime.embody-wasm/MESH_PROPORTIONS_STRIDE
+             :TEMPLATE_SKELETON_FIT_SOLUTION_STRIDE polymer.runtime.embody-wasm/TEMPLATE_SKELETON_FIT_SOLUTION_STRIDE
+             :TEMPLATE_SKELETON_FIT_TRANSFORM_STRIDE polymer.runtime.embody-wasm/TEMPLATE_SKELETON_FIT_TRANSFORM_STRIDE}}}}
 
   :test
   {:target :node-test

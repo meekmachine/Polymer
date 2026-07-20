@@ -5,6 +5,10 @@
 ;; This is not the Conversation agency implementation. It exists so current
 ;; callers can keep their historical service shape while the agency owns
 ;; conversation state, planning, scheduling, and stream facts.
+;;
+;; Important: the generator (LoomLarge AI Chat) owns LLM replies. The orphan
+;; agency inside this adapter must not auto-respond / wait on a missing
+;; conversation-provider, or turn-taking freezes after the first user utterance.
 
 (defn data-map [value]
   (cond
@@ -21,17 +25,29 @@
 (defn promise-resolve [value]
   (.resolve js/Promise value))
 
+(defn promise-reject [value]
+  (.reject js/Promise value))
+
 (defn now-ms []
   (.now js/Date))
 
+(defn service-handles [config]
+  ;; Keep live JS service handles out of js->clj. Converting them to CLJ maps
+  ;; breaks later aget/method calls (eye/head setSpeaking became a silent no-op).
+  {:eyeHeadTracking (when config (aget config "eyeHeadTracking"))
+   :prosodicService (when config (aget config "prosodicService"))})
+
 (defn default-config [config]
-  (merge {:autoListen true
-          :detectInterruptions true
-          :minSpeakTime 500
-          :allowTranscriptInterruptionFallback false
-          :eyeHeadTracking nil
-          :prosodicService nil}
-         (data-map config)))
+  (let [handles (service-handles config)
+        plain (dissoc (data-map config) :eyeHeadTracking :prosodicService)]
+    (merge {:autoListen true
+            :detectInterruptions true
+            :minSpeakTime 500
+            :allowTranscriptInterruptionFallback false
+            :eyeHeadTracking (:eyeHeadTracking handles)
+            :prosodicService (:prosodicService handles)}
+           plain
+           handles)))
 
 (defn generator-next [flow input has-input?]
   (if has-input?
@@ -51,10 +67,15 @@
                        :lastAgentSpeech nil
                        :isInterrupted false
                        :speakStartTime nil})
-        agency (conversation-agency/create-conversation-agency (clj->js @config-atom))
+        ;; Generator owns replies; disable agency autoRespond so transcriptFinal
+        ;; does not emit orphaned conversation.requestResponse with no provider.
+        agency (conversation-agency/create-conversation-agency
+                #js {:autoRespond false
+                     :maxHistory (or (:maxHistory @config-atom) 40)})
         flow-atom (atom nil)
         disposed? (atom false)
-        unsubscribers (atom [])]
+        unsubscribers (atom [])
+        playback-unsub (atom nil)]
     (letfn [(dispatch! [command]
               (js-call agency "dispatch" (clj->js command)))
             (set-state! [state]
@@ -62,6 +83,8 @@
               (js-call callbacks "onStateChange" state))
             (eye-head []
               (:eyeHeadTracking @config-atom))
+            (prosodic []
+              (:prosodicService @config-atom))
             (set-speaking! [value]
               (when-let [service (eye-head)]
                 (js-call service "setSpeaking" value)))
@@ -70,17 +93,34 @@
                 (js-call service "setListening" value)))
             (notify-error! [error]
               (js-call callbacks "onError" error))
+            (clear-playback-unsub! []
+              (when-let [unsubscribe @playback-unsub]
+                (unsubscribe)
+                (reset! playback-unsub nil)))
             (start-listening! []
               (when-not @disposed?
                 (set-speaking! false)
                 (set-listening! true)
                 (set-state! "userSpeaking")
-                (js-call transcription "startListening")))
+                (-> (promise-resolve (js-call transcription "startListening"))
+                    (.catch (fn [error]
+                              (when-not @disposed?
+                                (notify-error! error)))))))
             (stop-listening! []
               (set-listening! false)
               (js-call transcription "stopListening"))
+            (arm-interruption-listening! []
+              (if (:detectInterruptions @config-atom)
+                (-> (promise-resolve (js-call transcription "startListening"))
+                    (.catch (fn [error]
+                              (when-not @disposed?
+                                (notify-error! error)
+                                nil))))
+                (promise-resolve nil)))
             (finish-agent-speech! []
+              (clear-playback-unsub!)
               (set-speaking! false)
+              (js-call (prosodic) "stopTalking")
               (js-call transcription "notifyAgentSpeechEnd")
               (if (:autoListen @config-atom)
                 (start-listening!)
@@ -89,7 +129,7 @@
               (let [utterance (str text)]
                 (swap! context assoc
                        :lastAgentSpeech utterance
-                       :speakStartTime (now-ms)
+                       :speakStartTime nil
                        :isInterrupted false)
                 (dispatch! {:type "agentUtterance"
                             :text utterance
@@ -98,14 +138,29 @@
                 (js-call transcription "prepareAgentSpeech" utterance)
                 (set-listening! false)
                 (set-speaking! true)
+                (when-let [service (eye-head)]
+                  (js-call service "setGazeTarget" #js {:x 0 :y 0 :z 0}))
+                (js-call (prosodic) "startTalking")
                 (set-state! "agentSpeaking")
-                (-> (promise-resolve (js-call tts "speak" utterance))
+                (-> (arm-interruption-listening!)
+                    (.then (fn [_]
+                             (when-not @disposed?
+                               (clear-playback-unsub!)
+                               (when-let [unsubscribe (js-call tts "onPlaybackStart"
+                                                               (fn []
+                                                                 (when-not @disposed?
+                                                                   (swap! context assoc :speakStartTime (now-ms))
+                                                                   (js-call transcription "notifyAgentSpeech" utterance))))]
+                                 (reset! playback-unsub unsubscribe))
+                               (js-call tts "speak" utterance))))
                     (.then (fn [_result]
                              (when-not @disposed?
                                (finish-agent-speech!)))
                            (fn [error]
                              (when-not @disposed?
+                               (clear-playback-unsub!)
                                (set-speaking! false)
+                               (js-call (prosodic) "stopTalking")
                                (set-state! "idle")
                                (notify-error! error)))))))
             (handle-yield! [yielded]
@@ -152,6 +207,7 @@
                 (dispatch! {:type "interrupt" :reason "userSpeech" :event (data-map event)})
                 (js-call tts "stop")
                 (set-speaking! false)
+                (js-call (prosodic) "stopTalking")
                 (set-state! "interrupted")
                 (js-call callbacks "onUserSpeech" "" true true)
                 (start-listening!)))]
@@ -175,9 +231,11 @@
                           (notify-error! error)))))
            :stop (fn []
                    (when-not @disposed?
+                     (clear-playback-unsub!)
                      (js-call tts "stop")
                      (stop-listening!)
                      (set-speaking! false)
+                     (js-call (prosodic) "stopTalking")
                      (dispatch! {:type "stop" :reason "manual"})
                      (set-state! "idle")))
            :getState (fn [] (clj->js @context))
@@ -190,6 +248,7 @@
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
+                        (clear-playback-unsub!)
                         (doseq [unsubscribe @unsubscribers]
                           (unsubscribe))
                         (reset! unsubscribers [])
@@ -197,6 +256,7 @@
                         (js-call transcription "stopListening")
                         (set-speaking! false)
                         (set-listening! false)
+                        (js-call (prosodic) "stopTalking")
                         (js-call agency "dispose")))})))
 
 (defn ConversationService

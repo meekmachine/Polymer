@@ -46,6 +46,10 @@ if (!fs.existsSync(distPath)) {
       'DEFAULT_CHARACTER_LIGHTING_PRESET_IDS',
       'CHARACTER_SCENE_TYPES',
       'DEFAULT_CHARACTER_SCENE_TYPE_ID',
+      'initEmbodyCore',
+      'EMBODY_CORE_ABI_VERSION',
+      'createHairPhysicsSolver',
+      'createRuntimeCore',
     ];
 
     for (const name of requiredExports) {
