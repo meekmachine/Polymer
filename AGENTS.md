@@ -71,3 +71,7 @@ scheduler responsibilities, stream routing, and side-effect placement.
 - Include tests that prove stream routing, planner decisions, scheduler
   behavior, and side-effect boundaries.
 - Run `pnpm check:architecture` when adding or changing agency exports.
+- When a change to this repo (or any non-UI library repo, e.g. Polymer or
+  Embody) requires a dependency pin bump in a UI-facing host repo (e.g.
+  LoomLarge / loomlarge_lol), always report both PR links together: the
+  library PR and the matching host pin PR. Never report only one of them.
