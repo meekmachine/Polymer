@@ -17,6 +17,9 @@
     "set-target"
     "focusTarget"
     "attention.fact"
+    "conversation.userUtterance"
+    "conversation.agentUtterance"
+    "conversation.cancelRequested"
     "camera.fact"
     "camera.stale"
     "clearCameraOffset"
@@ -71,13 +74,19 @@
 (defn target-steps
   [command state now-ms]
   (let [payload (domain/data-map command)
-        options (domain/data-map (:options payload))
+        type (:type payload)
+        conversation-attention (when (#{"conversation.userUtterance"
+                                        "conversation.agentUtterance"}
+                                      type)
+                                 (domain/conversation-attention-command payload))
+        effective-payload (or conversation-attention payload)
+        options (domain/data-map (:options effective-payload))
         target-fact (domain/command-target payload)
-        camera-command? (#{"camera.fact" "camera.stale" "clearCameraOffset"} (:type payload))]
+        camera-command? (#{"camera.fact" "camera.stale" "clearCameraOffset"} type)]
     (if-not target-fact
       [{:op "fail"
         :reason "missing-target"
-        :commandType (:type payload)}]
+        :commandType type}]
       (let [camera-offset (if camera-command?
                             (:target target-fact)
                             (:cameraRelativeOffset state))
@@ -180,8 +189,11 @@
       (= "reset" type)
       (reset-steps command now-ms)
 
-      (= "cancel" type)
-      (cancel-steps command now-ms)
+      (#{"cancel" "conversation.cancelRequested"} type)
+      (cancel-steps (cond-> command
+                      (= "conversation.cancelRequested" type)
+                      (assoc :reason (or (:reason command) "conversation-cancel")))
+                    now-ms)
 
       :else
       (target-steps command state now-ms))))

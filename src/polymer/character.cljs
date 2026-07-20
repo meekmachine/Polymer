@@ -43,10 +43,39 @@
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
+        ;; Optional injectable conversation-provider effector. Hosts/tests may
+        ;; pass a function or {respond} object; Polymer never embeds LLM secrets.
+        conversation-provider (when config (aget config "conversationProvider"))
         unsubscribers (atom [])
         disposed? (atom false)]
     (letfn [(track! [unsubscribe]
               (swap! unsubscribers conj unsubscribe))
+
+            (invoke-conversation-provider! [event]
+              (when conversation-provider
+                (let [request (clj->js (dissoc event :type))
+                      respond-fn (cond
+                                   (fn? conversation-provider) conversation-provider
+                                   (and conversation-provider
+                                        (fn? (aget conversation-provider "respond")))
+                                   (aget conversation-provider "respond")
+                                   :else nil)
+                      reply! (fn [response]
+                               (when-not @disposed?
+                                 (let [payload (if (map? response)
+                                                 response
+                                                 (js->clj response :keywordize-keys true))]
+                                   (.dispatch ^js conversation-agency
+                                              (clj->js {:type "responseReady"
+                                                        :requestId (or (:requestId payload)
+                                                                       (:requestId event))
+                                                        :turnId (or (:turnId payload)
+                                                                    (:turnId event))
+                                                        :text (:text payload)
+                                                        :source (or (:source payload)
+                                                                    "conversation-provider")})))))]
+                  (when respond-fn
+                    (respond-fn request reply!)))))
 
             (schedule-animation! [source-agency snippet options]
               (.dispatch ^js animation-agency
@@ -186,13 +215,30 @@
                 nil))
 
             (route-conversation-event! [event]
+              ;; Router only: forward conversation facts/requests. Gaze and
+              ;; Prosodic own local policy through their planners/schedulers.
               (case (:type event)
+                ("conversation.userUtterance"
+                 "conversation.agentUtterance")
+                (let [fact (clj->js (assoc event :sourceAgency "conversation"))]
+                  (.dispatch ^js prosodic-agency fact)
+                  (.dispatch ^js gaze-agency fact))
+
+                "conversation.requestResponse"
+                (do
+                  (.dispatch ^js prosodic-agency
+                             (clj->js (assoc event :sourceAgency "conversation")))
+                  (invoke-conversation-provider! event))
+
                 "tts.requestSpeak"
                 (.dispatch ^js tts-agency (clj->js (:command event)))
 
                 "conversation.cancelRequested"
-                (.dispatch ^js tts-agency (clj->js {:type "stop"
-                                                    :reason (:reason event)}))
+                (let [cancel (clj->js (assoc event :sourceAgency "conversation"))]
+                  (.dispatch ^js prosodic-agency cancel)
+                  (.dispatch ^js gaze-agency cancel)
+                  (.dispatch ^js tts-agency (clj->js {:type "stop"
+                                                      :reason (:reason event)})))
 
                 nil))
 

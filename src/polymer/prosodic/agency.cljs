@@ -5,10 +5,10 @@
             [polymer.prosodic.state :as state]
             [polymer.stream :as stream]))
 
-;; Prosodic Expression consumes speech/blink facts and emits animation intent.
-;; It does not own TTS, LipSync, host UI state, storage, or the animation
-;; runtime. The character network routes TTS/Blink facts here, then routes
-;; Prosodic's animation requests to Polymer Animation.
+;; Prosodic Expression consumes speech/blink/conversation facts and emits
+;; animation intent. It does not own TTS, LipSync, host UI state, storage, or
+;; the animation runtime. The character network routes peer facts here, then
+;; routes Prosodic's animation requests to Polymer Animation.
 
 (defn js-command [type value]
   #js {:type type :value value})
@@ -23,7 +23,9 @@
   ;; Ignore/no-op plans are routine for word boundaries. Emitting every one
   ;; would create noisy high-frequency diagnostics without changing behavior.
   (or (false? (:ok plan))
-      (:gesture plan)))
+      (:gesture plan)
+      (some #{"record-conversation-fact" "remove-active-gestures"}
+            (map :op (:steps plan)))))
 
 (defn create-prosodic-agency [config]
   (let [input-stream (stream/create-stream)
@@ -72,10 +74,91 @@
                              :reason reason
                              :stoppedAt stopped-at})))
 
+            (execute-steps! [payload plan]
+              (doseq [step (:steps plan)]
+                (case (:op step)
+                  "apply-config"
+                  (do
+                    (swap! state-atom state/configure (:config payload))
+                    (emit-event {:type "prosodicConfigChanged"
+                                 :agency "prosodic"
+                                 :state @state-atom}))
+
+                  "clear-conversation-suppress"
+                  (swap! state-atom state/clear-conversation-suppress)
+
+                  "record-speech-start"
+                  (let [started-at (state/now-ms)]
+                    (swap! state-atom state/record-speech-start started-at (:name payload))
+                    (emit-event {:type "prosodicSpeechStarted"
+                                 :agency "prosodic"
+                                 :name (:name payload)
+                                 :startedAt started-at}))
+
+                  "record-speech-stop"
+                  (let [stopped-at (state/now-ms)
+                        reason (or (:reason payload) "requested")]
+                    (swap! state-atom state/clear-active reason stopped-at)
+                    (emit-event {:type "prosodicStopped"
+                                 :agency "prosodic"
+                                 :reason reason
+                                 :stoppedAt stopped-at}))
+
+                  "record-word-boundary"
+                  (let [word (state/clean-word (:word payload))
+                        word-index (int (state/number-or (:wordIndex payload)
+                                                         (:wordIndex @state-atom)))
+                        observed-at (state/now-ms)]
+                    (swap! state-atom state/record-word-boundary word word-index observed-at)
+                    (emit-event {:type "prosodicWordBoundary"
+                                 :agency "prosodic"
+                                 :word word
+                                 :wordIndex word-index
+                                 :observedAt observed-at}))
+
+                  "record-blink-fast-cue"
+                  (swap! state-atom state/record-blink-fast-cue (state/now-ms))
+
+                  "record-conversation-fact"
+                  (let [observed-at (state/now-ms)]
+                    (swap! state-atom state/record-conversation-fact payload observed-at)
+                    (emit-event {:type "prosodicConversationFact"
+                                 :agency "prosodic"
+                                 :conversationType (:type payload)
+                                 :text (:text payload)
+                                 :turnId (:turnId payload)
+                                 :observedAt observed-at}))
+
+                  "build-gesture-snippet"
+                  nil
+
+                  "schedule-animation"
+                  (when-let [gesture (:gesture plan)]
+                    (schedule-gesture! gesture
+                                       {:trigger (or (:type payload) "plan")
+                                        :word (state/clean-word (:word payload))
+                                        :wordIndex (int (state/number-or (:wordIndex payload)
+                                                                         (:wordIndex @state-atom)))}))
+
+                  "remove-active-gestures"
+                  (remove-active! (or (:reason payload) "requested"))
+
+                  "reset-state"
+                  (do
+                    (stop-local! "reset")
+                    (reset! state-atom (state/config->state nil))
+                    (emit-event {:type "prosodicConfigChanged"
+                                 :agency "prosodic"
+                                 :state @state-atom}))
+
+                  ("ignore" "fail")
+                  nil
+
+                  nil)))
+
             (dispatch! [command]
               (when-not @disposed?
                 (let [payload (js->clj command :keywordize-keys true)
-                      type (:type payload)
                       plan (goap/plan-command payload @state-atom)]
                   (emit-input {:type "command"
                                :agency "prosodic"
@@ -85,60 +168,7 @@
                     (emit-event {:type "error"
                                  :agency "prosodic"
                                  :message (plan-error-message plan)})
-                    (case type
-                      "configure"
-                      (do
-                        (swap! state-atom state/configure (:config payload))
-                        (emit-event {:type "prosodicConfigChanged"
-                                     :agency "prosodic"
-                                     :state @state-atom}))
-
-                      "speechStarted"
-                      (let [started-at (state/now-ms)]
-                        (swap! state-atom state/record-speech-start started-at (:name payload))
-                        (emit-event {:type "prosodicSpeechStarted"
-                                     :agency "prosodic"
-                                     :name (:name payload)
-                                     :startedAt started-at}))
-
-                      "wordBoundary"
-                      (let [word (state/clean-word (:word payload))
-                            word-index (int (state/number-or (:wordIndex payload)
-                                                             (:wordIndex @state-atom)))
-                            observed-at (state/now-ms)]
-                        (swap! state-atom state/record-word-boundary word word-index observed-at)
-                        (emit-event {:type "prosodicWordBoundary"
-                                     :agency "prosodic"
-                                     :word word
-                                     :wordIndex word-index
-                                     :observedAt observed-at})
-                        (when-let [gesture (:gesture plan)]
-                          (schedule-gesture! gesture {:trigger "speech"
-                                                      :word word
-                                                      :wordIndex word-index})))
-
-                      "blinkFast"
-                      (let [now (state/now-ms)]
-                        (when (:gesture plan)
-                          (swap! state-atom state/record-blink-fast-cue now)
-                          (schedule-gesture! "blink-fast" {:trigger "blink-fast"})))
-
-                      ("speechStopped" "stop")
-                      (stop-local! (or (:reason payload) "requested"))
-
-                      "reset"
-                      (do
-                        (stop-local! "reset")
-                        (reset! state-atom (state/config->state nil))
-                        (emit-event {:type "prosodicConfigChanged"
-                                     :agency "prosodic"
-                                     :state @state-atom}))
-
-                      ;; Unknown commands are normally caught by the planner.
-                      ;; This fallback remains defensive for JS interop.
-                      (emit-event {:type "error"
-                                   :agency "prosodic"
-                                   :message (str "Unknown Prosodic command: " type)}))))))]
+                    (execute-steps! payload plan)))))]
       #js {:dispatch dispatch!
            :snapshot (fn [] (state/visible-state @state-atom))
            :schedulerQueue (fn [] (clj->js ((:queue agency-scheduler))))

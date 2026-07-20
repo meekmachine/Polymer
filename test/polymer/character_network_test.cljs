@@ -70,7 +70,9 @@
     (.dispose ^js system)))
 
 (deftest character-network-routes-transcription-to-conversation
-  (let [system (polymer/createCharacterAgencies nil)
+  (let [system (polymer/createCharacterAgencies #js {:gaze #js {:smoothFactor 1
+                                                               :coalesceMs 0
+                                                               :minDelta 0}})
         events (collect-events system)]
     (.dispatch ^js system #js {:agency "conversation"
                                :command #js {:type "start"}})
@@ -87,13 +89,21 @@
                 @(:events events)))
       (is (some #(= "conversation.requestResponse" (:type %))
                 @(:events events)))
+      (is (some #(and (= "prosodicConversationFact" (:type %))
+                      (= "conversation.userUtterance" (:conversationType %)))
+                @(:events events)))
+      (is (some #(and (= "eyeHeadTracking.requestGaze" (:type %))
+                      (= "conversation" (:source %))
+                      (= "conversation-user" (:label %)))
+                @(:events events)))
       (is (= 1 (get-in snapshot [:conversation :userUtteranceCount]))))
     ((:unsubscribe events))
     (.dispose ^js system)))
 
 (deftest character-network-routes-conversation-to-tts-and-tts-feedback-back
   (let [system (polymer/createCharacterAgencies
-                #js {:tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}})
+                #js {:gaze #js {:smoothFactor 1 :coalesceMs 0 :minDelta 0}
+                     :tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}})
         events (collect-events system)]
     (.dispatch ^js system #js {:agency "conversation"
                                :command #js {:type "start"}})
@@ -111,12 +121,74 @@
       (is (some #(and (= "tts.requestSpeak" (:type %))
                       (= "agent answer" (:text %)))
                 @(:events events)))
+      (is (some #(and (= "conversation.agentUtterance" (:type %))
+                      (= "agent answer" (:text %)))
+                @(:events events)))
+      (is (some #(and (= "prosodicConversationFact" (:type %))
+                      (= "conversation.agentUtterance" (:conversationType %)))
+                @(:events events)))
+      (is (some #(and (= "eyeHeadTracking.requestGaze" (:type %))
+                      (= "conversation" (:source %))
+                      (= "conversation-agent" (:label %)))
+                @(:events events)))
       (is (some #(= "ttsSpeechStarted" (:type %))
                 @(:events events)))
       (is (some #(and (= "transcription.ttsStatus" (:type %))
                       (= "speaking" (:status %)))
                 @(:events events)))
       (is (= "speaking" (get-in snapshot [:transcription :agentSpeechStatus]))))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest character-network-routes-conversation-cancel-to-prosodic-gaze-and-tts
+  (let [system (polymer/createCharacterAgencies
+                #js {:gaze #js {:smoothFactor 1 :coalesceMs 0 :minDelta 0}
+                     :tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}})
+        events (collect-events system)]
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "start"}})
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "transcriptFinal"
+                                             :text "before interrupt"}})
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "interrupt"
+                                             :reason "barge-in"}})
+    (is (some #(and (= "conversation.cancelRequested" (:type %))
+                    (= "barge-in" (:reason %)))
+              @(:events events)))
+    (is (some #(and (= "prosodicConversationFact" (:type %))
+                    (= "conversation.cancelRequested" (:conversationType %)))
+              @(:events events)))
+    (is (some #(and (= "eyeHeadTracking.requestCancel" (:type %))
+                    (or (= "barge-in" (:reason %))
+                        (= "conversation-cancel" (:reason %))))
+              @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest character-network-invokes-injectable-conversation-provider
+  (let [provider-calls (atom [])
+        system (polymer/createCharacterAgencies
+                #js {:conversationProvider
+                     (fn [request reply!]
+                       (swap! provider-calls conj (js->clj request :keywordize-keys true))
+                       (reply! #js {:text "provider answer"}))
+                     :tts #js {:providers #js {:webSpeechSpeak (fake-web-speech-provider)}}
+                     :gaze #js {:smoothFactor 1 :coalesceMs 0 :minDelta 0}})
+        events (collect-events system)]
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "start"}})
+    (.dispatch ^js system #js {:agency "conversation"
+                               :command #js {:type "transcriptFinal"
+                                             :text "ask the provider"}})
+    (is (= 1 (count @provider-calls)))
+    (is (= "ask the provider" (:text (first @provider-calls))))
+    (is (some #(and (= "conversation.agentUtterance" (:type %))
+                    (= "provider answer" (:text %)))
+              @(:events events)))
+    (is (some #(and (= "tts.requestSpeak" (:type %))
+                    (= "provider answer" (:text %)))
+              @(:events events)))
     ((:unsubscribe events))
     (.dispose ^js system)))
 
