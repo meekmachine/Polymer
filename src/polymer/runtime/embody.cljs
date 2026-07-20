@@ -79,6 +79,20 @@
 (def extractHumanoidSkeletonTemplateFromModel (.-extractHumanoidSkeletonTemplateFromModel embody))
 
 (def createCharacterHost (.-createCharacterHost embody))
+
+;; Thin Three.js host over the Rust engine. All animation logic (profile
+;; compilation, AU/viseme/continuum state, transitions, frame evaluation)
+;; runs inside the Rust RuntimeCore; this host only inspects the model and
+;; applies packed frame output to Three.js objects.
+(def RustEmbodyHost (aget embody "RustEmbodyHost"))
+
+(defn create-rust-embody-host
+  "Create a RustEmbodyHost for a Three.js model. Returns a Promise.
+  config: JS object {profile, presetType, meshes}."
+  ([model] (create-rust-embody-host model #js {}))
+  ([model config] (.create RustEmbodyHost model config)))
+
+(def createRustEmbodyHost create-rust-embody-host)
 (def createDefaultCharacterScene (.-createDefaultCharacterScene embody))
 (def createDefaultCharacterLighting (.-createDefaultCharacterLighting embody))
 (def createShadowPlane (.-createShadowPlane embody))

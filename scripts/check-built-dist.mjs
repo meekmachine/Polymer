@@ -50,6 +50,8 @@ if (!fs.existsSync(distPath)) {
       'EMBODY_CORE_ABI_VERSION',
       'createHairPhysicsSolver',
       'createRuntimeCore',
+      'RustEmbodyHost',
+      'createRustEmbodyHost',
     ];
 
     for (const name of requiredExports) {
