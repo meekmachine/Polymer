@@ -80,6 +80,21 @@ export {
 } from '@lovelace_lol/embody';
 
 export type {
+  CharacterHost,
+  CharacterHostCharacterOptions,
+  CharacterHostExternalScene,
+  CharacterHostOptions,
+  CharacterModelLoadOptions,
+  CharacterModelLoadResult,
+  CharacterModelTransform,
+  DefaultCharacterLightingController,
+  DefaultCharacterLightingPresetId,
+  DefaultCharacterLightingSettings,
+  DefaultCharacterScene,
+  DefaultCharacterSceneOptions,
+} from '@lovelace_lol/embody';
+
+export type {
   AUBoneBindingState,
   AUInfo,
   AnimationClipInfo,
