@@ -1,5 +1,6 @@
 (ns polymer.conversation.agency
-  (:require [polymer.conversation.planner :as planner]
+  (:require [polymer.conversation.domain :as domain]
+            [polymer.conversation.planner :as planner]
             [polymer.conversation.scheduler :as scheduler]
             [polymer.conversation.state :as state]
             [polymer.stream :as stream]))
@@ -29,7 +30,7 @@
         scheduler-atom (atom nil)]
     (letfn [(dispatch! [command]
               (when-not @disposed?
-                (let [payload (state/data-map command)
+                (let [payload (domain/data-map command)
                       plan (planner/plan-command payload @state-atom (now-ms))]
                   ;; Input is observable for workers/tests and for future
                   ;; diagnostics. It is not host application state and should

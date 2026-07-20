@@ -24,6 +24,10 @@
          :commandType (:commandType plan)
          :queuedAt (now-ms)))
 
+(defn request-id
+  [request entry published-at]
+  (str "hair:" (:action request) ":" (:queueIndex entry) ":" published-at))
+
 (defn create-scheduler
   [{:keys [state-atom emit-event]}]
   (let [queue (atom [])
@@ -36,9 +40,15 @@
                 (swap! queue conj entry)
                 entry))
 
-            (emit-runtime-request! [request]
-              (swap! state-atom state/record-runtime-request request)
-              (emit-event request))
+            (emit-runtime-request! [request entry]
+              (let [published-at (now-ms)
+                    payload (assoc request
+                                   :requestId (request-id request entry published-at)
+                                   :queueIndex (:queueIndex entry)
+                                   :queuedAt (:queuedAt entry)
+                                   :publishedAt published-at)]
+                (swap! state-atom state/record-runtime-request payload)
+                (emit-event payload)))
 
             (publish-motion! []
               (when-not @disposed?
@@ -46,8 +56,10 @@
                 (when-let [motion @pending-motion]
                   (reset! pending-motion nil)
                   (let [id (swap! sequence inc)
+                        entry (enqueue! {:op "request-runtime-motion"}
+                                        {:commandType "motionFact"})
                         request (domain/motion-request motion (:physics @state-atom) id (now-ms))]
-                    (emit-runtime-request! request)))))
+                    (emit-runtime-request! request entry)))))
 
             (schedule-motion! [motion]
               (when-not @disposed?
@@ -60,7 +72,7 @@
 
             (execute-step! [step command plan]
               (let [now (now-ms)]
-                (enqueue! step plan)
+                (let [entry (enqueue! step plan)]
                 (case (:op step)
                   "apply-config"
                   (do
@@ -71,7 +83,7 @@
                                  :at now}))
 
                   "request-apply-state"
-                  (emit-runtime-request! (domain/material-request @state-atom now))
+                  (emit-runtime-request! (domain/material-request @state-atom now) entry)
 
                   "record-motion"
                   (swap! state-atom state/record-motion (:motion step))
@@ -91,7 +103,7 @@
                                  :at now}))
 
                   "request-reset"
-                  (emit-runtime-request! (domain/reset-request now))
+                  (emit-runtime-request! (domain/reset-request now) entry)
 
                   "fail"
                   (emit-event {:type "error"
@@ -100,7 +112,7 @@
                                :commandType (:commandType step)
                                :at now})
 
-                  nil)))]
+                  nil))))]
       {:schedule
        (fn [command plan]
          (when-not @disposed?

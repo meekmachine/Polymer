@@ -1,5 +1,5 @@
 (ns polymer.transcription.state
-  (:require [clojure.string :as str]))
+  (:require [polymer.transcription.domain :as domain]))
 
 ;; Transcription state tracks recognition session lifecycle and ordered transcript
 ;; facts. Browser APIs such as Web Speech, microphone access, and interruption
@@ -29,23 +29,11 @@
   [lo hi value]
   (min hi (max lo value)))
 
-(defn data-map
-  [value]
-  (cond
-    (map? value) value
-    value (js->clj value :keywordize-keys true)
-    :else {}))
-
-(defn text-or
-  [value fallback]
-  (let [text (str/trim (or value ""))]
-    (if (pos? (count text)) text fallback)))
-
 (defn normalize-config
   [config]
-  (let [input (merge default-config (data-map config))]
-    {:provider (text-or (:provider input) (:provider default-config))
-     :lang (text-or (:lang input) (:lang default-config))
+  (let [input (merge default-config (domain/data-map config))]
+    {:provider (domain/text-or (:provider input) (:provider default-config))
+     :lang (domain/text-or (:lang input) (:lang default-config))
      :continuous (boolean (:continuous input))
      :interimResults (boolean (:interimResults input))
      :maxAlternatives (int (clamp 1 10 (number-or (:maxAlternatives input)
@@ -71,6 +59,9 @@
    :lastPartial nil
    :lastFinal nil
    :lastError nil
+   :lastTtsEvent nil
+   :agentSpeaking false
+   :agentSpeechStatus "idle"
    :lastEvent nil
    :retryCount 0
    :startedCount 0
@@ -78,6 +69,8 @@
    :partialCount 0
    :finalCount 0
    :errorCount 0
+   :ignoredCount 0
+   :interruptionCount 0
    :config (normalize-config config)})
 
 (defn config->state
@@ -91,7 +84,7 @@
 (defn configure
   [state config]
   (assoc state :config (normalize-config (merge (:config state)
-                                                (data-map config)))))
+                                                (domain/data-map config)))))
 
 (defn reset-state
   [state]
@@ -165,3 +158,23 @@
                          :at now-ms})
       (update :errorCount inc)
       (update :retryCount (fn [count] (if retrying? (inc count) count)))))
+
+(defn record-ignored
+  [state ignored]
+  (-> state
+      (assoc :lastEvent ignored)
+      (update :ignoredCount inc)))
+
+(defn record-interruption
+  [state fact]
+  (-> state
+      (assoc :lastEvent fact)
+      (update :interruptionCount inc)))
+
+(defn record-tts-status
+  [state fact]
+  (assoc state
+         :agentSpeaking (boolean (:speaking fact))
+         :agentSpeechStatus (:status fact)
+         :lastTtsEvent fact
+         :lastEvent fact))

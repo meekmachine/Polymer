@@ -106,9 +106,17 @@
                   "publish-cancel"
                   (emit-event {:type "conversation.cancelRequested"
                                :agency "conversation"
-                               :targetAgency "tts"
+                               :targetAgency (get-in @state-atom [:config :ttsAgency])
                                :reason (:reason step)
                                :turnId (:turnId @state-atom)
+                               :at now})
+
+                  "ignore-stale-response"
+                  (emit-event {:type "conversation.ignored"
+                               :agency "conversation"
+                               :reason (:reason step)
+                               :requestId (:requestId step)
+                               :turnId (:turnId step)
                                :at now})
 
                   "record-tts-status"

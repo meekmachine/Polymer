@@ -1,5 +1,5 @@
 (ns polymer.transcription.planner
-  (:require [clojure.string :as str]
+  (:require [polymer.transcription.domain :as domain]
             [polymer.transcription.state :as state]))
 
 ;; The planner turns recognition commands and provider callbacks into explicit
@@ -16,17 +16,11 @@
     "partialTranscript"
     "providerFinal"
     "finalTranscript"
-    "providerError"})
-
-(defn clean-text
-  [value]
-  (let [text (str/trim (or value ""))]
-    (when (pos? (count text))
-      text)))
-
-(defn transcript-text
-  [command]
-  (clean-text (or (:text command) (:transcript command))))
+    "providerError"
+    "tts.status"
+    "ttsSpeechStarted"
+    "ttsSpeechStopped"
+    "ttsSpeechEnded"})
 
 (defn confidence
   [command]
@@ -47,12 +41,37 @@
     {:op "fail" :reason "unsupported-command" :commandType (:type command)}
 
     (and (#{"providerPartial" "partialTranscript" "providerFinal" "finalTranscript"} (:type command))
-         (not (transcript-text command)))
+         (not (domain/transcript-text command)))
     {:op "ignore" :reason "empty-transcript" :commandType (:type command)}
 
     (and (#{"providerPartial" "partialTranscript" "providerFinal" "finalTranscript"} (:type command))
          (not (allowed-confidence? command current-state)))
-    {:op "ignore" :reason "low-confidence" :commandType (:type command)}))
+    {:op "ignore" :reason "low-confidence" :commandType (:type command)}
+
+    (and (get-in current-state [:config :agentFilteringEnabled])
+         (:agentSpeaking current-state)
+         (#{"providerPartial" "partialTranscript" "providerFinal" "finalTranscript"} (:type command))
+         (domain/agent-source? command))
+    {:op "ignore" :reason "agent-speech" :commandType (:type command)}))
+
+(defn tts-status-fact
+  [command now-ms]
+  (let [status (or (:status command)
+                   (:stateStatus command)
+                   (get-in command [:state :status])
+                   (case (:type command)
+                     "ttsSpeechStarted" "speaking"
+                     ("ttsSpeechStopped" "ttsSpeechEnded") "idle"
+                     "idle"))]
+    {:type "transcription.ttsStatus"
+     :agency "transcription"
+     :sourceAgency "tts"
+     :status status
+     :speaking (or (:speaking command)
+                   (= "speaking" status)
+                   (= "ttsSpeechStarted" (:type command)))
+     :ttsEventType (:type command)
+     :at now-ms}))
 
 (defn command-steps
   [command current-state now-ms]
@@ -69,15 +88,37 @@
                           :reason (or (:reason command) (:type command))}]
       "reset" [{:op "reset-state"}]
       ("providerPartial" "partialTranscript")
-      [{:op "publish-partial"
-        :text (transcript-text command)
-        :confidence (confidence command)
-        :source (or (:source command) "provider")}]
+      (let [interrupt? (and (:agentSpeaking current-state)
+                            (get-in current-state [:config :interruptDetectionEnabled])
+                            (not (domain/agent-source? command)))]
+        (cond-> []
+          interrupt?
+          (conj {:op "publish-interruption"
+                 :text (domain/transcript-text command)
+                 :confidence (confidence command)
+                 :source (or (:source command) "provider")})
+
+          true
+          (conj {:op "publish-partial"
+                 :text (domain/transcript-text command)
+                 :confidence (confidence command)
+                 :source (or (:source command) "provider")})))
       ("providerFinal" "finalTranscript")
-      [{:op "publish-final"
-        :text (transcript-text command)
-        :confidence (confidence command)
-        :source (or (:source command) "provider")}]
+      (let [interrupt? (and (:agentSpeaking current-state)
+                            (get-in current-state [:config :interruptDetectionEnabled])
+                            (not (domain/agent-source? command)))]
+        (cond-> []
+          interrupt?
+          (conj {:op "publish-interruption"
+                 :text (domain/transcript-text command)
+                 :confidence (confidence command)
+                 :source (or (:source command) "provider")})
+
+          true
+          (conj {:op "publish-final"
+                 :text (domain/transcript-text command)
+                 :confidence (confidence command)
+                 :source (or (:source command) "provider")})))
       "providerError"
       (let [message (or (:message command) (:error command) "provider-error")
             retry? (and (:active current-state)
@@ -88,7 +129,10 @@
                   :retry retry?}]
           retry? (conj {:op "request-provider-retry"
                         :message message
-                        :retryAfterMs (get-in current-state [:config :retryDelayMs])}))))))
+                        :retryAfterMs (get-in current-state [:config :retryDelayMs])})))
+      ("tts.status" "ttsSpeechStarted" "ttsSpeechStopped" "ttsSpeechEnded")
+      [{:op "record-tts-status"
+        :fact (tts-status-fact command now-ms)}])))
 
 (defn plan-command
   [command current-state now-ms]

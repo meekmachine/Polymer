@@ -18,6 +18,8 @@
     "focusTarget"
     "attention.fact"
     "camera.fact"
+    "camera.stale"
+    "clearCameraOffset"
     "reset"
     "cancel"})
 
@@ -70,12 +72,20 @@
   [command state now-ms]
   (let [payload (domain/data-map command)
         options (domain/data-map (:options payload))
-        target-fact (domain/command-target payload)]
+        target-fact (domain/command-target payload)
+        camera-command? (#{"camera.fact" "camera.stale" "clearCameraOffset"} (:type payload))]
     (if-not target-fact
       [{:op "fail"
         :reason "missing-target"
         :commandType (:type payload)}]
-      (let [plan (assoc (domain/plan-target (:target target-fact)
+      (let [camera-offset (if camera-command?
+                            (:target target-fact)
+                            (:cameraRelativeOffset state))
+            base-target (if camera-command?
+                          (:baseTarget state)
+                          (:target target-fact))
+            adjusted-target (domain/add-targets base-target camera-offset)
+            plan (assoc (domain/plan-target adjusted-target
                                             (:lastRequestedTarget state)
                                             (:config state)
                                             options
@@ -83,7 +93,10 @@
                         :requestId (request-id "gaze" now-ms)
                         :source (:source target-fact)
                         :label (:label target-fact)
-                        :score (:score target-fact))
+                        :score (:score target-fact)
+                        :baseTarget base-target
+                        :cameraRelativeOffset camera-offset
+                        :cameraFact (when camera-command? payload))
             request (target-request plan state options (:source target-fact) (:label target-fact))]
         (cond
           (not (enabled-for-request? (:config state) options))

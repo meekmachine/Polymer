@@ -34,6 +34,12 @@
       :y (clamp -1 1 (number-or (:y input) (:y fallback)))
       :z (number-or (:z input) (:z fallback))})))
 
+(defn add-targets
+  [base offset]
+  {:x (clamp -1 1 (+ (:x base) (:x offset)))
+   :y (clamp -1 1 (+ (:y base) (:y offset)))
+   :z (number-or (:z base) 0)})
+
 (defn target-distance
   [a b]
   (js/Math.hypot (- (:x a) (:x b))
@@ -152,8 +158,14 @@
       (when-let [offset (:relativeOffset payload)]
         {:target (normalize-target offset)
          :source (or (:source payload) "cameraContext")
-         :label "camera-relative"
+         :label "camera-relative-offset"
          :score 0.4})
+
+      ("camera.stale" "clearCameraOffset")
+      {:target zero-target
+       :source (or (:source payload) "cameraContext")
+       :label "camera-relative-clear"
+       :score 0.4}
 
       (when-let [target (or (:target payload)
                             (:gazeTarget payload)

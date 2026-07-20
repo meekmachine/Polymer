@@ -1,4 +1,5 @@
-(ns polymer.conversation.state)
+(ns polymer.conversation.state
+  (:require [polymer.conversation.domain :as domain]))
 
 ;; Conversation state is the local transcript and turn-taking ledger. It does
 ;; not own an LLM provider, a TTS provider, host UI state, or animation. Those
@@ -24,31 +25,18 @@
   [lo hi value]
   (min hi (max lo value)))
 
-(defn data-map
-  [value]
-  (cond
-    (map? value) value
-    value (js->clj value :keywordize-keys true)
-    :else {}))
-
-(defn text-or
-  [value fallback]
-  (if (and (string? value) (pos? (count value)))
-    value
-    fallback))
-
 (defn normalize-config
   [config]
-  (let [input (merge default-config (data-map config))]
+  (let [input (merge default-config (domain/data-map config))]
     {:autoRespond (boolean (:autoRespond input))
      :maxHistory (int (clamp 1 200 (number-or (:maxHistory input)
                                               (:maxHistory default-config))))
-     :responseSource (text-or (:responseSource input)
-                              (:responseSource default-config))
-     :ttsAgency (text-or (:ttsAgency input)
-                         (:ttsAgency default-config))
-     :interruptionMode (text-or (:interruptionMode input)
-                                (:interruptionMode default-config))}))
+     :responseSource (domain/text-or (:responseSource input)
+                                     (:responseSource default-config))
+     :ttsAgency (domain/text-or (:ttsAgency input)
+                                (:ttsAgency default-config))
+     :interruptionMode (domain/text-or (:interruptionMode input)
+                                       (:interruptionMode default-config))}))
 
 (defn default-state
   [config]
@@ -83,7 +71,7 @@
 (defn configure
   [state config]
   (assoc state :config (normalize-config (merge (:config state)
-                                                (data-map config)))))
+                                                (domain/data-map config)))))
 
 (defn reset-state
   [state]

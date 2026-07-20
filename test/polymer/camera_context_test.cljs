@@ -88,6 +88,36 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest pending-camera-update-prevents-old-stale-timer-from-invalidating
+  (async done
+         (let [agency (camera-context/create-camera-context-agency #js {:coalesceMs 25
+                                                                        :staleAfterMs 30})
+               events (collect-events agency)]
+           (.dispatch ^js agency #js {:type "updateCamera"
+                                      :cameraPosition #js {:x 1 :y 0 :z 2}
+                                      :targetPosition #js {:x 0 :y 0 :z 0}})
+           (.dispatch ^js agency #js {:type "publishCameraFacts"})
+           (js/setTimeout
+            (fn []
+              (.dispatch ^js agency #js {:type "updateCamera"
+                                         :cameraPosition #js {:x 2 :y 0 :z 2}
+                                         :targetPosition #js {:x 0 :y 0 :z 0}}))
+            5)
+           (js/setTimeout
+            (fn []
+              (try
+                (let [stale-events (filter #(= "camera.stale" (:type %)) @(:events events))
+                      facts (filter #(= "camera.fact" (:type %)) @(:events events))]
+                  (is (empty? stale-events))
+                  (is (= 2 (:sequence (last facts)))))
+                ((:unsubscribe events))
+                (.dispose ^js agency)
+                (done)
+                (catch :default error
+                  (.dispose ^js agency)
+                  (throw error))))
+            45))))
+
 (deftest reset-clears-camera-facts
   (let [agency (camera-context/create-camera-context-agency #js {:coalesceMs 0})
         events (collect-events agency)]

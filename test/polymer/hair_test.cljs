@@ -34,6 +34,32 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest configure-physics-and-string-colors-emit-auditable-runtime-request
+  (let [agency (hair/create-hair-agency nil)
+        events (collect-events agency)]
+    (.dispatch ^js agency #js {:type "setBaseColor"
+                               :value "#123456"})
+    (.dispatch ^js agency #js {:type "configurePhysics"
+                               :physics #js {:enabled true
+                                             :responseScale 4}})
+    (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
+          requests (filter #(and (= "hair.requestRuntime" (:type %))
+                                 (= "applyState" (:action %)))
+                           @(:events events))
+          latest-request (last requests)]
+      (is (= "#123456" (get-in snapshot [:hairColor :baseColor])))
+      (is (true? (get-in snapshot [:physics :enabled])))
+      (is (= 4 (get-in snapshot [:physics :responseScale])))
+      (is (= 2 (:planCount snapshot)))
+      (is (some #(= "hairPlanCreated" (:type %)) @(:events events)))
+      (is (:requestId latest-request))
+      (is (number? (:queueIndex latest-request)))
+      (is (:queuedAt latest-request))
+      (is (:publishedAt latest-request))
+      (is (true? (get-in latest-request [:physics :enabled]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest immediate-motion-emits-runtime-request
   (let [agency (hair/create-hair-agency #js {:physics #js {:coalesceMs 0
                                                           :responseScale 1}})
@@ -45,6 +71,8 @@
       (is request)
       (is (= "applyMotion" (:action request)))
       (is (= "followMotion" (:mode request)))
+      (is (:requestId request))
+      (is (number? (:queueIndex request)))
       (is (= 1 (:motionCount snapshot)))
       (is (= 1 (:runtimeRequestCount snapshot))))
     ((:unsubscribe events))

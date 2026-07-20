@@ -63,6 +63,9 @@
    :active false
    :rawTarget domain/zero-target
    :target domain/zero-target
+   :baseTarget domain/zero-target
+   :cameraRelativeOffset domain/zero-target
+   :lastCameraFact nil
    :lastRequestedTarget domain/zero-target
    :pendingRequest nil
    :lastRequest nil
@@ -127,6 +130,11 @@
       (assoc :status "planning"
              :rawTarget (:rawTarget plan)
              :target (:target plan)
+             :baseTarget (or (:baseTarget plan) (:target plan))
+             :cameraRelativeOffset (or (:cameraRelativeOffset plan)
+                                       (:cameraRelativeOffset state))
+             :lastCameraFact (or (:cameraFact plan)
+                                 (:lastCameraFact state))
              :lastPlan plan
              :lastEvent {:type "gaze.targetPlanned"
                          :requestId (:requestId plan)
@@ -172,6 +180,9 @@
       (assoc :status "reset"
              :rawTarget domain/zero-target
              :target domain/zero-target
+             :baseTarget domain/zero-target
+             :cameraRelativeOffset domain/zero-target
+             :lastCameraFact nil
              :lastRequestedTarget domain/zero-target
              :pendingRequest nil
              :lastRequest request
