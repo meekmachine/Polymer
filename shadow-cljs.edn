@@ -105,7 +105,14 @@
              :resolveRegionVisibilityCameraAngle polymer.runtime.embody/resolveRegionVisibilityCameraAngle
              :toWorldDirection polymer.runtime.embody/toWorldDirection
              :CC4_BONES polymer.runtime.embody/CC4_BONES
-             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS}}}}
+             :VISEME_KEYS polymer.runtime.embody/VISEME_KEYS
+             :HUMANOID_SKELETON_TEMPLATES polymer.runtime.embody/HUMANOID_SKELETON_TEMPLATES
+             :JONATHAN_HUMANOID_SKELETON_TEMPLATE polymer.runtime.embody/JONATHAN_HUMANOID_SKELETON_TEMPLATE
+             :getHumanoidSkeletonTemplate polymer.runtime.embody/getHumanoidSkeletonTemplate
+             :getHumanoidSkeletonTemplateBoneNames polymer.runtime.embody/getHumanoidSkeletonTemplateBoneNames
+             :createValidationSkeletonFromHumanoidTemplate polymer.runtime.embody/createValidationSkeletonFromHumanoidTemplate
+             :computeHumanoidSkeletonTemplateRestBounds polymer.runtime.embody/computeHumanoidSkeletonTemplateRestBounds
+             :extractHumanoidSkeletonTemplateFromModel polymer.runtime.embody/extractHumanoidSkeletonTemplateFromModel}}}}
 
   :test
   {:target :node-test
