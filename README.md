@@ -2,6 +2,8 @@
 
 Clean ClojureScript character agency package for Character Loom.
 
+Continuous PR releases are published via [pkg.pr.new](https://pkg.pr.new/). Install the [pkg-pr-new GitHub App](https://github.com/apps/pkg-pr-new) on this repository so pull requests can publish preview packages. Stable npm publishing is deferred until we have a release candidate; until then consumers should use full git SHA pins or pkg.pr.new URLs.
+
 Polymer is intentionally separate from Latticework and Polyester. It is built as
 a Society of Mind agency system: small CLJS agencies collaborate through streams,
 plan locally, schedule their own work, and keep side effects inside the agencies
