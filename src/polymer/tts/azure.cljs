@@ -13,14 +13,17 @@
 ;; other text/timeline source.
 
 (def azure->canonical
-  ;; SAPI/Azure IDs 0-21 → canonical 15-slot CC4 order. Keep distinct lip
-  ;; families: id 4 is mid-front (ɛ) → Ih, id 6 is high-front (i/ɪ/j) → EE.
-  ;; Mapping both to Ih erased the spread-EE mouth for most Azure speech.
+  ;; SAPI/Azure IDs 0-21 → canonical 15-slot CC4 order.
+  ;; Must match Embody CC4_VISEME_SLOTS providerIds.azure (first-hit order):
+  ;;   0,21→B_M_P  1,2,9,11,12→Ah  3,8,10→Oh  4→AE  5→Er  6→EE  7→W_OO
+  ;;   13→R  14,19→T_L_D_N  15→S_Z  16→Ch_J  17→Th  18→F_V  20→K_G_H_NG
+  ;; Older Polymer rows that put 1→AE, 4→Ih, and 12→K_G_H_NG were wrong and
+  ;; made Azure mouths look nothing like the CC4 morph set.
   {0 (:B_M_P visemes/canonical-visemes)
-   1 (:AE visemes/canonical-visemes)
+   1 (:Ah visemes/canonical-visemes)
    2 (:Ah visemes/canonical-visemes)
    3 (:Oh visemes/canonical-visemes)
-   4 (:Ih visemes/canonical-visemes)
+   4 (:AE visemes/canonical-visemes)
    5 (:Er visemes/canonical-visemes)
    6 (:EE visemes/canonical-visemes)
    7 (:W_OO visemes/canonical-visemes)
@@ -28,7 +31,7 @@
    9 (:Ah visemes/canonical-visemes)
    10 (:Oh visemes/canonical-visemes)
    11 (:Ah visemes/canonical-visemes)
-   12 (:K_G_H_NG visemes/canonical-visemes)
+   12 (:Ah visemes/canonical-visemes)
    13 (:R visemes/canonical-visemes)
    14 (:T_L_D_N visemes/canonical-visemes)
    15 (:S_Z visemes/canonical-visemes)
@@ -177,8 +180,11 @@
   (let [text (normalized-word (:word word))]
     (cond
       (= provider-id 0) nil
+      ;; Id 6 is already EE; long-e refine kept for explicit word bias.
       (and (= provider-id 6) (long-e-word? text)) (:EE visemes/canonical-visemes)
+      ;; Id 4 is AE (ɛ/ʊ). When the word is clearly rounded-back ʊ, prefer W_OO.
       (and (= provider-id 4) (rounded-back? event-time-sec word)) (:W_OO visemes/canonical-visemes)
+      ;; Id 19 is T_L_D_N (includes θ). Prefer Th when the word timing is on "th".
       (and (= provider-id 19) (dental-th? event-time-sec word)) (:Th visemes/canonical-visemes)
       :else canonical-id)))
 

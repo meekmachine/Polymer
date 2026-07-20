@@ -110,11 +110,13 @@
       :else (jaw-activation-for-viseme viseme-id))))
 
 (def phoneme->viseme
+  ;; Align with Embody CC4_VISEME_SLOTS phoneme lists so Web Speech text
+  ;; planning hits the same morphs Azure/provider IDs resolve to.
   {"sil" (:B_M_P canonical-visemes)
    "pau" (:B_M_P canonical-visemes)
    "PAUSE" (:B_M_P canonical-visemes)
    "A" (:Ah canonical-visemes)
-   "E" (:EE canonical-visemes)
+   "E" (:AE canonical-visemes)
    "I" (:Ih canonical-visemes)
    "O" (:Oh canonical-visemes)
    "U" (:W_OO canonical-visemes)
@@ -126,11 +128,13 @@
    "AH" (:Ah canonical-visemes)
    "AA" (:Ah canonical-visemes)
    "AO" (:Oh canonical-visemes)
-   "EY" (:EE canonical-visemes)
-   "EH" (:EE canonical-visemes)
-   "UH" (:W_OO canonical-visemes)
+   ;; EH/EY/UH live on the AE slot in CC4 (not EE / W_OO).
+   "EY" (:AE canonical-visemes)
+   "EH" (:AE canonical-visemes)
+   "UH" (:AE canonical-visemes)
    "ER" (:Er canonical-visemes)
-   "Y" (:Ih canonical-visemes)
+   ;; Y/IY are high-front → EE. Keep IH/IX on Ih for short-i contrast.
+   "Y" (:EE canonical-visemes)
    "IY" (:EE canonical-visemes)
    "IH" (:Ih canonical-visemes)
    "IX" (:Ih canonical-visemes)
@@ -146,10 +150,11 @@
    "L" (:T_L_D_N canonical-visemes)
    "S" (:S_Z canonical-visemes)
    "Z" (:S_Z canonical-visemes)
-   "SH" (:S_Z canonical-visemes)
+   ;; SH/ZH are postalveolar → Ch_J in CC4, not the S_Z morph.
+   "SH" (:Ch_J canonical-visemes)
    "CH" (:Ch_J canonical-visemes)
    "JH" (:Ch_J canonical-visemes)
-   "ZH" (:S_Z canonical-visemes)
+   "ZH" (:Ch_J canonical-visemes)
    "TH" (:Th canonical-visemes)
    "DH" (:Th canonical-visemes)
    "F" (:F_V canonical-visemes)

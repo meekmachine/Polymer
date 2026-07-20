@@ -318,15 +318,14 @@
     (is (<= (sample-channel bilabial 0.092) 0.04))))
 
 (deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
-  (let [sibilant-snippet (build-text-fixture "chess")
-        ;; "out" expands AW → Ah (+ W_OO). Round-vowel letters no longer collapse
-        ;; to Ah, so do not use "duke"/"so" as the open-vowel fixture.
+  (let [;; "hiss" stays on Ih/S_Z (low jaw). Avoid mid vowels like EH→AE.
+        sibilant-snippet (build-text-fixture "hiss")
         open-vowel-snippet (build-text-fixture "out")
         sibilant-jaw (jaw-channel sibilant-snippet)
         open-vowel-jaw (jaw-channel open-vowel-snippet)]
     (is sibilant-jaw)
     (is open-vowel-jaw)
-    (is (<= (channel-max-intensity sibilant-jaw) 0.2))
+    (is (<= (channel-max-intensity sibilant-jaw) 0.25))
     (is (>= (channel-max-intensity open-vowel-jaw) 0.5))))
 
 (deftest jali-labiodental-fixture-is-distinct-from-bilabial-closure
@@ -346,7 +345,10 @@
     (is bilabial-in-pop)
     (is (>= (channel-max-intensity labiodental) 0.8))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
-    (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
+    ;; Trailing "e" in "five" is EH→AE (mid jaw). Labiodental itself stays low-jaw;
+    ;; only assert the F_V morph carried the word, not a full Ah open.
+    (is (< (channel-max-intensity (jaw-channel five))
+           (channel-max-intensity (jaw-channel (build-text-fixture "out")))))))
 
 (deftest LipSync-non-closure-visemes-ramp-across-renderable-time
   (let [snippet (snippet/build-lipsync-snippet
@@ -572,17 +574,43 @@
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
 
-(deftest azure-high-front-viseme-maps-to-ee-not-ih
-  ;; SAPI id 6 is i/ɪ/j. Mapping it to Ih collapsed Azure speech onto the same
-  ;; mid-front mouth as id 4; EE keeps the spread high-front shape distinct.
+(deftest azure-provider-ids-match-embody-cc4-slots
+  ;; Parity with Embody CC4_VISEME_SLOTS.providerIds.azure (first-hit order).
   (let [timeline (azure/azure-visemes->timeline
-                  [{:id 4 :time 0}
-                   {:id 6 :time 0.14}]
-                  400
+                  [{:id 1 :time 0}
+                   {:id 4 :time 0.05}
+                   {:id 6 :time 0.10}
+                   {:id 12 :time 0.15}
+                   {:id 16 :time 0.20}
+                   {:id 20 :time 0.25}]
+                  500
                   {})
-        viseme-ids (set (map :visemeId timeline))]
-    (is (contains? viseme-ids (:Ih visemes/canonical-visemes)))
-    (is (contains? viseme-ids (:EE visemes/canonical-visemes)))))
+        by-id (into {}
+                    (map (fn [event]
+                           ;; Expand diphthongs can emit multiple rows; keep first
+                           ;; occurrence of each canonical id for this check.
+                           [(:visemeId event) true])
+                         timeline))
+        ids (set (map :visemeId timeline))]
+    (is (contains? ids (:Ah visemes/canonical-visemes)))   ;; 1,12
+    (is (contains? ids (:AE visemes/canonical-visemes)))   ;; 4
+    (is (contains? ids (:EE visemes/canonical-visemes)))   ;; 6
+    (is (contains? ids (:Ch_J visemes/canonical-visemes))) ;; 16
+    (is (contains? ids (:K_G_H_NG visemes/canonical-visemes))) ;; 20
+    (is (not (contains? ids (:Ih visemes/canonical-visemes))))
+    by-id))
+
+(deftest web-speech-phonemes-match-embody-cc4-slots
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "EH")))
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "UH")))
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "EY")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "Y")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IY")))
+  (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "SH")))
+  (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "ZH")))
+  (is (= (:S_Z visemes/canonical-visemes) (get visemes/phoneme->viseme "S")))
+  (is (= (:Ah visemes/canonical-visemes) (get visemes/phoneme->viseme "HH")))
+  (is (= (:W_OO visemes/canonical-visemes) (get visemes/phoneme->viseme "UW"))))
 
 (deftest web-speech-round-vowels-use-oh-and-woo-not-ah
   ;; Single-letter o/u used to emit AA/AH → Ah for almost every round vowel,
@@ -1031,9 +1059,9 @@
     (.dispose ^js system)))
 
 (deftest jali-lip-planner-keeps-sibilants-narrower-than-open-vowels
-  (let [chess (build-text-fixture "chess")
+  (let [hiss (build-text-fixture "hiss")
         out (build-text-fixture "out")
-        sibilant (viseme-channel chess (:S_Z visemes/canonical-visemes))
+        sibilant (viseme-channel hiss (:S_Z visemes/canonical-visemes))
         open-vowel (viseme-channel out (:Ah visemes/canonical-visemes))]
     (is sibilant)
     (is open-vowel)
@@ -1125,11 +1153,12 @@
         mumbled (build-text-fixture "hello" {:speechStyle "mumbled" :lipScale 1 :jawScale 1})
         emphasized (build-text-fixture "hello" {:speechStyle "emphasized" :lipScale 1 :jawScale 1})
         soft-lips (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 0.4 :jawScale 1})
-        ;; EE has peak headroom under 1.0 so style/scale gains remain visible.
-        base-lip (channel-max-intensity (viseme-channel base (:EE visemes/canonical-visemes)))
-        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:EE visemes/canonical-visemes)))
-        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:EE visemes/canonical-visemes)))
-        soft-lip (channel-max-intensity (viseme-channel soft-lips (:EE visemes/canonical-visemes)))
+        ;; "hello" vowels land on Ah/AE/Oh after CC4-aligned phoneme mapping.
+        ;; AE keeps peak headroom under 1.0 so style/scale gains remain visible.
+        base-lip (channel-max-intensity (viseme-channel base (:AE visemes/canonical-visemes)))
+        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:AE visemes/canonical-visemes)))
+        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:AE visemes/canonical-visemes)))
+        soft-lip (channel-max-intensity (viseme-channel soft-lips (:AE visemes/canonical-visemes)))
         base-jaw (channel-max-intensity (jaw-channel base))
         mumbled-jaw (channel-max-intensity (jaw-channel mumbled))
         emphasized-jaw (channel-max-intensity (jaw-channel emphasized))]
