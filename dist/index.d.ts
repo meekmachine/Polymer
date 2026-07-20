@@ -59,6 +59,13 @@ export {
   toWorldDirection,
   CC4_BONES,
   VISEME_KEYS,
+  HUMANOID_SKELETON_TEMPLATES,
+  JONATHAN_HUMANOID_SKELETON_TEMPLATE,
+  getHumanoidSkeletonTemplate,
+  getHumanoidSkeletonTemplateBoneNames,
+  createValidationSkeletonFromHumanoidTemplate,
+  computeHumanoidSkeletonTemplateRestBounds,
+  extractHumanoidSkeletonTemplateFromModel,
 } from '@lovelace_lol/embody';
 
 export type {
@@ -112,6 +119,10 @@ export type {
   TransitionHandle,
   ValidationResult,
   VisemeSlot,
+  HumanoidSkeletonTemplate,
+  HumanoidSkeletonTemplateBone,
+  HumanoidSkeletonTemplateBounds,
+  HumanoidSkeletonTemplateVec3,
 } from '@lovelace_lol/embody';
 
 export interface BlinkState {
