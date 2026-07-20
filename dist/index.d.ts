@@ -1,5 +1,123 @@
 import type { Embody, EmbodyRuntime } from '@lovelace_lol/embody';
 
+/** Direct Embody Wasm core accessors (via @lovelace_lol/embody/wasm). */
+export declare function initEmbodyCore(): Promise<EmbodyCoreWasmModule>;
+export declare function isEmbodyCoreReady(): boolean;
+export declare function getEmbodyCore(): EmbodyCoreWasmModule;
+export declare function coreAbiVersion(): number;
+export declare function packMorphFrameDelta(
+  meshIds: Uint32Array,
+  morphTargetIds: Uint32Array,
+  values: Float32Array,
+  modes: Uint8Array
+): Float32Array;
+export declare function solveBilateralValues(base: number, balance: number): Float32Array;
+export declare function solveMorphBatch(
+  values: Float32Array,
+  balances: Float32Array,
+  mixWeights: Float32Array
+): Float32Array;
+export declare function solveAxisQuaternion(
+  axis: number,
+  degrees: number,
+  value: number,
+  scale: number
+): Float32Array;
+export declare function analyzeMeshProportions(
+  vertices: Float32Array,
+  verticalAxis: number
+): Float32Array;
+export declare function solveTemplateSkeletonFit(
+  meshVertices: Float32Array,
+  templateBounds: Float32Array,
+  verticalAxis: number,
+  verticalAnchor: number
+): Float32Array;
+export declare function composeTemplateFitAdjustment(
+  fit: Float32Array,
+  scaleMultiplier: number,
+  offsetX: number,
+  offsetY: number,
+  offsetZ: number
+): Float32Array;
+export declare function composeTemplateSkeletonFitTransform(
+  fitScale: number,
+  fitTranslation: Float32Array,
+  manualScale: number,
+  manualTranslation: Float32Array
+): Float32Array;
+export declare function defaultHairPhysicsConfigValues(): Float32Array;
+export declare function createHairPhysicsSolver(configValues?: Float32Array): WasmHairPhysicsSolver;
+export declare function createRuntimeCore(visemeSlotCount: number): WasmRuntimeCore;
+export declare const EMBODY_CORE_ABI_VERSION: number;
+export declare const PACKED_MORPH_FRAME_DELTA_STRIDE: number;
+export declare const HAIR_CONFIG_STRIDE: number;
+export declare const HAIR_STATE_STRIDE: number;
+export declare const HAIR_HEAD_STATE_STRIDE: number;
+export declare const HAIR_MORPH_OUTPUT_STRIDE: number;
+export declare const MESH_PROPORTIONS_STRIDE: number;
+export declare const TEMPLATE_SKELETON_FIT_SOLUTION_STRIDE: number;
+export declare const TEMPLATE_SKELETON_FIT_TRANSFORM_STRIDE: number;
+
+export interface WasmHairPhysicsSolver {
+  update(dtSeconds: number, headValues: Float32Array): Float32Array;
+  set_config(configValues: Float32Array): void;
+  get_config(): Float32Array;
+  get_state(): Float32Array;
+  reset(): void;
+  free?: () => void;
+}
+
+export interface WasmRuntimeCore {
+  load_au_morph_bindings(values: Float32Array): void;
+  load_viseme_morph_bindings(values: Float32Array): void;
+  set_mixed_aus(ids: Uint32Array): void;
+  set_au(id: number, value: number, balance: number): void;
+  get_au(id: number): number;
+  set_au_mix_weight(id: number, weight: number): void;
+  set_viseme(index: number, value: number): void;
+  set_viseme_slot_count(count: number): void;
+  clear(): void;
+  evaluate_morph_frame_delta(): Float32Array;
+  free?: () => void;
+}
+
+export interface EmbodyCoreWasmModule {
+  core_abi_version(): number;
+  pack_morph_frame_delta(
+    meshIds: Uint32Array,
+    morphTargetIds: Uint32Array,
+    values: Float32Array,
+    modes: Uint8Array
+  ): Float32Array;
+  solve_bilateral_values(base: number, balance: number): Float32Array;
+  solve_morph_batch(values: Float32Array, balances: Float32Array, mixWeights: Float32Array): Float32Array;
+  solve_axis_quaternion(axis: number, degrees: number, value: number, scale: number): Float32Array;
+  analyze_mesh_proportions(vertices: Float32Array, verticalAxis: number): Float32Array;
+  solve_template_skeleton_fit(
+    meshVertices: Float32Array,
+    templateBounds: Float32Array,
+    verticalAxis: number,
+    verticalAnchor: number
+  ): Float32Array;
+  compose_template_fit_adjustment(
+    fit: Float32Array,
+    scaleMultiplier: number,
+    offsetX: number,
+    offsetY: number,
+    offsetZ: number
+  ): Float32Array;
+  compose_template_skeleton_fit_transform(
+    fitScale: number,
+    fitTranslation: Float32Array,
+    manualScale: number,
+    manualTranslation: Float32Array
+  ): Float32Array;
+  default_hair_physics_config_values(): Float32Array;
+  HairPhysicsSolver: new (configValues: Float32Array) => WasmHairPhysicsSolver;
+  RuntimeCore?: new (visemeSlotCount: number) => WasmRuntimeCore;
+}
+
 export {
   Embody,
   BLENDING_MODES,

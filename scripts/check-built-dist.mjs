@@ -39,6 +39,10 @@ if (!fs.existsSync(distPath)) {
       'detectAnnotationLaterality',
       'resolveBoneNames',
       'Embody',
+      'initEmbodyCore',
+      'EMBODY_CORE_ABI_VERSION',
+      'createHairPhysicsSolver',
+      'createRuntimeCore',
     ];
 
     for (const name of requiredExports) {
