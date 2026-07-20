@@ -55,6 +55,29 @@ optional description or text representation, emoji trigger, left/right/both/cust
 scope, captured source metadata, duration, priority, affected bones, static bone
 targets, and optional time-based keyframes.
 
+Gesture commands can still name an exact gesture or emoji, but the planner also
+accepts gesture goals. A goal asks Gesture to choose from the authored library by
+intent, tags, scope, required or avoided effectors, cooldown, active conflicts,
+and capacity before it emits Animation requests.
+
+### Gesture GOAP Planning
+
+Gesture GOAP plans for one local world-state transition: a suitable authored
+arm/hand gesture is selected and safely scheduled through Animation, or the
+agency records why that goal cannot be satisfied. It is not a second public
+playback API.
+
+The planner uses the incoming command, the gesture library, active snippets, and
+Gesture config to decide:
+
+- which gesture best satisfies an explicit gesture id, emoji mapping, intent,
+  tags, text hints, scope, and bone constraints
+- whether the selected gesture is valid motion and is out of cooldown
+- whether active snippets conflict on affected bones
+- whether capacity is available under `maxActive`
+- whether to ignore, remove only conflicting snippets, remove the oldest snippets
+  needed for capacity, build a snippet, schedule Animation, and record the result
+
 Host integrations should prefer the character agency network so Gesture's
 animation requests are routed to Animation inside Polymer:
 
@@ -68,6 +91,18 @@ const agencies = createCharacterAgencies({
 });
 
 agencies.dispatch({ agency: "gesture", command: { type: "playEmoji", emoji: "👋" } });
+agencies.dispatch({
+  agency: "gesture",
+  command: {
+    type: "gesture.goal",
+    goal: {
+      intent: "greeting",
+      tags: ["wave"],
+      scope: "right",
+      avoidBones: ["HAND_L"],
+    },
+  },
+});
 ```
 
 The host supplies the gesture library and may observe streams for diagnostics,

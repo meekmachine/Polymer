@@ -1,6 +1,8 @@
 (ns polymer.gesture-test
   (:require [cljs.test :refer [async deftest is testing]]
-            [polymer.core :as polymer]))
+            [polymer.core :as polymer]
+            [polymer.gesture.goap :as gesture-goap]
+            [polymer.gesture.state :as gesture-state]))
 
 (def wave-emoji "👋")
 
@@ -32,6 +34,24 @@
                {:timeMs 250
                 :bones {"ARM_R" {:rotation [0.25881904510252074 0 0 0.9659258262890683]}}}]})
 
+(def left-greeting-gesture
+  (assoc wave-gesture
+         :id "left-wave"
+         :name "Left Wave"
+         :tags ["greeting" "wave"]
+         :scope "left"
+         :affectedBones ["HAND_L"]))
+
+(def right-greeting-gesture
+  (assoc wave-gesture
+         :id "right-wave"
+         :name "Right Wave"
+         :tags ["greeting" "wave"]
+         :scope "right"
+         :affectedBones ["HAND_R"]
+         :bones {"HAND_R" {:rotation [0 0 0.3826834323650898 0.9238795325112867]
+                           :position [0.1 0 0]}}))
+
 (defn collect [target subscribe-fn]
   (let [events (atom [])]
     {:events events
@@ -57,6 +77,9 @@
 
 (defn error-events [events]
   (filter #(= "error" (:type %)) @(:events events)))
+
+(defn plan-events [events]
+  (filter #(= "gesturePlanCreated" (:type %)) @(:events events)))
 
 (defn make-runtime [calls]
   #js {:playTypedSnippet
@@ -159,6 +182,19 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest gesture-unmapped-emoji-does-not-schedule-arbitrary-gesture
+  (let [agency (polymer/createGestureAgency
+                (clj->js {:gestures {"wave" wave-gesture}}))
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "playEmoji" :emoji "🤷"})
+    (let [plan-event (first (plan-events events))]
+      (is (empty? (scheduled-requests events)))
+      (is plan-event)
+      (is (:noop (:plan plan-event)))
+      (is (= "no-gesture-candidate" (get-in plan-event [:plan :steps 0 :reason]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest gesture-respects-max-active-when-not-replacing
   (let [agency (polymer/createGestureAgency
                 (clj->js {:replaceActive false
@@ -236,6 +272,104 @@
       (is (= 0 (:time (first (:keyframes rx-channel)))))
       (is (= 0.25 (:time (second (:keyframes rx-channel)))))
       (is (= 0 (:intensity (last (:keyframes rx-channel))))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest gesture-goap-selects-candidate-from-goal-constraints
+  (let [world (gesture-state/config->state
+               {:gestures {"left-wave" left-greeting-gesture
+                           "right-wave" right-greeting-gesture}})
+        plan (gesture-goap/plan-command
+              {:type "gesture.goal"
+               :intent "greeting"
+               :scope "right"
+               :avoidBones ["HAND_L"]}
+              world
+              1000)
+        select-step (some #(when (= "select-gesture" (:op %)) %) (:steps plan))]
+    (is (:ok plan))
+    (is (= ["resolve-gesture-goal"
+            "select-gesture"
+            "build-gesture-snippet"
+            "schedule-animation"
+            "record-schedule"]
+           (map :op (:steps plan))))
+    (is (= "right-wave" (:gestureId select-step)))
+    (is (= "right" (get-in select-step [:matches :scope])))))
+
+(deftest gesture-goap-plans-active-conflict-instead-of-forwarding-command
+  (let [active-snippet {:name "active-left"
+                        :maxTime 0.8
+                        :loop false
+                        :snippetPriority 60
+                        :metadata {:trigger "test"}}
+        world (-> (gesture-state/config->state
+                   {:replaceActive false
+                    :maxActive 2
+                    :gestures {"left-wave" left-greeting-gesture
+                               "right-wave" right-greeting-gesture}})
+                  (gesture-state/record-schedule left-greeting-gesture active-snippet 900))
+        plan (gesture-goap/plan-command
+              {:type "gesture.goal"
+               :intent "greeting"
+               :scope "left"
+               :affectedBones ["HAND_L"]}
+              world
+              1000)
+        ignore-step (some #(when (= "ignore" (:op %)) %) (:steps plan))]
+    (is (:ok plan))
+    (is (:noop plan))
+    (is (= "active-conflict" (:reason ignore-step)))
+    (is (= ["active-left"] (:names ignore-step)))))
+
+(deftest gesture-goal-dispatch-schedules-selected-gesture-with-plan-metadata
+  (let [agency (polymer/createGestureAgency
+                (clj->js {:gestures {"left-wave" left-greeting-gesture
+                                     "right-wave" right-greeting-gesture}}))
+        events (domain-events agency)]
+    (.performGoal ^js agency (clj->js {:intent "greeting"
+                                       :scope "right"
+                                       :avoidBones ["HAND_L"]
+                                       :intensity 0.7}))
+    (let [plan-event (first (plan-events events))
+          request (first (scheduled-requests events))
+          snippet (:snippet request)]
+      (is plan-event)
+      (is (= "right-wave" (get-in plan-event [:plan :gestureId])))
+      (is (= "right-wave" (get-in snippet [:metadata :gestureId])))
+      (is (= "goal" (get-in snippet [:metadata :trigger])))
+      (is (= "greeting" (get-in snippet [:metadata :intent])))
+      (is (= "right" (get-in snippet [:metadata :goal :scope])))
+      (is (= "right-wave" (get-in snippet [:metadata :selection :gestureId])))
+      (is (= 0.7 (:snippetIntensityScale snippet))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest gesture-goap-removes-conflicting-active-snippet-only
+  (let [agency (polymer/createGestureAgency
+                (clj->js {:replaceActive true
+                          :maxActive 2
+                          :gestures {"left-wave" left-greeting-gesture
+                                     "right-wave" right-greeting-gesture}}))
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "gesture.goal"
+                               :intent "greeting"
+                               :scope "left"
+                               :affectedBones #js ["HAND_L"]})
+    (.dispatch ^js agency #js {:type "gesture.goal"
+                               :intent "greeting"
+                               :scope "right"
+                               :affectedBones #js ["HAND_R"]})
+    (.dispatch ^js agency #js {:type "gesture.goal"
+                               :intent "greeting"
+                               :scope "left"
+                               :affectedBones #js ["HAND_L"]})
+    (let [removes (remove-requests events)
+          snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
+      (is (= 1 (count removes)))
+      (is (= "conflict" (:reason (first removes))))
+      (is (= 3 (count (scheduled-requests events))))
+      (is (= 2 (count (:activeSnippets snapshot)))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 

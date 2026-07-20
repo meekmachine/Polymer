@@ -13,23 +13,28 @@
   #js {:type type :value value})
 
 (defn plan-error-message [plan]
-  (let [step (first (:steps plan))]
+  (let [step (or (some #(when (= "fail" (:op %)) %) (:steps plan))
+                 (first (:steps plan)))]
     (case (:reason step)
       "unsupported-command" (str "Gesture plan failed: unsupported command " (:commandType step))
       "missing-emoji" "Gesture playEmoji command requires emoji"
       "missing-gesture" "Gesture command requires gestureId"
+      "missing-goal" "Gesture goal command requires a gesture goal, intent, tag, scope, emoji, or effector constraint"
       "unknown-gesture" (str "Unknown gesture: " (:gestureId step))
       "gesture-has-no-motion" (str "Gesture has no bone motion: " (:gestureId step))
+      "empty-library" "Gesture plan failed: gesture library is empty"
+      "no-gesture-candidate" "Gesture plan failed: no gesture matched the goal"
       (str "Gesture plan failed: " (:reason step)))))
 
 (defn should-emit-plan? [plan]
   (or (false? (:ok plan))
-      (not (:noop plan))))
+      (not (:noop plan))
+      (contains? goap/playable-command-types (get-in plan [:goal :type]))))
 
 (defn public-plan [plan]
   (-> plan
       (dissoc :gesture)
-      (update :goal dissoc :gesture)))
+      (update :goal dissoc :gesture :activeSnippets :config)))
 
 (defn create-gesture-agency [config]
   (let [input-stream (stream/create-stream)
@@ -86,9 +91,8 @@
                                :reason reason
                                :removedAt removed-at}))))
 
-            (schedule-gesture! [gesture payload]
-              (let [context {:name (:name payload)
-                             :intensity (:intensity payload)}
+            (schedule-gesture! [gesture context]
+              (let [context (or context {})
                     snippet-data (snippet/build-gesture-snippet gesture
                                                                 (:config @state-atom)
                                                                 context)]
@@ -105,6 +109,8 @@
                                    :scope (:scope gesture)
                                    :affectedBones (:affectedBones gesture)
                                    :name (:name snippet-data)
+                                   :trigger (:trigger context)
+                                   :intent (:intent context)
                                    :scheduledAt scheduled-at}))
                     (schedule-completion! snippet-data)
                     snippet-data)
@@ -148,10 +154,12 @@
                                      :emojiCount (count (:emojiMappings @state-atom))
                                      :updatedAt loaded-at}))
 
-                      ("playGesture" "playEmoji")
+                      ("playGesture" "playEmoji" "gesture.goal" "performGestureGoal" "playGoal")
                       (when-not (:noop plan)
-                        (remove-active! (:removeNames plan) (:removeReason plan))
-                        (schedule-gesture! (:gesture plan) payload))
+                        (doseq [step (:steps plan)]
+                          (when (= "remove-active-gestures" (:op step))
+                            (remove-active! (:names step) (:reason step))))
+                        (schedule-gesture! (:gesture plan) (merge payload (:context plan))))
 
                       "stopGesture"
                       (remove-active! (:removeNames plan) (:removeReason plan))
@@ -191,6 +199,7 @@
                                             :emojiMappings emoji-mappings})))
            :playGesture (fn [gesture-id] (dispatch! #js {:type "playGesture" :gestureId gesture-id}))
            :playEmoji (fn [emoji] (dispatch! #js {:type "playEmoji" :emoji emoji}))
+           :performGoal (fn [goal] (dispatch! #js {:type "gesture.goal" :goal goal}))
            :stopGesture (fn [gesture-id] (dispatch! #js {:type "stopGesture" :gestureId gesture-id}))
            :stopAll (fn [] (dispatch! #js {:type "stopAll"}))
            :reset (fn [] (dispatch! #js {:type "reset"}))

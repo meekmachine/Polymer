@@ -1,7 +1,11 @@
-import type { Embody, EmbodyRuntime } from '@lovelace_lol/embody';
+import { AnimationThree } from '@lovelace_lol/embody';
+import type { ThreeAnimationSystem } from '@lovelace_lol/embody';
+
+export type Embody = AnimationThree;
+export type EmbodyRuntime = AnimationThree | ThreeAnimationSystem;
+export const Embody: typeof AnimationThree;
 
 export {
-  Embody,
   BLENDING_MODES,
   THREE_BLENDING_MODES,
   collectMorphMeshes,
@@ -93,8 +97,6 @@ export type {
   LineConfig,
   LineCurve,
   LineStyle,
-  Embody,
-  EmbodyRuntime,
   MarkerGroup,
   MarkerStyle,
   MarkerStyleOverrides,
@@ -1124,6 +1126,30 @@ export interface GestureConfig {
   gestureEmojiMappings?: Record<string, string>;
 }
 
+export interface GestureGoal {
+  gestureId?: string;
+  id?: string;
+  preferredGestureId?: string;
+  preferredId?: string;
+  preferredGesture?: string;
+  emoji?: string;
+  intent?: string;
+  kind?: string;
+  purpose?: string;
+  tags?: string[];
+  requiredTags?: string[];
+  mustHaveTags?: string[];
+  scope?: GestureScope;
+  affectedBones?: string[];
+  requiredBones?: string[];
+  avoidBones?: string[];
+  sourceText?: string;
+  textRepresentation?: string;
+  name?: string;
+  intensity?: number;
+  trigger?: string;
+}
+
 export interface GestureActiveSnippet {
   name: string;
   gestureId: string;
@@ -1132,6 +1158,10 @@ export interface GestureActiveSnippet {
   scope?: GestureScope;
   affectedBones?: string[];
   maxTime: number;
+  loop?: boolean;
+  priority?: number;
+  trigger?: string;
+  intent?: string;
   scheduledAt: number;
 }
 
@@ -1159,6 +1189,7 @@ export type GestureDispatch =
     }
   | { type: 'playGesture'; gestureId: string; name?: string; intensity?: number }
   | { type: 'playEmoji'; emoji: string; name?: string; intensity?: number }
+  | ({ type: 'gesture.goal' | 'performGestureGoal' | 'playGoal'; goal?: GestureGoal } & GestureGoal)
   | { type: 'stopGesture'; gestureId: string }
   | { type: 'stopAll' }
   | { type: 'reset' };
@@ -1832,6 +1863,7 @@ export interface GestureAgency {
   loadGestures(gestures: Record<string, GestureSnapshot>, emojiMappings?: Record<string, string>): void;
   playGesture(gestureId: string): void;
   playEmoji(emoji: string): void;
+  performGoal(goal: GestureGoal): void;
   stopGesture(gestureId: string): void;
   stopAll(): void;
   reset(): void;
