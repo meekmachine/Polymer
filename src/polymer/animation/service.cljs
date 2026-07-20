@@ -57,16 +57,40 @@
   (swap! listeners conj listener)
   (subscription (fn [] (swap! listeners disj listener))))
 
+(defn notify-listener! [listener payload]
+  (cond
+    (fn? listener)
+    (listener payload)
+
+    (and listener (fn? (aget listener "next")))
+    (.call (aget listener "next") listener payload)
+
+    :else
+    (.warn js/console "[Polymer Animation] stream listener has no callback" listener)))
+
 (defn emit-to! [listeners payload]
   (let [js-payload (clj->js payload)]
     (doseq [listener @listeners]
       (try
-        (listener js-payload)
+        (notify-listener! listener js-payload)
         (catch :default error
           (.error js/console "[Polymer Animation] stream listener failed" error))))))
 
 (defn create-port [listeners]
-  #js {:subscribe (fn [listener] (subscribe! listeners listener))})
+  (let [port (atom nil)]
+    (reset! port
+            #js {:subscribe (fn [listener] (subscribe! listeners listener))
+                 :pipe (fn [& operators]
+                         ;; LoomLarge still uses RxJS operators such as
+                         ;; filter(...). Those operators expect a source with
+                         ;; subscribe(...) and return a derived observable. This
+                         ;; small pipe keeps Polymer's stream as plain data
+                         ;; while preserving the old observable API contract.
+                         (reduce (fn [source operator]
+                                   (operator source))
+                                 @port
+                                 operators))})
+    @port))
 
 (defn event-timestamp []
   (now-ms))

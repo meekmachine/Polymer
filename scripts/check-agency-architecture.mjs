@@ -11,6 +11,7 @@ const agencies = [
   { name: 'conversation', dir: 'conversation', ns: 'polymer.conversation' },
   { name: 'eyeHeadTracking', dir: 'eye_head', ns: 'polymer.eye-head' },
   { name: 'gaze', dir: 'gaze', ns: 'polymer.gaze' },
+  { name: 'gesture', dir: 'gesture', ns: 'polymer.gesture' },
   { name: 'hair', dir: 'hair', ns: 'polymer.hair' },
   { name: 'lipSync', dir: 'lipsync', ns: 'polymer.lipsync' },
   { name: 'prosodic', dir: 'prosodic', ns: 'polymer.prosodic' },

@@ -2161,25 +2161,30 @@ export interface BakedAnimationUIState {
   channels: BakedClipChannelInfo[];
 }
 
-export type AnimationEvent =
-  | { type: 'SNIPPET_ADDED'; snippetName: string; timestamp: number }
-  | { type: 'SNIPPET_REMOVED'; snippetName: string; timestamp: number }
-  | { type: 'SNIPPET_PLAY_STATE_CHANGED'; snippetName: string; isPlaying: boolean; timestamp: number }
-  | { type: 'SNIPPET_UPDATED'; snippetName: string; timestamp: number }
-  | { type: 'SNIPPET_LOOPED'; snippetName: string; iteration: number; localTime: number; timestamp: number }
-  | { type: 'SNIPPET_COMPLETED'; snippetName: string; timestamp: number }
-  | { type: 'KEYFRAME_COMPLETED'; snippetName: string; keyframeIndex: number; totalKeyframes: number; currentTime: number; duration: number; timestamp: number }
-  | { type: 'SNIPPET_PARAMS_CHANGED'; snippetName: string; params: Record<string, unknown>; timestamp: number }
-  | { type: 'GLOBAL_PLAYBACK_CHANGED'; state: 'playing' | 'paused' | 'stopped'; timestamp: number }
-  | { type: 'SNIPPET_SEEKED'; snippetName: string; time: number; timestamp: number }
-  | { type: 'BAKED_CLIPS_LOADED'; clips: BakedClipInfo[]; timestamp: number }
-  | { type: 'BAKED_ANIMATION_STARTED'; clipName: string; state: BakedAnimationUIState; timestamp: number }
-  | { type: 'BAKED_ANIMATION_STOPPED'; clipName: string; timestamp: number }
-  | { type: 'BAKED_ANIMATION_PAUSED'; clipName: string; timestamp: number }
-  | { type: 'BAKED_ANIMATION_RESUMED'; clipName: string; timestamp: number }
-  | { type: 'BAKED_ANIMATION_COMPLETED'; clipName: string; timestamp: number }
-  | { type: 'BAKED_ANIMATION_PROGRESS'; clipName: string; time: number; duration: number; timestamp: number }
-  | { type: 'BAKED_ANIMATION_PARAMS_CHANGED'; clipName: string; params: Record<string, unknown>; timestamp: number };
+export type AnimationEvent = {
+  timestamp: number;
+  snippetName?: string;
+  clipName?: string;
+} & (
+  | { type: 'SNIPPET_ADDED'; snippetName: string }
+  | { type: 'SNIPPET_REMOVED'; snippetName: string }
+  | { type: 'SNIPPET_PLAY_STATE_CHANGED'; snippetName: string; isPlaying: boolean }
+  | { type: 'SNIPPET_UPDATED'; snippetName: string }
+  | { type: 'SNIPPET_LOOPED'; snippetName: string; iteration: number; localTime: number }
+  | { type: 'SNIPPET_COMPLETED'; snippetName: string }
+  | { type: 'KEYFRAME_COMPLETED'; snippetName: string; keyframeIndex: number; totalKeyframes: number; currentTime: number; duration: number }
+  | { type: 'SNIPPET_PARAMS_CHANGED'; snippetName: string; params: Record<string, unknown> }
+  | { type: 'GLOBAL_PLAYBACK_CHANGED'; state: 'playing' | 'paused' | 'stopped' }
+  | { type: 'SNIPPET_SEEKED'; snippetName: string; time: number }
+  | { type: 'BAKED_CLIPS_LOADED'; clips: BakedClipInfo[] }
+  | { type: 'BAKED_ANIMATION_STARTED'; clipName: string; state: BakedAnimationUIState }
+  | { type: 'BAKED_ANIMATION_STOPPED'; clipName: string }
+  | { type: 'BAKED_ANIMATION_PAUSED'; clipName: string }
+  | { type: 'BAKED_ANIMATION_RESUMED'; clipName: string }
+  | { type: 'BAKED_ANIMATION_COMPLETED'; clipName: string }
+  | { type: 'BAKED_ANIMATION_PROGRESS'; clipName: string; time: number; duration: number }
+  | { type: 'BAKED_ANIMATION_PARAMS_CHANGED'; clipName: string; params: Record<string, unknown> }
+);
 
 export interface AnimationSubscription {
   unsubscribe(): void;
@@ -2187,6 +2192,8 @@ export interface AnimationSubscription {
 
 export interface AnimationObservable<T> {
   subscribe(listener: (value: T) => void): AnimationSubscription;
+  subscribe(listener: { next(value: T): void }): AnimationSubscription;
+  pipe<A = T>(...operators: Array<(source: any) => any>): AnimationObservable<A>;
 }
 
 export interface AnimationEventEmitter {
