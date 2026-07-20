@@ -52,7 +52,9 @@
         (:channels snippet)))
 
 (defn jaw-channel [snippet]
-  (channel-by-target snippet "bone" "JAW"))
+  ;; Jaw is Embody's bone-only lip-sync control 103, never AU 26 (whose
+  ;; Jaw_Open morph would fight the viseme morphs on the same vertices).
+  (channel-by-target snippet "lipSync" 103))
 
 (defn au-channel [snippet au-id]
   (channel-by-target snippet "au" au-id))
@@ -146,13 +148,13 @@
       (is (not (contains? snippet :snippetCategory)))
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
-      (is (seq (get-in snippet [:curves :26])))
+      (is (seq (get-in snippet [:curves :103])))
       (is (some #(= "viseme" (get-in % [:target :type])) (:channels snippet)))
-      (is (some #(and (= "bone" (get-in % [:target :type]))
-                      (= "JAW" (get-in % [:target :id]))
-                      (= "rz" (get-in % [:target :channel])))
+      (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                      (= 103 (get-in % [:target :id])))
                 (:channels snippet)))
       (is (nil? (au-channel snippet 26)))
+      (is (not (contains? (:curves snippet) :26)))
       (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
       (is (:speaking snapshot))
       (is (= 1 (:scheduledCount snapshot)))
@@ -217,13 +219,14 @@
     (let [snippet (first (scheduled-snippets events))
           channels (:channels snippet)
           lip-channels (filter #(= "viseme" (get-in % [:target :type])) channels)
-          jaw-channel (some #(when (and (= "bone" (get-in % [:target :type]))
-                                        (= "JAW" (get-in % [:target :id])))
+          jaw-channel (some #(when (and (= "lipSync" (get-in % [:target :type]))
+                                        (= 103 (get-in % [:target :id])))
                                %)
                             channels)]
       (is (seq lip-channels))
       (is jaw-channel)
       (is (nil? (au-channel snippet 26)))
+      (is (not (contains? (:curves snippet) :26)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (not (contains? snippet :snippetCategory)))
       (is (some :jawActivation (visemes/text->visemes "hello world"))))
@@ -240,7 +243,7 @@
           last-word (last (:wordTimings snapshot))]
       (is (> (:maxTime snippet) 6))
       (is (> (:endSec last-word) 6))
-      (is (seq (get-in snippet [:curves :26]))))
+      (is (seq (get-in snippet [:curves :103]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
@@ -625,7 +628,7 @@
                {:intensity 1 :jawScale 1}
                "voice:jaw-independent")
         lip-curve (get-in built [:curves "1"])
-        jaw-curve (get-in built [:curves "26"])]
+        jaw-curve (get-in built [:curves "103"])]
     (is (> (max-intensity lip-curve) 0.8))
     (is (<= (snippet/sample-curve-at jaw-curve 0.06) 0.001))
     (is (> (snippet/sample-curve-at jaw-curve 0.27) 0.4))))
@@ -639,9 +642,8 @@
                {:intensity 1 :jawScale 0}
                "voice:jaw-off")]
     (is (seq (get-in built [:curves "1"])))
-    (is (nil? (get-in built [:curves "26"])))
-    (is (not (some #(and (= "bone" (get-in % [:target :type]))
-                         (= "JAW" (get-in % [:target :id])))
+    (is (nil? (get-in built [:curves "103"])))
+    (is (not (some #(= "lipSync" (get-in % [:target :type]))
                    (:channels built))))))
 
 (deftest LipSync-source-label-does-not-change-viseme-jaw-mixing
@@ -665,8 +667,8 @@
       (is (not (contains? azure-snippet :snippetCategory)))
       (is (= (:curves web-snippet) (:curves azure-snippet)))
       (is (= (:channels web-snippet) (:channels azure-snippet)))
-      (is (= (get-in web-snippet [:curves :26])
-             (get-in azure-snippet [:curves :26]))))
+      (is (= (get-in web-snippet [:curves :103])
+             (get-in azure-snippet [:curves :103]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
@@ -680,7 +682,7 @@
                                    :visemes #js [#js {:visemeId 1 :offsetMs 100 :durationMs 180}]}})
     (let [snippet (first (scheduled-snippets events))
           lip-curve (get-in snippet [:curves :1])
-          jaw-curve (get-in snippet [:curves :26])]
+          jaw-curve (get-in snippet [:curves :103])]
       (is (= 0.05 (:time (first lip-curve))))
       (is (= 0.05 (:time (first jaw-curve)))))
     ((:unsubscribe events))
@@ -707,13 +709,11 @@
     (is (some #(and (= "viseme" (get-in % [:target :type]))
                     (= 1 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "bone" (get-in % [:target :type]))
-                    (= "JAW" (get-in % [:target :id]))
-                    (= "rz" (get-in % [:target :channel])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "bone" (get-in % [:target :type]))
-                    (= "JAW" (get-in % [:target :id]))
-                    (= "rz" (get-in % [:target :channel])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels
                (:snippet
                 (some #(when (= "animationSnippetScheduled" (:type %)) %)
@@ -1171,7 +1171,8 @@
                 {:intensity 1 :lipScale 1 :speechStyle "conversational"})]
     (is (seq (get curves (str (:F_V visemes/canonical-visemes)))))
     (is (nil? (get curves "32")))
-    (is (nil? (get curves "26")))))
+    (is (nil? (get curves "26")))
+    (is (nil? (get curves "103")))))
 
 (deftest jali-exclusive-handoff-ramps-instead-of-snapping
   ;; When the winning morph changes, the outgoing morph must ramp out and the

@@ -21,8 +21,8 @@
 
 (defn typed-jaw-channel? [channel]
   (let [target (typed-channel-target channel)]
-    (or (and (= "au" (:type target))
-             (= 26 (:id target)))
+    (or (and (= "lipSync" (:type target))
+             (= 103 (:id target)))
         (and (= "bone" (:type target))
              (= "JAW" (:id target))))))
 
@@ -61,7 +61,7 @@
          typed-viseme? (typed-viseme-snippet? snippet)
          viseme-category? (or (viseme-snippet-category? category) typed-viseme?)
          curves (or (:curves snippet) {})
-         has-jaw-curve? (or (contains? curves "26") (typed-jaw-snippet? snippet))
+         has-jaw-curve? (or (contains? curves "103") (typed-jaw-snippet? snippet))
          category-for-options (or category
                                   (when (and legacy-fallback? typed-viseme?)
                                     "visemeSnippet"))

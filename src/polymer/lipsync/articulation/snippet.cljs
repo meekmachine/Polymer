@@ -12,7 +12,11 @@
 ;; curves. Host UI, audio playback, LiveKit, Azure credentials, and engine
 ;; handles stay outside this namespace.
 
-(def jaw-au "26")
+;; Jaw motion is Embody's lip-sync control 103: a bone-only jaw-open binding
+;; with no morph influence. Never emit AU 26 here; AU 26 also drives the CC4
+;; Jaw_Open morph, which deforms the same vertices as the viseme morphs and
+;; visibly washes out the differences between mouth shapes.
+(def jaw-au "103")
 (def intensity-eps lip/intensity-eps)
 
 (defn finite-number? [value]
@@ -100,12 +104,18 @@
     (merge with-jaw tongue-curves)))
 
 (defn lipsync-channel-target [curve-key]
+  ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
+  ;; canonical viseme slots. Jaw motion is emitted as Embody's lip-sync control
+  ;; 103, which binds only the JAW bone rotation through the profile's
+  ;; auToBones bindings. This deliberately avoids AU 26 (whose Jaw_Open morph
+  ;; fights the viseme morphs on the same vertices) and avoids hardcoding a
+  ;; bone channel so per-character jaw bindings stay in the profile.
   (let [key (str curve-key)
         numeric-id (when (re-matches #"^\d+$" key)
                      (js/parseInt key 10))]
     (cond
       (= key jaw-au)
-      {:type "bone" :id "JAW" :channel "rz" :maxDegrees 30}
+      {:type "lipSync" :id 103}
 
       (and (some? numeric-id) (<= 0 numeric-id 14))
       {:type "viseme" :id numeric-id}

@@ -31,9 +31,8 @@
         target-type (:type target)]
     (case target-type
       "viseme" "lip"
-      "au" (case (:id target)
-             26 "jaw"
-             (if (contains? tongue-au-ids (:id target)) "tongue" "au"))
+      "lipSync" "jaw"
+      "au" (if (contains? tongue-au-ids (:id target)) "tongue" "au")
       "bone" (case (:id target)
                "JAW" "jaw"
                "TONGUE" "tongue"
