@@ -87,9 +87,12 @@
       (contains? #{"P" "B"} normalized) ["bilabial" "obstruent"]
       (= "M" normalized) ["bilabial" "nasal"]
       (contains? #{"F" "V"} normalized) ["labiodental" "fricative"]
-      (contains? #{"S" "Z" "SH" "ZH"} normalized) ["sibilant" "fricative"]
+      ;; Only alveolar S/Z are narrow sibilants. SH/ZH share the Ch_J morph and
+      ;; must not inherit the weak :sibilant envelope (peak 0.52) or Web Speech
+      ;; "sh/ch" looks half as open as Azure id 16.
+      (contains? #{"S" "Z"} normalized) ["sibilant" "fricative"]
       (contains? #{"TH" "DH"} normalized) ["dental" "fricative"]
-      (contains? #{"T" "D" "K" "G" "CH" "JH"} normalized) ["obstruent" "tongue"]
+      (contains? #{"T" "D" "K" "G" "CH" "JH" "SH" "ZH"} normalized) ["obstruent" "tongue"]
       (contains? #{"N" "NG"} normalized) ["nasal" "tongue"]
       (contains? #{"L"} normalized) ["liquid" "tongue"]
       (contains? #{"R"} normalized) ["liquid"]
@@ -104,8 +107,8 @@
   (let [normalized (normalize-phoneme phoneme)]
     (cond
       (contains? #{"P" "B" "M"} normalized) 0
-      (contains? #{"F" "V" "S" "Z" "SH" "ZH" "TH" "DH"} normalized) 0.06
-      (contains? #{"T" "D" "N" "L" "K" "G" "NG" "CH" "JH"} normalized) 0.16
+      (contains? #{"F" "V" "S" "Z" "TH" "DH"} normalized) 0.06
+      (contains? #{"T" "D" "N" "L" "K" "G" "NG" "CH" "JH" "SH" "ZH"} normalized) 0.16
       (contains? #{"H" "HH" "Y" "W" "R"} normalized) 0.18
       :else (jaw-activation-for-viseme viseme-id))))
 
@@ -117,7 +120,9 @@
    "PAUSE" (:B_M_P canonical-visemes)
    "A" (:Ah canonical-visemes)
    "E" (:AE canonical-visemes)
-   "I" (:Ih canonical-visemes)
+   ;; Bare "I" must match IH/IX → EE (Embody first-hit). Leaving it on Ih made
+   ;; any legacy "I" event diverge from the live Web Speech IH path.
+   "I" (:EE canonical-visemes)
    "O" (:Oh canonical-visemes)
    "U" (:W_OO canonical-visemes)
    "0" (:Th canonical-visemes)
@@ -210,7 +215,8 @@
    "OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
    "AW" [(:Ah canonical-visemes) (:W_OO canonical-visemes)]
    "OY" [(:Oh canonical-visemes) (:EE canonical-visemes)]
-   "AY" [(:Ah canonical-visemes) (:Ih canonical-visemes)]})
+   ;; Offglide is high-front → EE (Ih is almost never driven under CC4 first-hit).
+   "AY" [(:Ah canonical-visemes) (:EE canonical-visemes)]})
 
 (def diphthong-min-duration-ms 80)
 (def diphthong-secondary-min-ms 36)
@@ -252,7 +258,9 @@
       "c" (if (#{"e" "i"} next-letter) ["S"] ["K"])
       "d" ["D"]
       "f" ["F"]
-      "g" (if (#{"e" "i"} next-letter) ["JH"] ["G"])
+      ;; Default hard G. Soft-g before e/i ("get"→JH) was wrong far more often
+      ;; than it helped for this lightweight grapheme planner.
+      "g" ["G"]
       "h" ["HH"]
       "j" ["JH"]
       "k" ["K"]
@@ -269,8 +277,20 @@
       "z" ["Z"]
       [])))
 
+(defn strip-silent-final-e [letters]
+  ;; English magic-e: ...Vowel...Consonant e → drop the final e so "five"/"make"
+  ;; do not emit a trailing EH→AE mouth beat after the coda.
+  (if (and (>= (count letters) 4)
+           (= (subs letters (dec (count letters))) "e")
+           (re-matches #".*[aeiouy].*[bcdfghjklmnpqrstvwxyz]e" letters))
+    (subs letters 0 (dec (count letters)))
+    letters))
+
 (defn word->phonemes [word]
-  (loop [remaining (-> (or word "") str/lower-case (str/replace #"[^a-z]" ""))
+  (loop [remaining (-> (or word "")
+                       str/lower-case
+                       (str/replace #"[^a-z]" "")
+                       strip-silent-final-e)
          phonemes []]
     (if (zero? (count remaining))
       phonemes

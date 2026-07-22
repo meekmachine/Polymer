@@ -241,8 +241,8 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 6))
-      (is (> (:endSec last-word) 6))
+      (is (> (:maxTime snippet) 5.5))
+      (is (> (:endSec last-word) 5.5))
       (is (seq (get-in snippet [:curves :103]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
@@ -255,8 +255,8 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 4.4))
-      (is (> (:endSec last-word) 4.4))
+      (is (> (:maxTime snippet) 4.2))
+      (is (> (:endSec last-word) 4.2))
       (is (= "phrase" (:word last-word))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
@@ -345,10 +345,9 @@
     (is bilabial-in-pop)
     (is (>= (channel-max-intensity labiodental) 0.8))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
-    ;; Trailing "e" in "five" is EH→AE (mid jaw). Labiodental itself stays low-jaw;
-    ;; only assert the F_V morph carried the word, not a full Ah open.
-    (is (< (channel-max-intensity (jaw-channel five))
-           (channel-max-intensity (jaw-channel (build-text-fixture "out")))))))
+    ;; Silent final "e" is stripped, so "five" should not open like "out".
+    (is (<= (channel-max-intensity (jaw-channel five)) 0.25))
+    (is (not (viseme-channel five (:AE visemes/canonical-visemes))))))
 
 (deftest LipSync-non-closure-visemes-ramp-across-renderable-time
   (let [snippet (snippet/build-lipsync-snippet
@@ -608,11 +607,33 @@
   (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IY")))
   (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IH")))
   (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IX")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "I")))
   (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "SH")))
   (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "ZH")))
   (is (= (:S_Z visemes/canonical-visemes) (get visemes/phoneme->viseme "S")))
   (is (= (:Ah visemes/canonical-visemes) (get visemes/phoneme->viseme "HH")))
   (is (= (:W_OO visemes/canonical-visemes) (get visemes/phoneme->viseme "UW"))))
+
+(deftest web-speech-sh-uses-chj-envelope-not-weak-sibilant
+  (let [ship (build-text-fixture "ship")
+        hiss (build-text-fixture "hiss")
+        sh (viseme-channel ship (:Ch_J visemes/canonical-visemes))
+        s (viseme-channel hiss (:S_Z visemes/canonical-visemes))]
+    (is sh)
+    (is s)
+    (is (>= (channel-max-intensity sh) 0.70))
+    (is (<= (channel-max-intensity s) 0.60))
+    (is (> (channel-max-intensity sh) (channel-max-intensity s)))))
+
+(deftest web-speech-hard-g-and-silent-e
+  (let [get-phones (map :phoneme (visemes/text->visemes "get"))
+        five-phones (map :phoneme (visemes/text->visemes "five"))
+        five-ids (set (map :visemeId (visemes/text->visemes "five")))]
+    (is (some #{"G"} get-phones))
+    (is (not-any? #{"JH"} get-phones))
+    (is (not-any? #{"EH" "E"} five-phones))
+    (is (not (contains? five-ids (:AE visemes/canonical-visemes))))
+    (is (contains? five-ids (:F_V visemes/canonical-visemes)))))
 
 (deftest azure-refine-does-not-round-hello-or-remap-alveolars-to-th
   ;; Regression: trailing "o" used to force id 4 → W_OO on "hello", and id 19
