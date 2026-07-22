@@ -181,12 +181,16 @@
             (recur (rest remaining) (if keep? (conj result curr) result))))))))
 
 (defn scale-lip-intensity [value intensity]
+  ;; Scale < 1 softens linearly. Scale > 1 used to use 1-(1-x)^s, which pulled
+  ;; every peak toward 1 and erased vowel-family contrast under emphasized /
+  ;; stressed speech. Cap boost and stay linear so Ah/EE/Oh stay distinct.
   (let [normalized (state/clamp 0 lip-dominant-cap value)
-        scale (max 0 (state/number-or intensity 1))]
+        scale (max 0 (state/number-or intensity 1))
+        boost (state/clamp 0 1.35 scale)]
     (cond
       (<= (js/Math.abs (- scale 1)) intensity-eps) normalized
       (<= scale 1) (* normalized scale)
-      :else (- 1 (js/Math.pow (- 1 normalized) scale)))))
+      :else (state/clamp 0 lip-dominant-cap (* normalized boost)))))
 
 (defn scale-curve-intensity [curve intensity]
   (mapv (fn [frame]

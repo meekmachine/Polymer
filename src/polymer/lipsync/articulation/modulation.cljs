@@ -142,12 +142,14 @@
   (let [style (style-gains config)
         articulation (state/clamp 0 2
                                   (state/number-or (:articulationScale config) 1))
-        emotion (clamp-feature (:emotionIntensity config) 0.5 1.6 1)]
+        emotion (clamp-feature (:emotionIntensity config) 0.5 1.6 1)
+        ;; Use the stronger of style lip vs articulation — multiplying both
+        ;; (e.g. mumbled 0.30 * 0.40) crushed mouths into near-zero contrast.
+        style-lip (max (:lip style) (:articulation style))]
     {:lip (* (state/clamp 0 2 (state/number-or (:intensity config) 1))
              (state/clamp 0 2 (state/number-or (:lipScale config) 1))
              articulation
-             (:lip style)
-             (:articulation style)
+             style-lip
              emotion)
      :jaw (* (state/clamp 0 2 (state/number-or (:jawScale config) 1))
              (:jaw style)

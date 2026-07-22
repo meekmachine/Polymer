@@ -606,11 +606,40 @@
   (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "EY")))
   (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "Y")))
   (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IY")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IH")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IX")))
   (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "SH")))
   (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "ZH")))
   (is (= (:S_Z visemes/canonical-visemes) (get visemes/phoneme->viseme "S")))
   (is (= (:Ah visemes/canonical-visemes) (get visemes/phoneme->viseme "HH")))
   (is (= (:W_OO visemes/canonical-visemes) (get visemes/phoneme->viseme "UW"))))
+
+(deftest azure-refine-does-not-round-hello-or-remap-alveolars-to-th
+  ;; Regression: trailing "o" used to force id 4 → W_OO on "hello", and id 19
+  ;; (d/t/n) used to become Th whenever the word contained "th".
+  (let [hello (azure/azure-visemes->timeline
+               [{:id 12 :time 0}
+                {:id 4 :time 0.12}
+                {:id 14 :time 0.24}
+                {:id 8 :time 0.34}]
+               500
+               {:wordTimings [{:word "hello" :start 0 :end 0.5}]})
+        thanks (azure/azure-visemes->timeline
+                [{:id 19 :time 0.1}
+                 {:id 17 :time 0.2}]
+                400
+                {:wordTimings [{:word "thanks" :start 0 :end 0.4}]})
+        hello-ids (map :visemeId hello)
+        thanks-ids (map :visemeId thanks)]
+    (is (some #{(:AE visemes/canonical-visemes)} hello-ids))
+    (is (some #{(:Oh visemes/canonical-visemes)} hello-ids))
+    (is (not-any? #(and (= (:W_OO visemes/canonical-visemes) %)
+                        ;; OW diphthong expansion may emit W_OO from id 8; that
+                        ;; is fine. Fail only if AE was replaced entirely.
+                        (not (some #{(:AE visemes/canonical-visemes)} hello-ids)))
+                   hello-ids))
+    (is (some #{(:T_L_D_N visemes/canonical-visemes)} thanks-ids))
+    (is (some #{(:Th visemes/canonical-visemes)} thanks-ids))))
 
 (deftest web-speech-round-vowels-use-oh-and-woo-not-ah
   ;; Single-letter o/u used to emit AA/AH → Ah for almost every round vowel,

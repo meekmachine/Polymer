@@ -61,7 +61,10 @@
          typed-viseme? (typed-viseme-snippet? snippet)
          viseme-category? (or (viseme-snippet-category? category) typed-viseme?)
          curves (or (:curves snippet) {})
-         has-jaw-curve? (or (contains? curves "103") (typed-jaw-snippet? snippet))
+         ;; Curve maps may use string or keyword keys after host keywordize.
+         has-jaw-curve? (or (contains? curves "103")
+                            (contains? curves :103)
+                            (typed-jaw-snippet? snippet))
          category-for-options (or category
                                   (when (and legacy-fallback? typed-viseme?)
                                     "visemeSnippet"))

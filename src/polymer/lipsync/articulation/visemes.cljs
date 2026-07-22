@@ -133,11 +133,13 @@
    "EH" (:AE canonical-visemes)
    "UH" (:AE canonical-visemes)
    "ER" (:Er canonical-visemes)
-   ;; Y/IY are high-front → EE. Keep IH/IX on Ih for short-i contrast.
+   ;; Y/IY/IH/IX → EE to match Embody CC4 first-hit (EE lists IH/IX/Y before
+   ;; the Ih slot). Azure id 6 also resolves to EE; keeping Web Speech on Ih
+   ;; made short-i mouths diverge by provider.
    "Y" (:EE canonical-visemes)
    "IY" (:EE canonical-visemes)
-   "IH" (:Ih canonical-visemes)
-   "IX" (:Ih canonical-visemes)
+   "IH" (:EE canonical-visemes)
+   "IX" (:EE canonical-visemes)
    "W" (:W_OO canonical-visemes)
    "UW" (:W_OO canonical-visemes)
    "OW" (:Oh canonical-visemes)

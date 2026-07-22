@@ -146,35 +146,17 @@
       (str/ends-with? word "y")))
 
 (defn rounded-back? [event-time-sec word]
+  ;; Only true ʊ/u spellings. Do NOT match bare trailing "o" (hello/to/go) or
+  ;; "ow/oa/ose" — those false-positives remapped correct AE (id 4) onto W_OO
+  ;; and made Azure mouths look stuck rounded.
   (let [text (normalized-word (:word word))]
     (and (pos? (count text))
-         (boolean (re-find #"(?:oo|ew|ue|ui|ough|ow|oa|oe|ose|ole|old|own|o)$" text))
+         (boolean (re-find #"(?:oo|ew|ue|ui|ough)" text))
          (let [start-sec (word-start-sec word)
                end-sec (word-end-sec word)
                duration-sec (max 0.001 (- end-sec start-sec))
                progress (state/clamp 0 1 (/ (- event-time-sec start-sec) duration-sec))]
            (>= progress 0.35)))))
-
-(defn dental-th? [event-time-sec word]
-  (let [text (normalized-word (:word word))]
-    (and (str/includes? text "th")
-         (let [start-sec (word-start-sec word)
-               end-sec (word-end-sec word)
-               duration-sec (max 0.001 (- end-sec start-sec))
-               progress (state/clamp 0 1 (/ (- event-time-sec start-sec) duration-sec))
-               positions (loop [index (str/index-of text "th")
-                                result []]
-                           (if (nil? index)
-                             result
-                             (recur (str/index-of text "th" (inc index)) (conj result index))))]
-           (some (fn [index]
-                   (let [th-progress (if (<= (count text) 2) 0 (/ index (max 1 (- (count text) 2))))
-                         starts-word? (= index 0)
-                         ends-word? (>= index (- (count text) 2))]
-                     (or (and starts-word? (<= progress 0.45))
-                         (and ends-word? (>= progress 0.55))
-                         (<= (js/Math.abs (- progress th-progress)) 0.22))))
-                 positions)))))
 
 (defn refine-for-word [provider-id canonical-id event-time-sec word]
   (let [text (normalized-word (:word word))]
@@ -182,10 +164,9 @@
       (= provider-id 0) nil
       ;; Id 6 is already EE; long-e refine kept for explicit word bias.
       (and (= provider-id 6) (long-e-word? text)) (:EE visemes/canonical-visemes)
-      ;; Id 4 is AE (ɛ/ʊ). When the word is clearly rounded-back ʊ, prefer W_OO.
+      ;; Id 4 is AE (ɛ/ʊ). Only remap to W_OO for clear rounded-back ʊ spellings.
       (and (= provider-id 4) (rounded-back? event-time-sec word)) (:W_OO visemes/canonical-visemes)
-      ;; Id 19 is T_L_D_N (includes θ). Prefer Th when the word timing is on "th".
-      (and (= provider-id 19) (dental-th? event-time-sec word)) (:Th visemes/canonical-visemes)
+      ;; Do not remap id 19 (d/t/n → T_L_D_N) to Th. Azure θ/ð is already id 17.
       :else canonical-id)))
 
 (defn mapped-events [normalized options]
