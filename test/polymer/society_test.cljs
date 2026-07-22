@@ -21,6 +21,8 @@
     "lipSync.animation.requestSeekSnippet→animation"
     "prosodic.animation.requestScheduleSnippet→animation"
     "prosodic.animation.requestRemoveSnippet→animation"
+    "emphatic.animation.requestScheduleSnippet→animation"
+    "emphatic.animation.requestRemoveSnippet→animation"
     ;; blink → prosodic
     "blink.signal.blink-fast→prosodic"
     ;; speech discourse
@@ -28,17 +30,28 @@
     "transcription.transcription.interruption→conversation"
     "conversation.tts.requestSpeak→tts"
     "conversation.conversation.cancelRequested→tts"
+    "conversation.conversation.userUtterance→prosodic"
+    "conversation.conversation.agentUtterance→prosodic"
+    "conversation.conversation.requestResponse→prosodic"
+    "conversation.conversation.cancelRequested→prosodic"
+    "conversation.conversation.userUtterance→emphatic"
+    "conversation.conversation.agentUtterance→emphatic"
+    "conversation.conversation.cancelRequested→emphatic"
     "tts.lipSync.command→lipSync"
     "tts.ttsStatusChanged→conversation"
     "tts.ttsStatusChanged→transcription"
     "tts.ttsSpeechStarted→prosodic"
+    "tts.ttsSpeechStarted→emphatic"
     "tts.ttsSpeechStarted→transcription"
     "tts.ttsSpeechStarted→conversation"
     "tts.ttsWordBoundary→prosodic"
+    "tts.ttsWordBoundary→emphatic"
     "tts.ttsSpeechStopped→prosodic"
+    "tts.ttsSpeechStopped→emphatic"
     "tts.ttsSpeechStopped→transcription"
     "tts.ttsSpeechStopped→conversation"
     "tts.ttsSpeechEnded→prosodic"
+    "tts.ttsSpeechEnded→emphatic"
     "tts.ttsSpeechEnded→transcription"
     "tts.ttsSpeechEnded→conversation"})
 
@@ -52,7 +65,9 @@
     (doseq [name ["animation" "transcription" "tts" "lipSync" "conversation"]]
       (is (true? (get-in agencies [name :required])) name))
     (is (false? (get-in agencies ["blink" :required])))
-    (is (false? (get-in agencies ["hair" :required])))))
+    (is (false? (get-in agencies ["hair" :required])))
+    (is (false? (get-in agencies ["prosodic" :required])))
+    (is (false? (get-in agencies ["emphatic" :required])))))
 
 (deftest default-agency-society-js-export-shape
   (let [js-society polymer/DEFAULT_AGENCY_SOCIETY
@@ -61,5 +76,6 @@
     (is (map? (:agencies clj-society)))
     (is (sequential? (:edges clj-society)))
     (is (= (count expected-route-edge-ids) (count (:edges clj-society))))
+    (is (contains? (:agencies clj-society) :emphatic))
     (is (= 0.5 (get-in clj-society [:cb5t :E])))
     (is (= "weightedSum" (get-in clj-society [:characterRollup :type])))))

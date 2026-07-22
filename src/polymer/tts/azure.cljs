@@ -127,6 +127,23 @@
 (defn word-end-sec [word]
   (state/number-or (or (:endSec word) (:end word) (:end_time word)) (word-start-sec word)))
 
+(defn clean-word [word]
+  (when word
+    (let [value (.trim (str word))]
+      (when (pos? (count value)) value))))
+
+(defn normalize-word-timing [timing]
+  (let [word (clean-word (:word timing))
+        start-sec (max 0 (word-start-sec timing))
+        end-sec (max start-sec (word-end-sec timing))]
+    (when word
+      {:word word
+       :startSec start-sec
+       :endSec end-sec})))
+
+(defn normalize-word-timings [word-timings]
+  (into [] (keep normalize-word-timing) (or word-timings [])))
+
 (defn find-word-at-time [time-sec word-timings]
   (some (fn [word]
           (when (and (>= time-sec (- (word-start-sec word) 0.02))

@@ -15,6 +15,7 @@ const agencies = [
   { name: 'hair', dir: 'hair', ns: 'polymer.hair' },
   { name: 'lipSync', dir: 'lipsync', ns: 'polymer.lipsync' },
   { name: 'prosodic', dir: 'prosodic', ns: 'polymer.prosodic' },
+  { name: 'emphatic', dir: 'emphatic', ns: 'polymer.emphatic' },
   { name: 'transcription', dir: 'transcription', ns: 'polymer.transcription' },
   { name: 'tts', dir: 'tts', ns: 'polymer.tts' },
 ];

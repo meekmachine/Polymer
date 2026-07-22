@@ -898,8 +898,51 @@ export interface ProsodicConfig {
   intensity?: number;
   priority?: number;
   speechGestureEvery?: number;
+  browPulseEvery?: number;
+  headPulseEvery?: number;
+  openingGesture?: boolean;
   blinkFastCooldownMs?: number;
 }
+
+export interface EmphaticConfig {
+  enabled?: boolean;
+  intensity?: number;
+  priority?: number;
+  cooldownMs?: number;
+}
+
+export interface EmphaticState {
+  agency: 'emphatic';
+  speaking: boolean;
+  wordIndex: number;
+  currentWord: string | null;
+  plan: Record<string, unknown> | null;
+  activeSnippets: string[];
+  scheduledCount: number;
+  removedCount: number;
+  lastEmphaticAt: number;
+  lastGesture: string | null;
+  config: Required<EmphaticConfig>;
+  lastEvent: null | Record<string, unknown>;
+}
+
+export type EmphaticDispatch =
+  | { type: 'configure'; config: EmphaticConfig }
+  | { type: 'analyzeUtterance'; text: string }
+  | { type: 'userUtterance' | 'agentUtterance' | 'conversation.userUtterance' | 'conversation.agentUtterance'; text?: string; sourceAgency?: string }
+  | { type: 'conversation.cancelRequested'; reason?: string; sourceAgency?: string }
+  | { type: 'speechStarted'; name?: string; text?: string; sourceAgency?: string; engine?: string }
+  | { type: 'speechStopped'; reason?: string; sourceAgency?: string }
+  | {
+      type: 'wordBoundary';
+      word: string;
+      wordIndex?: number;
+      observedElapsedSec?: number;
+      hostElapsedSec?: number;
+      sourceAgency?: string;
+    }
+  | { type: 'stop'; reason?: string }
+  | { type: 'reset' };
 
 export interface ProsodicState {
   agency: 'prosodic';
@@ -917,7 +960,7 @@ export interface ProsodicState {
 
 export type ProsodicDispatch =
   | { type: 'configure'; config: ProsodicConfig }
-  | { type: 'speechStarted'; name?: string; sourceAgency?: string; engine?: string }
+  | { type: 'speechStarted'; name?: string; text?: string; sourceAgency?: string; engine?: string }
   | { type: 'speechStopped'; reason?: string; sourceAgency?: string }
   | {
       type: 'wordBoundary';
@@ -928,6 +971,8 @@ export type ProsodicDispatch =
       sourceAgency?: string;
     }
   | { type: 'blinkFast'; sourceAgency?: string; plan?: Record<string, unknown> }
+  | { type: 'conversation.userUtterance' | 'conversation.agentUtterance' | 'conversation.requestResponse'; text?: string; sourceAgency?: string }
+  | { type: 'conversation.cancelRequested'; reason?: string; sourceAgency?: string }
   | { type: 'stop'; reason?: string }
   | { type: 'reset' };
 
@@ -1591,7 +1636,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestScheduleSnippet';
-      agency: 'blink' | 'lipSync' | 'gesture' | 'prosodic' | 'eyeHeadTracking';
+      agency: 'blink' | 'lipSync' | 'gesture' | 'prosodic' | 'emphatic' | 'eyeHeadTracking';
       requestId: string;
       snippet: PolymerAnimationSnippet;
       options: { autoPlay?: boolean; [key: string]: unknown };
@@ -1601,7 +1646,7 @@ export type PolymerDomainEvent =
     }
   | {
       type: 'animation.requestRemoveSnippet';
-      agency: 'lipSync' | 'gesture' | 'prosodic' | 'eyeHeadTracking';
+      agency: 'lipSync' | 'gesture' | 'prosodic' | 'emphatic' | 'eyeHeadTracking';
       requestId: string;
       name: string;
       reason: string;
@@ -1835,6 +1880,20 @@ export type PolymerDomainEvent =
       scheduledAt: number;
     }
   | { type: 'prosodicStopped'; agency: 'prosodic'; reason: string; stoppedAt: number }
+  | { type: 'emphaticPlanCreated'; agency: 'emphatic'; plan?: Record<string, unknown>; text?: string; emphasisWords?: number[]; observedAt?: number }
+  | { type: 'emphaticConfigChanged'; agency: 'emphatic'; state: EmphaticState }
+  | { type: 'emphaticSpeechStarted'; agency: 'emphatic'; name?: string; text?: string; startedAt: number }
+  | { type: 'emphaticWordBoundary'; agency: 'emphatic'; word?: string; wordIndex: number; observedAt: number }
+  | {
+      type: 'emphaticGestureScheduled';
+      agency: 'emphatic';
+      gesture: string;
+      name: string;
+      word?: string;
+      wordIndex?: number;
+      scheduledAt: number;
+    }
+  | { type: 'emphaticStopped'; agency: 'emphatic'; reason: string; stoppedAt: number }
   | { type: string; agency: 'conversation' | 'transcription' | 'hair' | 'cameraContext'; [key: string]: unknown }
   | {
       type: 'ready';
@@ -1848,6 +1907,7 @@ export type PolymerDomainEvent =
         | 'tts'
         | 'gesture'
         | 'prosodic'
+        | 'emphatic'
         | 'conversation'
         | 'transcription'
         | 'hair'
@@ -2063,8 +2123,40 @@ export interface ProsodicAgency {
   subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
   configure(config: ProsodicConfig): void;
   speechStarted(name?: string): void;
+  /** Latticework ConversationService compatibility alias for speechStarted. */
+  startTalking(): void;
+  /** Latticework ConversationService compatibility alias for speechStopped. */
+  stopTalking(): void;
+  /** Latticework Compatibility alias for wordBoundary. */
+  pulse(wordIndex: number): void;
+  pulse(word: string, wordIndex: number): void;
   wordBoundary(word: string, wordIndex?: number): void;
   blinkFast(): void;
+  stop(): void;
+  reset(): void;
+  dispose(): void;
+}
+
+export interface EmphaticAgency {
+  input: PolymerInputStream<EmphaticDispatch>;
+  events: PolymerStream<PolymerDomainEvent>;
+  effects: PolymerStream<PolymerEffectEvent>;
+  dispatch(command: EmphaticDispatch): void;
+  snapshot(): EmphaticState;
+  schedulerQueue(): Array<Record<string, unknown>>;
+  subscribeInput(listener: (event: { type: 'command'; agency: 'emphatic'; command: EmphaticDispatch }) => void): () => void;
+  subscribeEvents(listener: (event: PolymerDomainEvent) => void): () => void;
+  subscribeEffects(listener: (event: PolymerEffectEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribe(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for events. Prefer subscribeEvents. */
+  subscribeStatus(listener: (event: PolymerStatusEvent) => void): () => void;
+  /** Compatibility alias for effects. Prefer subscribeEffects. */
+  subscribeCommands(listener: (event: PolymerEffectEvent) => void): () => void;
+  configure(config: EmphaticConfig): void;
+  analyzeUtterance(text: string): void;
+  speechStarted(name?: string, text?: string): void;
+  wordBoundary(word: string, wordIndex?: number): void;
   stop(): void;
   reset(): void;
   dispose(): void;
@@ -2158,6 +2250,7 @@ export interface CharacterAgencySnapshot {
   tts: TTSState;
   lipSync: LipSyncState;
   prosodic: ProsodicState;
+  emphatic: EmphaticState;
   conversation: ConversationState;
   transcription: TranscriptionState;
   hair: HairState;
@@ -2177,6 +2270,7 @@ export type CharacterAgencyDispatch =
   | { agency: 'tts'; command: TTSDispatch }
   | { agency: 'lipSync'; command: LipSyncDispatch }
   | { agency: 'prosodic'; command: ProsodicDispatch }
+  | { agency: 'emphatic'; command: EmphaticDispatch }
   | { agency: 'conversation'; command: ConversationDispatch }
   | { agency: 'transcription'; command: TranscriptionDispatch }
   | { agency: 'hair'; command: HairDispatch }
@@ -2201,6 +2295,7 @@ export interface CharacterAgencies {
   agency(name: 'tts'): TTSAgency;
   agency(name: 'lipSync'): LipSyncAgency;
   agency(name: 'prosodic'): ProsodicAgency;
+  agency(name: 'emphatic'): EmphaticAgency;
   agency(name: 'conversation'): ConversationAgency;
   agency(name: 'transcription'): TranscriptionAgency;
   agency(name: 'hair'): HairAgency;
@@ -2725,6 +2820,7 @@ export function createLipSyncAgency(config?: LipSyncConfig): LipSyncAgency;
 export function createTTSAgency(config?: TTSConfig): TTSAgency;
 export function createGestureAgency(config?: GestureConfig): GestureAgency;
 export function createProsodicAgency(config?: ProsodicConfig): ProsodicAgency;
+export function createEmphaticAgency(config?: EmphaticConfig): EmphaticAgency;
 export function createConversationAgency(config?: ConversationConfig): ConversationAgency;
 export function createTranscriptionAgency(config?: TranscriptionConfig): TranscriptionAgency;
 export function createHairAgency(config?: HairConfig): HairAgency;
@@ -2741,6 +2837,7 @@ export function createCharacterAgencies(config?: {
   tts?: TTSConfig;
   lipSync?: LipSyncConfig;
   prosodic?: ProsodicConfig;
+  emphatic?: EmphaticConfig;
   conversation?: ConversationConfig;
   transcription?: TranscriptionConfig;
   hair?: HairConfig;

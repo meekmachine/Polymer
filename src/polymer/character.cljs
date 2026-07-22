@@ -8,6 +8,7 @@
             [polymer.gesture.agency :as gesture]
             [polymer.hair.agency :as hair]
             [polymer.lipsync.agency :as lipsync]
+            [polymer.emphatic.agency :as emphatic]
             [polymer.prosodic.agency :as prosodic]
             [polymer.stream :as stream]
             [polymer.transcription.agency :as transcription]
@@ -21,8 +22,9 @@
 ;; blink facts, Camera Context emits gaze facts, Transcription emits transcript
 ;; facts, Conversation emits speech requests, TTS emits speech timing facts,
 ;; LipSync emits mouth animation intent, Gesture emits arm/hand animation intent,
-;; Prosodic emits speech/blink expression intent, Hair emits hair runtime
-;; requests, and Animation talks directly to Embody.
+;; Prosodic emits cadence expression intent, Emphatic emits linguistic stress
+;; intent, Hair emits hair runtime requests, and Animation talks directly to
+;; Embody.
 
 (defn create-character-agencies [config]
   (let [input-stream (stream/create-stream)
@@ -43,6 +45,7 @@
         tts-agency (tts/create-tts-agency (when config (aget config "tts")))
         lipsync-agency (lipsync/create-lipsync-agency (when config (aget config "lipSync")))
         prosodic-agency (prosodic/create-prosodic-agency (when config (aget config "prosodic")))
+        emphatic-agency (emphatic/create-emphatic-agency (when config (aget config "emphatic")))
         ;; Optional injectable conversation-provider effector. Hosts/tests may
         ;; pass a function or {respond} object; Polymer never embeds LLM secrets.
         conversation-provider (when config (aget config "conversationProvider"))
@@ -118,6 +121,7 @@
                     "tts" (.dispatch ^js tts-agency (clj->js (:command payload)))
                     "lipSync" (.dispatch ^js lipsync-agency (clj->js (:command payload)))
                     "prosodic" (.dispatch ^js prosodic-agency (clj->js (:command payload)))
+                    "emphatic" (.dispatch ^js emphatic-agency (clj->js (:command payload)))
                     (emit-event {:type "error"
                                  :agency (or (:agency payload) "unknown")
                                  :message "Unknown Polymer agency"})))))
@@ -134,6 +138,7 @@
                         :tts (js->clj (.snapshot ^js tts-agency) :keywordize-keys true)
                         :lipSync (js->clj (.snapshot ^js lipsync-agency) :keywordize-keys true)
                         :prosodic (js->clj (.snapshot ^js prosodic-agency) :keywordize-keys true)
+                        :emphatic (js->clj (.snapshot ^js emphatic-agency) :keywordize-keys true)
                         :animation (js->clj (.snapshot ^js animation-agency) :keywordize-keys true)}))
 
             (route-blink-event! [event]
@@ -215,13 +220,14 @@
                 nil))
 
             (route-conversation-event! [event]
-              ;; Router only: forward conversation facts/requests. Gaze and
-              ;; Prosodic own local policy through their planners/schedulers.
+              ;; Router only: forward conversation facts/requests. Gaze,
+              ;; Prosodic, and Emphatic own local policy through planners.
               (case (:type event)
                 ("conversation.userUtterance"
                  "conversation.agentUtterance")
                 (let [fact (clj->js (assoc event :sourceAgency "conversation"))]
                   (.dispatch ^js prosodic-agency fact)
+                  (.dispatch ^js emphatic-agency fact)
                   (.dispatch ^js gaze-agency fact))
 
                 "conversation.requestResponse"
@@ -236,6 +242,7 @@
                 "conversation.cancelRequested"
                 (let [cancel (clj->js (assoc event :sourceAgency "conversation"))]
                   (.dispatch ^js prosodic-agency cancel)
+                  (.dispatch ^js emphatic-agency cancel)
                   (.dispatch ^js gaze-agency cancel)
                   (.dispatch ^js tts-agency (clj->js {:type "stop"
                                                       :reason (:reason event)})))
@@ -264,7 +271,14 @@
                              (clj->js {:type "speechStarted"
                                        :sourceAgency "tts"
                                        :name (:name event)
-                                       :engine (:engine event)}))
+                                       :engine (:engine event)
+                                       :text (:text event)}))
+                  (.dispatch ^js emphatic-agency
+                             (clj->js {:type "speechStarted"
+                                       :sourceAgency "tts"
+                                       :name (:name event)
+                                       :engine (:engine event)
+                                       :text (:text event)}))
                   (.dispatch ^js transcription-agency
                              (clj->js event))
                   (.dispatch ^js conversation-agency
@@ -272,17 +286,22 @@
                                        :status "speaking"})))
 
                 "ttsWordBoundary"
-                (.dispatch ^js prosodic-agency
-                           (clj->js {:type "wordBoundary"
-                                     :sourceAgency "tts"
-                                     :word (:word event)
-                                     :wordIndex (:wordIndex event)
-                                     :observedElapsedSec (:observedElapsedSec event)
-                                     :hostElapsedSec (:hostElapsedSec event)}))
+                (let [boundary (clj->js {:type "wordBoundary"
+                                         :sourceAgency "tts"
+                                         :word (:word event)
+                                         :wordIndex (:wordIndex event)
+                                         :observedElapsedSec (:observedElapsedSec event)
+                                         :hostElapsedSec (:hostElapsedSec event)})]
+                  (.dispatch ^js prosodic-agency boundary)
+                  (.dispatch ^js emphatic-agency boundary))
 
                 "ttsSpeechStopped"
                 (do
                   (.dispatch ^js prosodic-agency
+                             (clj->js {:type "speechStopped"
+                                       :sourceAgency "tts"
+                                       :reason (:reason event)}))
+                  (.dispatch ^js emphatic-agency
                              (clj->js {:type "speechStopped"
                                        :sourceAgency "tts"
                                        :reason (:reason event)}))
@@ -295,6 +314,10 @@
                 "ttsSpeechEnded"
                 (do
                   (.dispatch ^js prosodic-agency
+                             (clj->js {:type "speechStopped"
+                                       :sourceAgency "tts"
+                                       :reason "completed"}))
+                  (.dispatch ^js emphatic-agency
                              (clj->js {:type "speechStopped"
                                        :sourceAgency "tts"
                                        :reason "completed"}))
@@ -320,6 +343,16 @@
                 nil))
 
             (route-prosodic-event! [event]
+              (case (:type event)
+                "animation.requestScheduleSnippet"
+                (schedule-animation! (:agency event) (:snippet event) (:options event))
+
+                "animation.requestRemoveSnippet"
+                (remove-animation! (:agency event) (:name event))
+
+                nil))
+
+            (route-emphatic-event! [event]
               (case (:type event)
                 "animation.requestScheduleSnippet"
                 (schedule-animation! (:agency event) (:snippet event) (:options event))
@@ -409,6 +442,13 @@
                                     (emit-event payload)))))
       (track! (.subscribeEffects ^js prosodic-agency
                                  #(emit-effect (js->clj % :keywordize-keys true))))
+      (track! (.subscribeEvents ^js emphatic-agency
+                                (fn [event]
+                                  (let [payload (js->clj event :keywordize-keys true)]
+                                    (route-emphatic-event! payload)
+                                    (emit-event payload)))))
+      (track! (.subscribeEffects ^js emphatic-agency
+                                 #(emit-effect (js->clj % :keywordize-keys true))))
       #js {:dispatch dispatch!
            :input (stream/writable-port input-stream dispatch!)
            :events (stream/readable-port event-stream)
@@ -428,6 +468,7 @@
                        "tts" tts-agency
                        "lipSync" lipsync-agency
                        "prosodic" prosodic-agency
+                       "emphatic" emphatic-agency
                        nil))
            :subscribeInput (fn [listener] ((:subscribe input-stream) listener))
            :subscribeEvents (fn [listener] ((:subscribe event-stream) listener))
@@ -452,6 +493,7 @@
                         (.dispose ^js tts-agency)
                         (.dispose ^js lipsync-agency)
                         (.dispose ^js prosodic-agency)
+                        (.dispose ^js emphatic-agency)
                         (.dispose ^js animation-agency)
                         ((:dispose input-stream))
                         ((:dispose event-stream))

@@ -1,34 +1,30 @@
-(ns polymer.prosodic.agency
-  (:require [polymer.prosodic.goap :as goap]
-            [polymer.prosodic.scheduler :as scheduler]
-            [polymer.prosodic.snippet :as snippet]
-            [polymer.prosodic.state :as state]
+(ns polymer.emphatic.agency
+  (:require [polymer.emphatic.domain :as domain]
+            [polymer.emphatic.goap :as goap]
+            [polymer.emphatic.scheduler :as scheduler]
+            [polymer.emphatic.snippet :as snippet]
+            [polymer.emphatic.state :as state]
             [polymer.stream :as stream]))
 
-;; Prosodic Expression consumes speech/blink/conversation facts and emits
-;; animation intent. It does not own TTS, LipSync, host UI state, storage, or
-;; the animation runtime. The character network routes peer facts here, then
-;; routes Prosodic's animation requests to Polymer Animation.
-
-(defn js-command [type value]
-  #js {:type type :value value})
+;; Emphatic Expression owns linguistic stress during speech. Prosodic owns
+;; speaking cadence. Emphatic analyzes utterance text, then spikes brow/head
+;; AUs on emphasis word boundaries. It emits animation requests only — Animation
+;; owns the Embody effector.
 
 (defn plan-error-message [plan]
   (let [step (first (:steps plan))]
     (case (:reason step)
-      "unsupported-command" (str "Prosodic plan failed: unsupported command " (:commandType step))
-      (str "Prosodic plan failed: " (:reason step)))))
+      "unsupported-command" (str "Emphatic plan failed: unsupported command " (:commandType step))
+      (str "Emphatic plan failed: " (:reason step)))))
 
 (defn should-emit-plan? [plan]
-  ;; Ignore/no-op plans are routine for word boundaries. Emitting every one
-  ;; would create noisy high-frequency diagnostics without changing behavior.
   (or (false? (:ok plan))
       (:gesture plan)
       (seq (:gestures plan))
-      (some #{"record-conversation-fact" "remove-active-gestures"}
+      (some #{"analyze-utterance" "remove-active-gestures"}
             (map :op (:steps plan)))))
 
-(defn create-prosodic-agency [config]
+(defn create-emphatic-agency [config]
   (let [input-stream (stream/create-stream)
         event-stream (stream/create-stream)
         effect-stream (stream/create-stream)
@@ -39,8 +35,8 @@
         agency-scheduler (scheduler/create-scheduler {:emit-event emit-event})]
     (letfn [(emit-plan! [plan]
               (when (should-emit-plan? plan)
-                (emit-event {:type "prosodicPlanCreated"
-                             :agency "prosodic"
+                (emit-event {:type "emphaticPlanCreated"
+                             :agency "emphatic"
                              :plan plan})))
 
             (schedule-gesture! [gesture-kind context]
@@ -50,8 +46,8 @@
                 ((:schedule-gesture agency-scheduler) snippet-data {:autoPlay true})
                 (let [scheduled-at (state/now-ms)]
                   (swap! state-atom state/record-schedule (:name snippet-data) gesture-kind scheduled-at)
-                  (emit-event {:type "prosodicGestureScheduled"
-                               :agency "prosodic"
+                  (emit-event {:type "emphaticGestureScheduled"
+                               :agency "emphatic"
                                :gesture gesture-kind
                                :name (:name snippet-data)
                                :word (:word context)
@@ -70,8 +66,8 @@
               (remove-active! reason)
               (let [stopped-at (state/now-ms)]
                 (swap! state-atom state/clear-active reason stopped-at)
-                (emit-event {:type "prosodicStopped"
-                             :agency "prosodic"
+                (emit-event {:type "emphaticStopped"
+                             :agency "emphatic"
                              :reason reason
                              :stoppedAt stopped-at})))
 
@@ -81,27 +77,36 @@
                   "apply-config"
                   (do
                     (swap! state-atom state/configure (:config payload))
-                    (emit-event {:type "prosodicConfigChanged"
-                                 :agency "prosodic"
+                    (emit-event {:type "emphaticConfigChanged"
+                                 :agency "emphatic"
                                  :state @state-atom}))
 
-                  "clear-conversation-suppress"
-                  (swap! state-atom state/clear-conversation-suppress)
+                  "analyze-utterance"
+                  (let [text (or (:text payload) (:utterance payload) "")
+                        analyzed (domain/analyze-utterance text)
+                        observed-at (state/now-ms)]
+                    (swap! state-atom state/record-plan analyzed observed-at)
+                    (emit-event {:type "emphaticPlanCreated"
+                                 :agency "emphatic"
+                                 :text text
+                                 :emphasisWords (:emphasisWords analyzed)
+                                 :observedAt observed-at}))
 
                   "record-speech-start"
                   (let [started-at (state/now-ms)]
-                    (swap! state-atom state/record-speech-start started-at (:name payload))
-                    (emit-event {:type "prosodicSpeechStarted"
-                                 :agency "prosodic"
+                    (swap! state-atom state/record-speech-start started-at (:name payload) (:text payload))
+                    (emit-event {:type "emphaticSpeechStarted"
+                                 :agency "emphatic"
                                  :name (:name payload)
+                                 :text (:text payload)
                                  :startedAt started-at}))
 
                   "record-speech-stop"
                   (let [stopped-at (state/now-ms)
                         reason (or (:reason payload) "requested")]
                     (swap! state-atom state/clear-active reason stopped-at)
-                    (emit-event {:type "prosodicStopped"
-                                 :agency "prosodic"
+                    (emit-event {:type "emphaticStopped"
+                                 :agency "emphatic"
                                  :reason reason
                                  :stoppedAt stopped-at}))
 
@@ -111,23 +116,10 @@
                                                          (:wordIndex @state-atom)))
                         observed-at (state/now-ms)]
                     (swap! state-atom state/record-word-boundary word word-index observed-at)
-                    (emit-event {:type "prosodicWordBoundary"
-                                 :agency "prosodic"
+                    (emit-event {:type "emphaticWordBoundary"
+                                 :agency "emphatic"
                                  :word word
                                  :wordIndex word-index
-                                 :observedAt observed-at}))
-
-                  "record-blink-fast-cue"
-                  (swap! state-atom state/record-blink-fast-cue (state/now-ms))
-
-                  "record-conversation-fact"
-                  (let [observed-at (state/now-ms)]
-                    (swap! state-atom state/record-conversation-fact payload observed-at)
-                    (emit-event {:type "prosodicConversationFact"
-                                 :agency "prosodic"
-                                 :conversationType (:type payload)
-                                 :text (:text payload)
-                                 :turnId (:turnId payload)
                                  :observedAt observed-at}))
 
                   "build-gesture-snippet"
@@ -148,8 +140,8 @@
                   (do
                     (stop-local! "reset")
                     (reset! state-atom (state/config->state nil))
-                    (emit-event {:type "prosodicConfigChanged"
-                                 :agency "prosodic"
+                    (emit-event {:type "emphaticConfigChanged"
+                                 :agency "emphatic"
                                  :state @state-atom}))
 
                   ("ignore" "fail")
@@ -162,12 +154,12 @@
                 (let [payload (js->clj command :keywordize-keys true)
                       plan (goap/plan-command payload @state-atom)]
                   (emit-input {:type "command"
-                               :agency "prosodic"
+                               :agency "emphatic"
                                :command payload})
                   (emit-plan! plan)
                   (if (false? (:ok plan))
                     (emit-event {:type "error"
-                                 :agency "prosodic"
+                                 :agency "emphatic"
                                  :message (plan-error-message plan)})
                     (execute-steps! payload plan)))))]
       #js {:dispatch dispatch!
@@ -183,26 +175,14 @@
            :subscribeStatus (fn [listener] ((:subscribe event-stream) listener))
            :subscribeCommands (fn [listener] ((:subscribe effect-stream) listener))
            :configure (fn [next-config] (dispatch! #js {:type "configure" :config next-config}))
-           :speechStarted (fn [name] (dispatch! #js {:type "speechStarted" :name name}))
-           ;; Latticework ConversationService compat: startTalking/stopTalking/pulse.
-           :startTalking (fn [] (dispatch! #js {:type "speechStarted" :name "compat:startTalking"}))
-           :stopTalking (fn [] (dispatch! #js {:type "speechStopped" :reason "compat:stopTalking"}))
-           :pulse (fn
-                    ([word-index]
-                     (dispatch! #js {:type "wordBoundary"
-                                     :word (str "w" word-index)
-                                     :wordIndex word-index}))
-                    ([word word-index]
-                     (dispatch! #js {:type "wordBoundary"
-                                     :word word
-                                     :wordIndex word-index})))
+           :analyzeUtterance (fn [text] (dispatch! #js {:type "analyzeUtterance" :text text}))
+           :speechStarted (fn [name text] (dispatch! #js {:type "speechStarted" :name name :text text}))
            :wordBoundary (fn
                            ([word] (dispatch! #js {:type "wordBoundary" :word word}))
                            ([word word-index]
                             (dispatch! #js {:type "wordBoundary"
                                             :word word
                                             :wordIndex word-index})))
-           :blinkFast (fn [] (dispatch! #js {:type "blinkFast"}))
            :stop (fn [] (dispatch! #js {:type "stop"}))
            :reset (fn [] (dispatch! #js {:type "reset"}))
            :dispose (fn []

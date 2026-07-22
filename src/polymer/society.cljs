@@ -19,7 +19,8 @@
    "hair"
    "tts"
    "lipSync"
-   "prosodic"])
+   "prosodic"
+   "emphatic"])
 
 (def required-agency-names
   #{"animation" "transcription" "tts" "lipSync" "conversation"})
@@ -62,6 +63,8 @@
    (edge "lipSync.animation.requestSeekSnippet→animation" "lipSync" "animation.requestSeekSnippet" "animation" true)
    (edge "prosodic.animation.requestScheduleSnippet→animation" "prosodic" "animation.requestScheduleSnippet" "animation" true)
    (edge "prosodic.animation.requestRemoveSnippet→animation" "prosodic" "animation.requestRemoveSnippet" "animation" true)
+   (edge "emphatic.animation.requestScheduleSnippet→animation" "emphatic" "animation.requestScheduleSnippet" "animation" true)
+   (edge "emphatic.animation.requestRemoveSnippet→animation" "emphatic" "animation.requestRemoveSnippet" "animation" true)
 
    ;; Blink ↔ prosodic coupling (seeded; not required — may be disabled per character)
    (edge "blink.signal.blink-fast→prosodic" "blink" "signal" "prosodic" false {:signal "blink-fast"})
@@ -71,17 +74,28 @@
    (edge "transcription.transcription.interruption→conversation" "transcription" "transcription.interruption" "conversation" true)
    (edge "conversation.tts.requestSpeak→tts" "conversation" "tts.requestSpeak" "tts" true)
    (edge "conversation.conversation.cancelRequested→tts" "conversation" "conversation.cancelRequested" "tts" true)
+   (edge "conversation.conversation.userUtterance→prosodic" "conversation" "conversation.userUtterance" "prosodic" false)
+   (edge "conversation.conversation.agentUtterance→prosodic" "conversation" "conversation.agentUtterance" "prosodic" false)
+   (edge "conversation.conversation.requestResponse→prosodic" "conversation" "conversation.requestResponse" "prosodic" false)
+   (edge "conversation.conversation.cancelRequested→prosodic" "conversation" "conversation.cancelRequested" "prosodic" false)
+   (edge "conversation.conversation.userUtterance→emphatic" "conversation" "conversation.userUtterance" "emphatic" false)
+   (edge "conversation.conversation.agentUtterance→emphatic" "conversation" "conversation.agentUtterance" "emphatic" false)
+   (edge "conversation.conversation.cancelRequested→emphatic" "conversation" "conversation.cancelRequested" "emphatic" false)
    (edge "tts.lipSync.command→lipSync" "tts" "lipSync.command" "lipSync" true)
    (edge "tts.ttsStatusChanged→conversation" "tts" "ttsStatusChanged" "conversation" true)
    (edge "tts.ttsStatusChanged→transcription" "tts" "ttsStatusChanged" "transcription" true)
    (edge "tts.ttsSpeechStarted→prosodic" "tts" "ttsSpeechStarted" "prosodic" true)
+   (edge "tts.ttsSpeechStarted→emphatic" "tts" "ttsSpeechStarted" "emphatic" true)
    (edge "tts.ttsSpeechStarted→transcription" "tts" "ttsSpeechStarted" "transcription" true)
    (edge "tts.ttsSpeechStarted→conversation" "tts" "ttsSpeechStarted" "conversation" true)
    (edge "tts.ttsWordBoundary→prosodic" "tts" "ttsWordBoundary" "prosodic" true)
+   (edge "tts.ttsWordBoundary→emphatic" "tts" "ttsWordBoundary" "emphatic" true)
    (edge "tts.ttsSpeechStopped→prosodic" "tts" "ttsSpeechStopped" "prosodic" true)
+   (edge "tts.ttsSpeechStopped→emphatic" "tts" "ttsSpeechStopped" "emphatic" true)
    (edge "tts.ttsSpeechStopped→transcription" "tts" "ttsSpeechStopped" "transcription" true)
    (edge "tts.ttsSpeechStopped→conversation" "tts" "ttsSpeechStopped" "conversation" true)
    (edge "tts.ttsSpeechEnded→prosodic" "tts" "ttsSpeechEnded" "prosodic" true)
+   (edge "tts.ttsSpeechEnded→emphatic" "tts" "ttsSpeechEnded" "emphatic" true)
    (edge "tts.ttsSpeechEnded→transcription" "tts" "ttsSpeechEnded" "transcription" true)
    (edge "tts.ttsSpeechEnded→conversation" "tts" "ttsSpeechEnded" "conversation" true)])
 

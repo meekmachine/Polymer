@@ -20,6 +20,8 @@
    :snippetPriority priority
    :snippetPlaybackRate 1
    :snippetIntensityScale intensity
+   :snippetBlendMode "additive"
+   :mixerClampWhenFinished true
    :metadata (merge {:agency "prosodic"} metadata)})
 
 (defn gesture-name [gesture-kind now]
@@ -29,20 +31,20 @@
   (base-snippet
    (gesture-name "emphasis" now)
    {"1" [{:time 0.0 :intensity 0}
-         {:time 0.15 :intensity 0.35}
-         {:time 0.45 :intensity 0.45}
-         {:time 0.75 :intensity 0}]
+         {:time 0.12 :intensity 0.42}
+         {:time 0.4 :intensity 0.55}
+         {:time 0.7 :intensity 0}]
     "2" [{:time 0.0 :intensity 0}
-         {:time 0.15 :intensity 0.25}
-         {:time 0.45 :intensity 0.35}
-         {:time 0.75 :intensity 0}]
+         {:time 0.12 :intensity 0.32}
+         {:time 0.4 :intensity 0.42}
+         {:time 0.7 :intensity 0}]
     "55" [{:time 0.0 :intensity 0}
-          {:time 0.25 :intensity 0.15}
-          {:time 0.65 :intensity 0.15}
-          {:time 0.95 :intensity 0}]}
-   0.95
+          {:time 0.2 :intensity 0.22}
+          {:time 0.55 :intensity 0.22}
+          {:time 0.85 :intensity 0}]}
+   0.85
    (:priority config)
-   (* 0.8 (:intensity config))
+   (* 0.9 (:intensity config))
    (merge {:gesture "emphasis"} context)))
 
 (defn nod-snippet [now config context]
