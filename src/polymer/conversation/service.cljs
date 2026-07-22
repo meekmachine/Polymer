@@ -148,7 +148,11 @@
                 (js-call tts "stop")
                 (stop-speaking-behaviors!)
                 (set-state! "interrupted")
-                (js-call callbacks "onUserSpeech" "" true true)))
+                ;; Only surface a user-speech callback when we have text (transcript
+                ;; fallback). Audio barge-in should not emit an empty final utterance.
+                (let [text (str (or (:text (data-map event)) ""))]
+                  (when (pos? (count text))
+                    (js-call callbacks "onUserSpeech" text true true)))))
             (finish-agent-speech! []
               (clear-playback-unsub!)
               (reset! agent-speech-active? false)

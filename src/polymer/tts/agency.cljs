@@ -242,8 +242,10 @@
                   ;; Prime synchronously while the click/user gesture is still
                   ;; available. Synthesis may finish later, but the element is
                   ;; already allowed to play in stricter browsers.
+                ;; Prime HTMLAudio for autoplay unlock only. Do not advertise the
+                ;; playback-reference track until real Azure audio is routed, or
+                ;; barge-in would arm against a silent muted unlock clip.
                 (prime-audio! resources volume)
-                (notify-playback-reference-track!)
                 (-> synth-promise
                     (.then (fn [raw]
                                ;; Provider/backend shapes are normalized before

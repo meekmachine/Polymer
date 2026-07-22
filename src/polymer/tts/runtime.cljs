@@ -329,13 +329,16 @@
                                (resolve status)))))))))))))
 
 (defn prime-audio!
-  "Prime one HTMLAudio element while the user gesture is still fresh."
+  "Prime one HTMLAudio element while the user gesture is still fresh.
+
+  Intentionally does not attach the MediaElementSource graph yet. That graph is
+  created on the first real Azure play so the barge-in reference track carries
+  agent speech rather than the muted unlock clip."
   [resources volume]
   (when (exists? js/Audio)
     (ensure-playback-audio-context! resources)
     (let [audio (or (:audio @resources) (js/Audio.))]
       (swap! resources assoc :audio audio)
-      (ensure-html-audio-playback-graph! resources audio volume)
       (set! (.-muted audio) true)
       (set! (.-loop audio) true)
       (set! (.-volume audio) volume)
