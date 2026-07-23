@@ -45,6 +45,11 @@
     (or (when win (aget win "SpeechRecognition"))
         (when win (aget win "webkitSpeechRecognition")))))
 
+(defn recognizer-active?
+  "True from the synchronous start request until the provider ends."
+  [status]
+  (contains? #{"starting" "listening"} status))
+
 (defn emit-set! [listeners & args]
   (doseq [listener @listeners]
     (.apply listener nil (to-array args))))
@@ -357,6 +362,11 @@
                                   (when-not track
                                     (throw (js/Error. "No microphone audio track available")))
                                   (try
+                                    ;; SpeechRecognition.onstart is asynchronous. Mark the
+                                    ;; provider as starting before .start so Conversation can
+                                    ;; safely keep its armed microphone through the agent →
+                                    ;; user turn without issuing a second .start call.
+                                    (set-state! {:status "starting" :error nil})
                                     (js/console.log "[TranscriptionService] Starting speech recognition with mic track...")
                                     (.start instance track)
                                     (catch :default err
@@ -365,7 +375,9 @@
                                   (when @agent-speaking?
                                     (start-interruption-monitoring!))
                                   (resolve nil))))
-                       (.catch reject))
+                       (.catch (fn [error]
+                                 (set-state! {:status "idle"})
+                                 (reject error))))
                    (let [error (js/Error. "Web Speech recognition is not available")]
                      (handle-error! #js {:error (.-message error)})
                      (reject error))))))
@@ -375,7 +387,7 @@
       #js {:startListening (fn []
                              (if @disposed?
                                (js/Promise.reject (js/Error. "Transcription service is disposed"))
-                               (if (= "listening" (:status @state-atom))
+                               (if (recognizer-active? (:status @state-atom))
                                  (js/Promise.resolve nil)
                                  (do
                                    (reset! manual-stop? false)

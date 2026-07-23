@@ -49,7 +49,10 @@
     (merge {:autoListen true
             :detectInterruptions true
             :minSpeakTime 500
-            :allowTranscriptInterruptionFallback false
+            ;; Audio-level barge-in needs a playback reference track. Keep the
+            ;; transcript path on by default so compatibility hosts remain
+            ;; interruptible when that track is unavailable.
+            :allowTranscriptInterruptionFallback true
             :eyeHeadTracking (:eyeHeadTracking handles)
             :prosodicService (:prosodicService handles)}
            plain
