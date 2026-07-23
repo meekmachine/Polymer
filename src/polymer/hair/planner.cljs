@@ -34,9 +34,10 @@
     (case (:type command)
       "configure" [{:op "apply-config"}
                    {:op "request-apply-state"}]
+      ;; Register object refs only. Applying materials here would paint default
+      ;; colors whenever a host UI mounts HairService and registers meshes.
       "registerObjects" [{:op "apply-config"
-                          :config {:objects (:objects command)}}
-                         {:op "request-apply-state"}]
+                          :config {:objects (:objects command)}}]
       "setHairColor" [{:op "apply-config"
                        :config {:hairColor (or (:color command)
                                                (:value command)

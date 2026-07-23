@@ -28,9 +28,14 @@
     (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is (= 2 (count (:objects snapshot))))
       (is (true? (:isEyebrow (second (:objects snapshot)))))
-      (is (some #(and (= "hair.requestRuntime" (:type %))
-                      (= "applyState" (:action %)))
-                @(:events events))))
+      (is (some #(and (= "hair.status" (:type %))
+                      (= "configured" (:status %)))
+                @(:events events)))
+      ;; Registration must not request a material apply — that would overwrite
+      ;; scene colors with agency defaults when a UI merely opens the hair tab.
+      (is (not-any? #(and (= "hair.requestRuntime" (:type %))
+                          (= "applyState" (:action %)))
+                    @(:events events))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
