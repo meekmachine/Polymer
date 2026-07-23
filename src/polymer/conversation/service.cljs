@@ -150,12 +150,9 @@
                             :event (data-map event)})
                 (js-call tts "stop")
                 (stop-speaking-behaviors!)
-                (set-state! "interrupted")
-                ;; Only surface a user-speech callback when we have text (transcript
-                ;; fallback). Audio barge-in should not emit an empty final utterance.
-                (let [text (str (or (:text (data-map event)) ""))]
-                  (when (pos? (count text))
-                    (js-call callbacks "onUserSpeech" text true true)))))
+                ;; Audio interruptions have no transcript to report. Transcript
+                ;; fallback is reported exactly once by transcript-handler.
+                (set-state! "interrupted")))
             (finish-agent-speech! []
               (clear-playback-unsub!)
               (reset! agent-speech-active? false)

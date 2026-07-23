@@ -283,6 +283,9 @@
           (fn []
             (is (some #(= "stop" (:op %)) @tts-calls))
             (is (some #(and (:interruption %) (= "stop please" (:text %))) @speech-events))
+            (is (= 1 (count (filter #(and (:interruption %)
+                                         (= "stop please" (:text %)))
+                                   @speech-events))))
             (.dispose ^js service)
             (done))
           50))
