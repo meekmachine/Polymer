@@ -7,7 +7,11 @@
                                           backend-url
                                           callback-event
                                           cleanup-audio!
+                                          clear-display-media-reference!
                                           custom-provider
+                                          dispose-playback-resources!
+                                          ensure-web-speech-display-media-reference!
+                                          get-playback-reference-track
                                           js-error
                                           load-azure-voices!
                                           load-web-speech-voices!
@@ -43,11 +47,18 @@
         resources (atom {:audio nil
                          :audioUrl nil
                          :audioSource nil
-                         :webSpeechHandle nil})
+                         :webSpeechHandle nil
+                         :audioContext nil
+                         :playbackReferenceDestination nil
+                         :mediaElementSource nil
+                         :playbackGain nil
+                         :displayMediaReferenceStream nil
+                         :displayMediaReferenceTrack nil})
         session-scheduler (scheduler/create-scheduler)
         azure-cache (atom {})
         voice-load-seq (atom 0)
         voice-load-requests (atom {})
+        playback-reference-listeners (atom #{})
         disposed? (atom false)]
     (letfn [(session-id []
                 ;; Every provider callback captures the session id active when
@@ -57,6 +68,18 @@
 
             (active-session? [id]
               (and (not @disposed?) (= id (session-id))))
+
+            (notify-playback-reference-track! []
+              ;; Host-facing handle for barge-in. Stream messages stay plain data;
+              ;; MediaStreamTrack is exposed only through this imperative API.
+              (let [track (get-playback-reference-track resources)]
+                (doseq [listener @playback-reference-listeners]
+                  (listener track))
+                (emit-event {:type "ttsPlaybackReferenceChanged"
+                             :agency "tts"
+                             :available (boolean track)
+                             :at (now-ms)})
+                track))
 
             (emit-status! []
                 ;; Status events are coarse facts, not animation ticks. The
@@ -219,6 +242,9 @@
                   ;; Prime synchronously while the click/user gesture is still
                   ;; available. Synthesis may finish later, but the element is
                   ;; already allowed to play in stricter browsers.
+                ;; Prime HTMLAudio for autoplay unlock only. Do not advertise the
+                ;; playback-reference track until real Azure audio is routed, or
+                ;; barge-in would arm against a silent muted unlock clip.
                 (prime-audio! resources volume)
                 (-> synth-promise
                     (.then (fn [raw]
@@ -261,6 +287,7 @@
                                               :name snippet-name
                                               :startedAt (:startedAt @state-atom)})
                                  (emit-status!)
+                                 (notify-playback-reference-track!)
                                  (when-let [clock (or (:clock playback)
                                                       (when (aget playback "clock")
                                                         (js->clj (aget playback "clock") :keywordize-keys true)))]
@@ -436,20 +463,46 @@
            :subscribe (fn [listener] ((:subscribe event-stream) listener))
            :subscribeStatus (fn [listener] ((:subscribe event-stream) listener))
            :subscribeCommands (fn [listener] ((:subscribe effect-stream) listener))
-           :configure (fn [next-config] (dispatch! #js {:type "configure" :config next-config}))
+           :configure (fn [next-config]
+                        (dispatch! #js {:type "configure" :config next-config})
+                        (when (= "none" (get-in @state-atom [:config :webSpeechReferenceMode]))
+                          (clear-display-media-reference! resources)
+                          (notify-playback-reference-track!)))
            :loadVoices (fn
                          ([] (dispatch! #js {:type "loadVoices"}))
                          ([engine] (dispatch! #js {:type "loadVoices" :engine engine})))
            :speak (fn [text] (dispatch! #js {:type "speak" :text text}))
            :stop (fn [] (dispatch! #js {:type "stop"}))
            :reset (fn [] (dispatch! #js {:type "reset"}))
+           :getPlaybackReferenceTrack (fn [] (get-playback-reference-track resources))
+           :onPlaybackReferenceTrackChange (fn [listener]
+                                             (swap! playback-reference-listeners conj listener)
+                                             (listener (get-playback-reference-track resources))
+                                             (fn []
+                                               (swap! playback-reference-listeners disj listener)))
+           :preparePlaybackReference (fn []
+                                       (let [config (:config @state-atom)]
+                                         (cond
+                                           (and (= "webSpeech" (:engine config))
+                                                (= "displayMedia" (:webSpeechReferenceMode config)))
+                                           (-> (ensure-web-speech-display-media-reference! resources)
+                                               (.then (fn [status]
+                                                        (notify-playback-reference-track!)
+                                                        status)))
+
+                                           (get-playback-reference-track resources)
+                                           (js/Promise.resolve "available")
+
+                                           :else
+                                           (js/Promise.resolve "unavailable"))))
            :dispose (fn []
                       (when-not @disposed?
                         (reset! disposed? true)
                         (cancel-voice-loads!)
                         ((:dispose session-scheduler))
                         (stop-web-speech!)
-                        (cleanup-audio! resources)
+                        (dispose-playback-resources! resources)
+                        (reset! playback-reference-listeners #{})
                         ((:dispose input-stream))
                         ((:dispose event-stream))
                         ((:dispose effect-stream))))})))
