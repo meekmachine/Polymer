@@ -73,5 +73,7 @@ scheduler responsibilities, stream routing, and side-effect placement.
 - Run `pnpm check:architecture` when adding or changing agency exports.
 - When a change to this repo (or any non-UI library repo, e.g. Polymer or
   Embody) requires a dependency pin bump in a UI-facing host repo (e.g.
-  LoomLarge / loomlarge_lol), always report both PR links together: the
-  library PR and the matching host pin PR. Never report only one of them.
+  LoomLarge / loomlarge_lol), create a matching host pin PR. The upstream
+  library PR description must link to that host PR, and the host PR description
+  must link back to the upstream library PR. Always report both links together;
+  never report only one of them.
