@@ -1,24 +1,20 @@
 (ns polymer.nlp.phonemes
-  (:require [polymer.nlp.double-metaphone :as metaphone]))
+  (:require [clj-fuzzy.metaphone :as metaphone-single]
+            [clj-fuzzy.porter :as porter]
+            [polymer.nlp.double-metaphone :as metaphone]))
 
-;; Standardized text → phoneme extraction for LipSync and Emphatic.
+;; Standardized text → phoneme / lexical analysis for LipSync and Emphatic.
 ;;
-;; Pipeline:
-;;   1. word → Double Metaphone primary code (standardized phonetic identity)
-;;   2. code chars → phoneme tokens
-;;   3. vocalic recovery when metaphone omits medial vowels (animation needs
-;;      a nucleus; metaphone is a matching code, not a full pronunciation)
-;;   4. adjacent metaphone vowels collapse to diphthong phonemes (OY/AY/…)
-;;   5. LipSync maps phonemes → canonical visemes
+;; LipSync pipeline:
+;;   word → Double Metaphone → phoneme tokens → (vocalic / diphthong) → visemes
 ;;
-;; Emphatic consumes the same phonetic analysis (code length / ambiguity) so
-;; stress planning is not a hardcoded English stop-word list.
+;; Emphatic also consumes stem (Porter) and single Metaphone so stress can use
+;; clj-fuzzy algorithms instead of English stop-word lists.
 
 (def metaphone-vowels #{"A" "E" "I" "O" "U"})
 
 (def diphthong-collapse
-  ;; Rewrite rules on standardized metaphone vowel tokens only — not grapheme
-  ;; letter tables.
+  ;; Rewrite rules on standardized metaphone vowel tokens only.
   [["O" "I" "OY"]
    ["A" "I" "AY"]
    ["A" "U" "AW"]
@@ -73,14 +69,11 @@
 (defn ensure-vocalic
   "Metaphone often drops non-initial vowels. LipSync still needs a vocalic
   nucleus, so splice a contiguous orthographic vowel block after the onset
-  consonant when the code has none. Keeping vowels contiguous preserves
-  diphthong pairs (OI→OY, AI→AY) for the later collapse step."
+  consonant when the code has none."
   [cleaned phonemes]
   (if (some metaphone-vowels phonemes)
     (vec phonemes)
     (let [vowels (orthographic-vowel-phones cleaned)
-          ;; Two-vowel nuclei cover English diphthong spellings; extra trailing
-          ;; silent/schwa letters (choice→oie) are ignored for mouth planning.
           nucleus (vec (take 2 vowels))]
       (cond
         (empty? nucleus) (vec phonemes)
@@ -88,8 +81,7 @@
         :else (into [] (concat [(first phonemes)] nucleus (rest phonemes)))))))
 
 (defn collapse-diphthongs
-  "Collapse adjacent metaphone vowels into ARPABET-compatible diphthong tokens
-  that the existing viseme diphthong planner already understands."
+  "Collapse adjacent metaphone vowels into ARPABET-compatible diphthong tokens."
   [phonemes]
   (loop [remaining (vec phonemes)
          out []]
@@ -110,8 +102,6 @@
   [word]
   (cond
     (numeric-token? word)
-    ;; Digits are spoken content for Emphatic; LipSync can treat each digit as
-    ;; a short open-mouth beat until provider timing exists.
     (vec (repeat (count (str word)) "A"))
 
     :else
@@ -126,7 +116,7 @@
           (if (seq phones) phones ["A"]))))))
 
 (defn word->phonetic
-  "Rich phonetic analysis for one word (shared by LipSync + Emphatic)."
+  "Rich phonetic + lexical analysis for one word (LipSync + Emphatic)."
   [word]
   (if (numeric-token? word)
     (let [digits (str word)]
@@ -134,6 +124,9 @@
        :cleaned digits
        :primary digits
        :secondary digits
+       :metaphone digits
+       :stem digits
+       :stemLength (count digits)
        :phonemes (word->phonemes digits)
        :codeLength (count digits)
        :ambiguous? false
@@ -144,11 +137,18 @@
                   (metaphone/double-metaphone cleaned))
           primary (or (:primary codes) "")
           secondary (or (:secondary codes) "")
+          stem (when (pos? (count cleaned))
+                 (or (porter/stem cleaned) cleaned))
+          single (when (pos? (count cleaned))
+                   (or (metaphone-single/process cleaned) ""))
           phonemes (word->phonemes cleaned)]
       {:word word
        :cleaned cleaned
        :primary primary
        :secondary secondary
+       :metaphone single
+       :stem (or stem "")
+       :stemLength (count (or stem ""))
        :phonemes phonemes
        :codeLength (count primary)
        :ambiguous? (and (pos? (count primary))

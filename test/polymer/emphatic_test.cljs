@@ -50,11 +50,15 @@
   (let [plan (domain/analyze-utterance "Absolutely not the answer!")]
     (is (true? (:exclamationEmphasis plan)))
     (is (seq (:emphasisWords plan)))
-    ;; Heavy metaphone code "APSLTL" should emphasize "absolutely".
+    ;; Heavy metaphone / Porter stem mass should emphasize "absolutely".
     (is (some #{0} (:emphasisWords plan)))
-    ;; Light code for "the" ("0") should usually not lead emphasis.
+    ;; Light code for "the" should not lead emphasis.
+    (let [the-idx (first (keep-indexed (fn [i w] (when (= "the" w) i)) (:words plan)))]
+      (is (some? the-idx))
+      (is (false? (domain/emphasis-index? plan the-idx))))
     (is (seq (:analyses plan)))
     (is (every? :primary (:analyses plan)))
+    (is (every? :stem (:analyses plan)))
     (is (seq (:browGestures plan)))))
 
 (deftest emphatic-domain-stresses-numeric-tokens

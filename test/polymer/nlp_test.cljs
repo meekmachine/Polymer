@@ -73,3 +73,10 @@
     (is (true? (:numeric? analysis)))
     (is (= 2 (:codeLength analysis)))
     (is (= ["A" "A"] (:phonemes analysis)))))
+
+(deftest word-analysis-includes-clj-fuzzy-stem-and-metaphone
+  (let [analysis (phonemes/word->phonetic "absolutely")]
+    (is (string? (:stem analysis)))
+    (is (pos? (:stemLength analysis)))
+    (is (string? (:metaphone analysis)))
+    (is (pos? (count (:metaphone analysis))))))
