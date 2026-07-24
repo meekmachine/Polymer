@@ -12,6 +12,7 @@
              :createEyeHeadTrackingService polymer.core/createEyeHeadTrackingService
              :createTranscriptionService polymer.core/createTranscriptionService
              :createConversationService polymer.core/createConversationService
+             :createConversationTTSService polymer.core/createConversationTTSService
              :HairService polymer.core/HairService
              :TranscriptionService polymer.core/TranscriptionService
              :ConversationService polymer.core/ConversationService

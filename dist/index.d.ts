@@ -2587,6 +2587,37 @@ export interface ConversationService {
   dispose(): void;
 }
 
+export type PlaybackReferenceStatus =
+  | 'unavailable'
+  | 'requesting'
+  | 'available'
+  | 'denied'
+  | 'failed'
+  | 'no-audio'
+  | 'ended';
+
+export type ConversationTTSCallbacks = {
+  onStart?: () => void;
+  onEnd?: () => void;
+  onBoundary?: (event: { word: string; charIndex: number }) => void;
+  onError?: (error: Error) => void;
+  onPlaybackReferenceStatusChange?: (status: PlaybackReferenceStatus) => void;
+};
+
+export interface ConversationTTSService {
+  getVoices(): TTSVoice[];
+  setVoice(voiceName: string): boolean;
+  speak(text: string): Promise<{ interrupted: boolean }>;
+  stop(): void;
+  updateConfig(config: Partial<TTSConfig>): void;
+  dispose(): void;
+  getPlaybackReferenceTrack(): MediaStreamTrack | null;
+  getPlaybackReferenceStatus(): PlaybackReferenceStatus;
+  preparePlaybackReference(): Promise<PlaybackReferenceStatus>;
+  onPlaybackReferenceTrackChange(listener: (track: MediaStreamTrack | null) => void): () => void;
+  onPlaybackStart(listener: () => void): () => void;
+}
+
 export declare class HairService {
   constructor(engine?: Embody | EmbodyRuntime | unknown);
   registerObjects(objects: unknown[]): void;
@@ -2623,6 +2654,7 @@ export function createAnimationService(engine: Embody | EmbodyRuntime): Animatio
 export function createEyeHeadTrackingService(config?: EyeHeadTrackingConfig, callbacks?: EyeHeadTrackingCallbacks): EyeHeadTrackingService;
 export function createTranscriptionService(config?: TranscriptionConfig, callbacks?: TranscriptionCallbacks): TranscriptionService;
 export function createConversationService(tts: { speak(text: string): Promise<unknown>; stop(): void }, transcription: TranscriptionService, config?: ConversationConfig, callbacks?: ConversationCallbacks): ConversationService;
+export function createConversationTTSService(agencies: CharacterAgencies, config?: TTSConfig, callbacks?: ConversationTTSCallbacks): ConversationTTSService;
 export const HAIR_COLOR_PRESETS: Record<string, HairColor>;
 export const DEFAULT_HAIR_PHYSICS_CONFIG: HairPhysicsRuntimeConfig;
 export const DEFAULT_HAIR_PHYSICS_ENABLED: boolean;
