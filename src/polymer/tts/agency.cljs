@@ -104,7 +104,11 @@
                 (emit-lipsync! {:type "configure"
                                 :config {:intensity (:lipsyncIntensity config)
                                          :jawScale (:jawScale config)
+                                         :lipScale (:lipScale config)
+                                         :articulationScale (:articulationScale config)
                                          :tongueScale (:tongueScale config)
+                                         :speechStyle (:speechStyle config)
+                                         :emotionIntensity (:emotionIntensity config)
                                          :speechRate (or (:rate command) (:rate config))
                                          :visualLeadMs (or (:visualLeadMs command) (:visualLeadMs config))
                                          :wordDriftThresholdSec (if (= engine "azure")

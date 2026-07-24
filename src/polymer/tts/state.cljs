@@ -40,7 +40,11 @@
    :visualLeadMs 35
    :lipsyncIntensity 1
    :jawScale 1
+   :lipScale 1
+   :articulationScale 1
    :tongueScale 1
+   :speechStyle "conversational"
+   :emotionIntensity 1
    ;; Web Speech does not expose provider viseme timings. Polymer builds an
    ;; utterance-level fallback timeline from text, then receives coarse browser
    ;; word-boundary callbacks. A tight correction threshold makes that fallback
@@ -69,7 +73,11 @@
      :visualLeadMs (clamp 0 250 (:visualLeadMs input) (:visualLeadMs default-config))
      :lipsyncIntensity (clamp 0 2 (:lipsyncIntensity input) (:lipsyncIntensity default-config))
      :jawScale (clamp 0 2 (:jawScale input) (:jawScale default-config))
+     :lipScale (clamp 0 2 (:lipScale input) (:lipScale default-config))
+     :articulationScale (clamp 0 2 (:articulationScale input) (:articulationScale default-config))
      :tongueScale (clamp 0 2 (:tongueScale input) (:tongueScale default-config))
+     :speechStyle (string-or (:speechStyle input) (:speechStyle default-config))
+     :emotionIntensity (clamp 0.5 1.6 (:emotionIntensity input) (:emotionIntensity default-config))
      :webSpeechDriftThresholdSec (clamp 0 1 (:webSpeechDriftThresholdSec input) (:webSpeechDriftThresholdSec default-config))
      :azureDriftThresholdSec (clamp 0 1 (:azureDriftThresholdSec input) (:azureDriftThresholdSec default-config))
      :azureCacheLimit (int (clamp 0 64 (:azureCacheLimit input) (:azureCacheLimit default-config)))

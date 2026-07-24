@@ -87,9 +87,12 @@
       (contains? #{"P" "B"} normalized) ["bilabial" "obstruent"]
       (= "M" normalized) ["bilabial" "nasal"]
       (contains? #{"F" "V"} normalized) ["labiodental" "fricative"]
-      (contains? #{"S" "Z" "SH" "ZH"} normalized) ["sibilant" "fricative"]
+      ;; Only alveolar S/Z are narrow sibilants. SH/ZH share the Ch_J morph and
+      ;; must not inherit the weak :sibilant envelope (peak 0.52) or Web Speech
+      ;; "sh/ch" looks half as open as Azure id 16.
+      (contains? #{"S" "Z"} normalized) ["sibilant" "fricative"]
       (contains? #{"TH" "DH"} normalized) ["dental" "fricative"]
-      (contains? #{"T" "D" "K" "G" "CH" "JH"} normalized) ["obstruent" "tongue"]
+      (contains? #{"T" "D" "K" "G" "CH" "JH" "SH" "ZH"} normalized) ["obstruent" "tongue"]
       (contains? #{"N" "NG"} normalized) ["nasal" "tongue"]
       (contains? #{"L"} normalized) ["liquid" "tongue"]
       (contains? #{"R"} normalized) ["liquid"]
@@ -104,18 +107,22 @@
   (let [normalized (normalize-phoneme phoneme)]
     (cond
       (contains? #{"P" "B" "M"} normalized) 0
-      (contains? #{"F" "V" "S" "Z" "SH" "ZH" "TH" "DH"} normalized) 0.06
-      (contains? #{"T" "D" "N" "L" "K" "G" "NG" "CH" "JH"} normalized) 0.16
+      (contains? #{"F" "V" "S" "Z" "TH" "DH"} normalized) 0.06
+      (contains? #{"T" "D" "N" "L" "K" "G" "NG" "CH" "JH" "SH" "ZH"} normalized) 0.16
       (contains? #{"H" "HH" "Y" "W" "R"} normalized) 0.18
       :else (jaw-activation-for-viseme viseme-id))))
 
 (def phoneme->viseme
+  ;; Align with Embody CC4_VISEME_SLOTS phoneme lists so Web Speech text
+  ;; planning hits the same morphs Azure/provider IDs resolve to.
   {"sil" (:B_M_P canonical-visemes)
    "pau" (:B_M_P canonical-visemes)
    "PAUSE" (:B_M_P canonical-visemes)
    "A" (:Ah canonical-visemes)
-   "E" (:EE canonical-visemes)
-   "I" (:Ih canonical-visemes)
+   "E" (:AE canonical-visemes)
+   ;; Bare "I" must match IH/IX → EE (Embody first-hit). Leaving it on Ih made
+   ;; any legacy "I" event diverge from the live Web Speech IH path.
+   "I" (:EE canonical-visemes)
    "O" (:Oh canonical-visemes)
    "U" (:W_OO canonical-visemes)
    "0" (:Th canonical-visemes)
@@ -126,14 +133,18 @@
    "AH" (:Ah canonical-visemes)
    "AA" (:Ah canonical-visemes)
    "AO" (:Oh canonical-visemes)
-   "EY" (:EE canonical-visemes)
-   "EH" (:EE canonical-visemes)
-   "UH" (:W_OO canonical-visemes)
+   ;; EH/EY/UH live on the AE slot in CC4 (not EE / W_OO).
+   "EY" (:AE canonical-visemes)
+   "EH" (:AE canonical-visemes)
+   "UH" (:AE canonical-visemes)
    "ER" (:Er canonical-visemes)
-   "Y" (:Ih canonical-visemes)
+   ;; Y/IY/IH/IX → EE to match Embody CC4 first-hit (EE lists IH/IX/Y before
+   ;; the Ih slot). Azure id 6 also resolves to EE; keeping Web Speech on Ih
+   ;; made short-i mouths diverge by provider.
+   "Y" (:EE canonical-visemes)
    "IY" (:EE canonical-visemes)
-   "IH" (:Ih canonical-visemes)
-   "IX" (:Ih canonical-visemes)
+   "IH" (:EE canonical-visemes)
+   "IX" (:EE canonical-visemes)
    "W" (:W_OO canonical-visemes)
    "UW" (:W_OO canonical-visemes)
    "OW" (:Oh canonical-visemes)
@@ -146,10 +157,11 @@
    "L" (:T_L_D_N canonical-visemes)
    "S" (:S_Z canonical-visemes)
    "Z" (:S_Z canonical-visemes)
-   "SH" (:S_Z canonical-visemes)
+   ;; SH/ZH are postalveolar → Ch_J in CC4, not the S_Z morph.
+   "SH" (:Ch_J canonical-visemes)
    "CH" (:Ch_J canonical-visemes)
    "JH" (:Ch_J canonical-visemes)
-   "ZH" (:S_Z canonical-visemes)
+   "ZH" (:Ch_J canonical-visemes)
    "TH" (:Th canonical-visemes)
    "DH" (:Th canonical-visemes)
    "F" (:F_V canonical-visemes)
@@ -164,46 +176,47 @@
    "B" (:B_M_P canonical-visemes)
    "M" (:B_M_P canonical-visemes)})
 
+;; Text-plan durations are at speechRate 1 (ms). Speech-rate scaling is the only
+;; adjuster — do not multiply by a second hidden scale factor.
 (def phoneme-durations
-  {"A" 50 "E" 45 "I" 40 "O" 55 "U" 50
-   "0" 35 "X" 45 "J" 40
-   "P" 25 "B" 25 "T" 20 "D" 20 "K" 30 "G" 30
-   "F" 35 "V" 35 "S" 40 "Z" 40 "SH" 45 "ZH" 45
-   "TH" 35 "DH" 35 "H" 30 "HH" 30
-   "CH" 40 "JH" 40
-   "M" 35 "N" 35 "NG" 40
-   "L" 40 "R" 40
-   "W" 35 "Y" 30
-   "IY" 50 "EY" 60 "UW" 50 "OW" 60 "AO" 55
-   "IH" 40 "EH" 45 "UH" 45 "AH" 45 "AX" 35
-   "AY" 65 "AW" 65 "OY" 70
-   "ER" 50 "AA" 55 "AE" 55
-   "IX" 30})
+  {"A" 100 "E" 90 "I" 80 "O" 110 "U" 100
+   "0" 70 "X" 90 "J" 80
+   "P" 50 "B" 50 "T" 40 "D" 40 "K" 60 "G" 60
+   "F" 70 "V" 70 "S" 80 "Z" 80 "SH" 90 "ZH" 90
+   "TH" 70 "DH" 70 "H" 60 "HH" 60
+   "CH" 80 "JH" 80
+   "M" 70 "N" 70 "NG" 80
+   "L" 80 "R" 80
+   "W" 70 "Y" 60
+   "IY" 100 "EY" 120 "UW" 100 "OW" 120 "AO" 110
+   "IH" 80 "EH" 90 "UH" 90 "AH" 90 "AX" 70
+   "AY" 130 "AW" 130 "OY" 140
+   "ER" 100 "AA" 110 "AE" 110
+   "IX" 60})
 
-(def fallback-text-duration-scale 2)
-
-(def web-speech-word-floor-ms 360)
-(def web-speech-char-floor-ms 65)
+(def default-vowel-duration-ms 100)
+(def default-consonant-duration-ms 70)
 
 (def pause-durations
   {"PAUSE_SPACE" 0
-   "PAUSE_COMMA" 50
-   "PAUSE_PERIOD" 100
-   "PAUSE_QUESTION" 100
-   "PAUSE_EXCLAMATION" 100
-   "PAUSE_SEMICOLON" 75
-   "PAUSE_COLON" 75})
+   "PAUSE_COMMA" 100
+   "PAUSE_PERIOD" 200
+   "PAUSE_QUESTION" 200
+   "PAUSE_EXCLAMATION" 200
+   "PAUSE_SEMICOLON" 150
+   "PAUSE_COLON" 150})
 
 (def diphthong-targets
   {;; Web Speech fallback starts from text, so it does not get provider
    ;; phoneme timing. Treat English diphthongs as internal lip travel inside
-   ;; one vocalic jaw gesture: the lips move through two targets, but AU26
-   ;; should stay on the same jaw arc instead of flapping twice.
+   ;; one vocalic jaw gesture: the lips move through two targets on a single
+   ;; jaw arc instead of flapping twice.
    "EY" [(:AE canonical-visemes) (:EE canonical-visemes)]
    "OW" [(:Oh canonical-visemes) (:W_OO canonical-visemes)]
    "AW" [(:Ah canonical-visemes) (:W_OO canonical-visemes)]
    "OY" [(:Oh canonical-visemes) (:EE canonical-visemes)]
-   "AY" [(:Ah canonical-visemes) (:Ih canonical-visemes)]})
+   ;; Offglide is high-front → EE (Ih is almost never driven under CC4 first-hit).
+   "AY" [(:Ah canonical-visemes) (:EE canonical-visemes)]})
 
 (def diphthong-min-duration-ms 80)
 (def diphthong-secondary-min-ms 36)
@@ -231,18 +244,23 @@
   (let [letter (subs remaining 0 1)
         next-letter (when (> (count remaining) 1) (subs remaining 1 2))
         at-end? (= 1 (count remaining))]
+    ;; Map single letters onto distinct mouth families. Do not collapse o/u into
+    ;; Ah (AA/AH) — that makes Web Speech text planning look like one open
+    ;; vowel for almost every round vowel letter.
     (case letter
       "a" ["AE"]
       "e" ["EH"]
       "i" ["IH"]
-      "o" ["AA"]
-      "u" ["AH"]
+      "o" ["OW"]
+      "u" ["UW"]
       "y" (if at-end? ["IY"] ["Y"])
       "b" ["B"]
       "c" (if (#{"e" "i"} next-letter) ["S"] ["K"])
       "d" ["D"]
       "f" ["F"]
-      "g" (if (#{"e" "i"} next-letter) ["JH"] ["G"])
+      ;; Default hard G. Soft-g before e/i ("get"→JH) was wrong far more often
+      ;; than it helped for this lightweight grapheme planner.
+      "g" ["G"]
       "h" ["HH"]
       "j" ["JH"]
       "k" ["K"]
@@ -259,8 +277,20 @@
       "z" ["Z"]
       [])))
 
+(defn strip-silent-final-e [letters]
+  ;; English magic-e: ...Vowel...Consonant e → drop the final e so "five"/"make"
+  ;; do not emit a trailing EH→AE mouth beat after the coda.
+  (if (and (>= (count letters) 4)
+           (= (subs letters (dec (count letters))) "e")
+           (re-matches #".*[aeiouy].*[bcdfghjklmnpqrstvwxyz]e" letters))
+    (subs letters 0 (dec (count letters)))
+    letters))
+
 (defn word->phonemes [word]
-  (loop [remaining (-> (or word "") str/lower-case (str/replace #"[^a-z]" ""))
+  (loop [remaining (-> (or word "")
+                       str/lower-case
+                       (str/replace #"[^a-z]" "")
+                       strip-silent-final-e)
          phonemes []]
     (if (zero? (count remaining))
       phonemes
@@ -308,7 +338,9 @@
     (let [normalized (normalize-phoneme phoneme)
           viseme-id (get phoneme->viseme normalized (:B_M_P canonical-visemes))
           classes (phoneme-classes normalized viseme-id)
-          fallback-duration (if (vowel? normalized) 50 35)]
+          fallback-duration (if (vowel? normalized)
+                              default-vowel-duration-ms
+                              default-consonant-duration-ms)]
       {:phoneme normalized
        :phonemeClass (primary-class classes)
        :phonemeClasses classes
@@ -364,7 +396,7 @@
      :durationMs (:durationMs segment)}))
 
 (defn adjust-duration [duration speech-rate]
-  (js/Math.round (/ (* duration fallback-text-duration-scale)
+  (js/Math.round (/ duration
                     (state/clamp 0.2 3 (state/number-or speech-rate 1)))))
 
 (defn phonemes->visemes
@@ -433,17 +465,23 @@
 
   Browser Web Speech does not expose provider viseme timing or total audio
   duration. Short function words are especially under-estimated by pure phoneme
-  sums, so use a conservative word/character floor and keep the longer of that
-  floor and the phoneme-derived timeline. Boundary events can still correct
-  drift later, but they should not immediately clamp a too-short phrase snippet
-  to its end."
-  [text speech-rate base-duration-ms]
-  (let [rate (state/clamp 0.2 3 (state/number-or speech-rate 1))
-        words (word-tokens text)
-        word-floor (/ (* (count words) web-speech-word-floor-ms) rate)
-        char-floor (/ (* (word-char-count words) web-speech-char-floor-ms) rate)
-        floor-ms (max word-floor char-floor)]
-    (js/Math.round (max base-duration-ms floor-ms))))
+  sums, so use config floors (textPlanWordFloorMs / textPlanCharFloorMs) and keep
+  the longer of that floor and the phoneme-derived timeline. Boundary events can
+  still correct drift later, but they should not immediately clamp a too-short
+  phrase snippet to its end."
+  ([text speech-rate base-duration-ms]
+   (web-speech-duration-ms text speech-rate base-duration-ms nil))
+  ([text speech-rate base-duration-ms timing]
+   (let [rate (state/clamp 0.2 3 (state/number-or speech-rate 1))
+         words (word-tokens text)
+         word-floor-ms (state/number-or (:textPlanWordFloorMs timing)
+                                        (:textPlanWordFloorMs state/default-config))
+         char-floor-ms (state/number-or (:textPlanCharFloorMs timing)
+                                        (:textPlanCharFloorMs state/default-config))
+         word-floor (/ (* (count words) word-floor-ms) rate)
+         char-floor (/ (* (word-char-count words) char-floor-ms) rate)
+         floor-ms (max word-floor char-floor)]
+     (js/Math.round (max base-duration-ms floor-ms)))))
 
 (defn text->word-timings
   "Estimate word timing from the same deterministic text planner used for

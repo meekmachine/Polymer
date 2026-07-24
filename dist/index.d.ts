@@ -712,13 +712,32 @@ export interface LipSyncConfig {
   intensity?: number;
   speechRate?: number;
   jawScale?: number;
+  /**
+   * Independent lip-action scale (JALI LI). Separated from jawScale so mumbled
+   * vs emphasized speech can change mouth shape amplitude without forcing jaw.
+   */
+  lipScale?: number;
+  /** Overall articulation gain applied with lipScale for style/modulation. */
+  articulationScale?: number;
   /** Scale for independently planned tongue AU curves. Set 0 to disable tongue motion. */
   tongueScale?: number;
+  /**
+   * High-level JALI-style articulation preset: mumbled | relaxed |
+   * conversational | emphasized | shouted. Multiplies jaw/lip gains.
+   */
+  speechStyle?: 'mumbled' | 'relaxed' | 'conversational' | 'emphasized' | 'shouted' | string;
+  /** Soft emotion intensity gain for mouth articulation (0.5-1.6). */
+  emotionIntensity?: number;
   rampMs?: number;
   holdMs?: number;
   priority?: number;
   visualLeadMs?: number;
+  /** Default matches TTS webSpeechDriftThresholdSec (0.35). Azure overrides via TTS. */
   wordDriftThresholdSec?: number;
+  /** Web Speech text-plan floor: ms per word at speechRate 1. */
+  textPlanWordFloorMs?: number;
+  /** Web Speech text-plan floor: ms per alphabetic character at speechRate 1. */
+  textPlanCharFloorMs?: number;
 }
 
 export interface LipSyncVisemeEvent {
@@ -740,6 +759,24 @@ export interface LipSyncVisemeEvent {
    * M being both bilabial and nasal or F being labiodental and fricative.
    */
   phonemeClasses?: string[];
+  /** Optional stress / word prominence (≈0.55-1.55). */
+  stress?: number;
+  wordProminence?: number;
+  prominence?: number;
+  /** Optional broadband audio energy for JA/LI modulation. */
+  energy?: number;
+  audioEnergy?: number;
+  audioIntensity?: number;
+  /** Optional high-frequency energy for fricative/plosive lip power. */
+  highFreqEnergy?: number;
+  hfEnergy?: number;
+  /** Optional pitch (Hz) soft emphasis cue. */
+  pitch?: number;
+  f0?: number;
+  /** Optional per-event emotion intensity. */
+  emotionIntensity?: number;
+  /** Optional provider confidence (0-1); reserved for future gating. */
+  confidence?: number;
   offsetMs: number;
   durationMs: number;
 }
@@ -845,8 +882,13 @@ export interface TTSConfig {
   visualLeadMs?: number;
   lipsyncIntensity?: number;
   jawScale?: number;
+  /** Independent lip-action scale forwarded into LipSync before each session. */
+  lipScale?: number;
+  articulationScale?: number;
   /** Scale for LipSync tongue AU planning forwarded by TTS before each speech session. */
   tongueScale?: number;
+  speechStyle?: 'mumbled' | 'relaxed' | 'conversational' | 'emphasized' | 'shouted' | string;
+  emotionIntensity?: number;
   webSpeechDriftThresholdSec?: number;
   azureDriftThresholdSec?: number;
   azureCacheLimit?: number;

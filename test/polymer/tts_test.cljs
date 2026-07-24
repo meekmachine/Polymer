@@ -185,6 +185,9 @@
 
 (deftest tts-agency-owns-web-speech-session-and-emits-lipsync-facts
   (let [agency (polymer/createTTSAgency #js {:tongueScale 1.35
+                                             :lipScale 0.85
+                                             :articulationScale 1.1
+                                             :speechStyle "emphasized"
                                              :providers #js {:webSpeechSpeak (fake-web-speech-provider)}})
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "speak"
@@ -201,6 +204,9 @@
              (map :type commands)))
       (is (= ["ttsSessionStarted"] (map :type queue)))
       (is (= 1.35 (get-in (first commands) [:config :tongueScale])))
+      (is (= 0.85 (get-in (first commands) [:config :lipScale])))
+      (is (= 1.1 (get-in (first commands) [:config :articulationScale])))
+      (is (= "emphasized" (get-in (first commands) [:config :speechStyle])))
       (is (= 0.35 (get-in (first commands) [:config :wordDriftThresholdSec])))
       (is (= "speaking" (:status snapshot)))
       (is (:speaking snapshot))
@@ -328,9 +334,8 @@
       (is (some #(and (= "viseme" (get-in % [:target :type]))
                       (= 1 (get-in % [:target :id])))
                 (:channels first-call)))
-      (is (some #(and (= "bone" (get-in % [:target :type]))
-                      (= "JAW" (get-in % [:target :id]))
-                      (= "rz" (get-in % [:target :channel])))
+      (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                      (= 103 (get-in % [:target :id])))
                 (:channels first-call)))
       (is (not (contains? (:options first-call) :snippetCategory)))
       (is (false? (get-in first-call [:options :autoVisemeJaw]))))

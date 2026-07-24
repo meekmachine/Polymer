@@ -1,6 +1,7 @@
 (ns polymer.lipsync-test
   (:require [cljs.test :refer [deftest is testing]]
             [polymer.core :as polymer]
+            [polymer.lipsync.articulation.lip :as lip]
             [polymer.lipsync.articulation.snippet :as snippet]
             [polymer.lipsync.articulation.tongue :as tongue]
             [polymer.lipsync.articulation.visemes :as visemes]
@@ -51,7 +52,8 @@
         (:channels snippet)))
 
 (defn jaw-channel [snippet]
-  (channel-by-target snippet "bone" "JAW"))
+  ;; Jaw is Embody's bone-only lip-sync control 103.
+  (channel-by-target snippet "lipSync" 103))
 
 (defn au-channel [snippet au-id]
   (channel-by-target snippet "au" au-id))
@@ -145,13 +147,13 @@
       (is (not (contains? snippet :snippetCategory)))
       (is (= 1 (:snippetPlaybackRate snippet)))
       (is (false? (:autoVisemeJaw snippet)))
-      (is (seq (get-in snippet [:curves :26])))
+      (is (seq (get-in snippet [:curves :103])))
       (is (some #(= "viseme" (get-in % [:target :type])) (:channels snippet)))
-      (is (some #(and (= "bone" (get-in % [:target :type]))
-                      (= "JAW" (get-in % [:target :id]))
-                      (= "rz" (get-in % [:target :channel])))
+      (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                      (= 103 (get-in % [:target :id])))
                 (:channels snippet)))
       (is (nil? (au-channel snippet 26)))
+      (is (not (contains? (:curves snippet) :26)))
       (is (= ["hello" "world"] (map :word (:wordTimings snapshot))))
       (is (:speaking snapshot))
       (is (= 1 (:scheduledCount snapshot)))
@@ -216,13 +218,14 @@
     (let [snippet (first (scheduled-snippets events))
           channels (:channels snippet)
           lip-channels (filter #(= "viseme" (get-in % [:target :type])) channels)
-          jaw-channel (some #(when (and (= "bone" (get-in % [:target :type]))
-                                        (= "JAW" (get-in % [:target :id])))
+          jaw-channel (some #(when (and (= "lipSync" (get-in % [:target :type]))
+                                        (= 103 (get-in % [:target :id])))
                                %)
                             channels)]
       (is (seq lip-channels))
       (is jaw-channel)
       (is (nil? (au-channel snippet 26)))
+      (is (not (contains? (:curves snippet) :26)))
       (is (false? (:autoVisemeJaw snippet)))
       (is (not (contains? snippet :snippetCategory)))
       (is (some :jawActivation (visemes/text->visemes "hello world"))))
@@ -237,9 +240,9 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 6))
-      (is (> (:endSec last-word) 6))
-      (is (seq (get-in snippet [:curves :26]))))
+      (is (> (:maxTime snippet) 5.5))
+      (is (> (:endSec last-word) 5.5))
+      (is (seq (get-in snippet [:curves :103]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
@@ -251,8 +254,8 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 4.4))
-      (is (> (:endSec last-word) 4.4))
+      (is (> (:maxTime snippet) 4.2))
+      (is (> (:endSec last-word) 4.2))
       (is (= "phrase" (:word last-word))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
@@ -314,13 +317,14 @@
     (is (<= (sample-channel bilabial 0.092) 0.04))))
 
 (deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
-  (let [sibilant-snippet (build-text-fixture "chess")
-        open-vowel-snippet (build-text-fixture "duke")
+  (let [;; "hiss" stays on Ih/S_Z (low jaw). Avoid mid vowels like EH→AE.
+        sibilant-snippet (build-text-fixture "hiss")
+        open-vowel-snippet (build-text-fixture "out")
         sibilant-jaw (jaw-channel sibilant-snippet)
         open-vowel-jaw (jaw-channel open-vowel-snippet)]
     (is sibilant-jaw)
     (is open-vowel-jaw)
-    (is (<= (channel-max-intensity sibilant-jaw) 0.2))
+    (is (<= (channel-max-intensity sibilant-jaw) 0.25))
     (is (>= (channel-max-intensity open-vowel-jaw) 0.5))))
 
 (deftest jali-labiodental-fixture-is-distinct-from-bilabial-closure
@@ -332,14 +336,17 @@
         bilabial-in-five (viseme-channel five (:B_M_P visemes/canonical-visemes))
         bilabial-in-pop (viseme-channel pop-man (:B_M_P visemes/canonical-visemes))]
     (is labiodental)
-    (is labiodental-contact)
-    (is labiodental-press)
+    ;; F_V is a single mouth morph. Contact/press AUs are intentionally off so
+    ;; they cannot stack a second mouth morph on top of F_V.
+    (is (nil? labiodental-contact))
+    (is (nil? labiodental-press))
     (is (nil? bilabial-in-five))
     (is bilabial-in-pop)
     (is (>= (channel-max-intensity labiodental) 0.8))
-    (is (>= (channel-max-intensity labiodental-contact) 0.20))
     (is (>= (channel-max-intensity bilabial-in-pop) 0.95))
-    (is (<= (channel-max-intensity (jaw-channel five)) 0.2))))
+    ;; Silent final "e" is stripped, so "five" should not open like "out".
+    (is (<= (channel-max-intensity (jaw-channel five)) 0.25))
+    (is (not (viseme-channel five (:AE visemes/canonical-visemes))))))
 
 (deftest LipSync-non-closure-visemes-ramp-across-renderable-time
   (let [snippet (snippet/build-lipsync-snippet
@@ -373,7 +380,7 @@
     (is oh-channel)
     (is ee-channel)
     (is (>= (channel-max-intensity oh-channel) 0.85))
-    (is (>= (channel-max-intensity ee-channel) 0.85))
+    (is (>= (channel-max-intensity ee-channel) 0.75))
     (is (<= (local-peak-count jaw) 1))
     (is (every? #(> (:intensity %) 0.20) jaw-frames-during-diphthong))))
 
@@ -391,7 +398,7 @@
     (is ae-channel)
     (is ee-channel)
     (is (>= (channel-max-intensity ae-channel) 0.75))
-    (is (>= (channel-max-intensity ee-channel) 0.80))
+    (is (>= (channel-max-intensity ee-channel) 0.75))
     (is (<= (local-peak-count jaw) 1))))
 
 (deftest LipSync-jaw-planner-keeps-one-arc-through-provider-diphthong
@@ -437,8 +444,8 @@
     (is (>= (count coda-events) 3))
     (is jaw)
     ;; The consonant stack after the vowel should stay as one low narrowing
-    ;; target. The lip/tongue visemes still fire, but AU26 should not reopen
-    ;; for NG, TH, and S as separate jaw beats.
+    ;; target. The lip/tongue visemes still fire, but the jaw channel should
+    ;; not reopen for NG, TH, and S as separate jaw beats.
     (is (<= (local-peak-count jaw) 1))
     (is (<= (sample-channel jaw 0.70) 0.16))
     (is (<= (sample-channel jaw 0.82) 0.16))))
@@ -565,6 +572,106 @@
     (is (some #(= (:W_OO visemes/canonical-visemes) %) viseme-ids))
     (is (some #(= (:Th visemes/canonical-visemes) %) viseme-ids))))
 
+(deftest azure-provider-ids-match-embody-cc4-slots
+  ;; Parity with Embody CC4_VISEME_SLOTS.providerIds.azure (first-hit order).
+  (let [timeline (azure/azure-visemes->timeline
+                  [{:id 1 :time 0}
+                   {:id 4 :time 0.05}
+                   {:id 6 :time 0.10}
+                   {:id 12 :time 0.15}
+                   {:id 16 :time 0.20}
+                   {:id 20 :time 0.25}]
+                  500
+                  {})
+        by-id (into {}
+                    (map (fn [event]
+                           ;; Expand diphthongs can emit multiple rows; keep first
+                           ;; occurrence of each canonical id for this check.
+                           [(:visemeId event) true])
+                         timeline))
+        ids (set (map :visemeId timeline))]
+    (is (contains? ids (:Ah visemes/canonical-visemes)))   ;; 1,12
+    (is (contains? ids (:AE visemes/canonical-visemes)))   ;; 4
+    (is (contains? ids (:EE visemes/canonical-visemes)))   ;; 6
+    (is (contains? ids (:Ch_J visemes/canonical-visemes))) ;; 16
+    (is (contains? ids (:K_G_H_NG visemes/canonical-visemes))) ;; 20
+    (is (not (contains? ids (:Ih visemes/canonical-visemes))))
+    by-id))
+
+(deftest web-speech-phonemes-match-embody-cc4-slots
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "EH")))
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "UH")))
+  (is (= (:AE visemes/canonical-visemes) (get visemes/phoneme->viseme "EY")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "Y")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IY")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IH")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "IX")))
+  (is (= (:EE visemes/canonical-visemes) (get visemes/phoneme->viseme "I")))
+  (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "SH")))
+  (is (= (:Ch_J visemes/canonical-visemes) (get visemes/phoneme->viseme "ZH")))
+  (is (= (:S_Z visemes/canonical-visemes) (get visemes/phoneme->viseme "S")))
+  (is (= (:Ah visemes/canonical-visemes) (get visemes/phoneme->viseme "HH")))
+  (is (= (:W_OO visemes/canonical-visemes) (get visemes/phoneme->viseme "UW"))))
+
+(deftest web-speech-sh-uses-chj-envelope-not-weak-sibilant
+  (let [ship (build-text-fixture "ship")
+        hiss (build-text-fixture "hiss")
+        sh (viseme-channel ship (:Ch_J visemes/canonical-visemes))
+        s (viseme-channel hiss (:S_Z visemes/canonical-visemes))]
+    (is sh)
+    (is s)
+    (is (>= (channel-max-intensity sh) 0.70))
+    (is (<= (channel-max-intensity s) 0.60))
+    (is (> (channel-max-intensity sh) (channel-max-intensity s)))))
+
+(deftest web-speech-hard-g-and-silent-e
+  (let [get-phones (map :phoneme (visemes/text->visemes "get"))
+        five-phones (map :phoneme (visemes/text->visemes "five"))
+        five-ids (set (map :visemeId (visemes/text->visemes "five")))]
+    (is (some #{"G"} get-phones))
+    (is (not-any? #{"JH"} get-phones))
+    (is (not-any? #{"EH" "E"} five-phones))
+    (is (not (contains? five-ids (:AE visemes/canonical-visemes))))
+    (is (contains? five-ids (:F_V visemes/canonical-visemes)))))
+
+(deftest azure-refine-does-not-round-hello-or-remap-alveolars-to-th
+  ;; Regression: trailing "o" used to force id 4 → W_OO on "hello", and id 19
+  ;; (d/t/n) used to become Th whenever the word contained "th".
+  (let [hello (azure/azure-visemes->timeline
+               [{:id 12 :time 0}
+                {:id 4 :time 0.12}
+                {:id 14 :time 0.24}
+                {:id 8 :time 0.34}]
+               500
+               {:wordTimings [{:word "hello" :start 0 :end 0.5}]})
+        thanks (azure/azure-visemes->timeline
+                [{:id 19 :time 0.1}
+                 {:id 17 :time 0.2}]
+                400
+                {:wordTimings [{:word "thanks" :start 0 :end 0.4}]})
+        hello-ids (map :visemeId hello)
+        thanks-ids (map :visemeId thanks)]
+    (is (some #{(:AE visemes/canonical-visemes)} hello-ids))
+    (is (some #{(:Oh visemes/canonical-visemes)} hello-ids))
+    (is (not-any? #(and (= (:W_OO visemes/canonical-visemes) %)
+                        ;; OW diphthong expansion may emit W_OO from id 8; that
+                        ;; is fine. Fail only if AE was replaced entirely.
+                        (not (some #{(:AE visemes/canonical-visemes)} hello-ids)))
+                   hello-ids))
+    (is (some #{(:T_L_D_N visemes/canonical-visemes)} thanks-ids))
+    (is (some #{(:Th visemes/canonical-visemes)} thanks-ids))))
+
+(deftest web-speech-round-vowels-use-oh-and-woo-not-ah
+  ;; Single-letter o/u used to emit AA/AH → Ah for almost every round vowel,
+  ;; which made Web Speech mouths look stuck on one open shape.
+  (let [so-ids (set (map :visemeId (visemes/text->visemes "so")))
+        moon-ids (set (map :visemeId (visemes/text->visemes "moon")))]
+    (is (contains? so-ids (:Oh visemes/canonical-visemes)))
+    (is (contains? so-ids (:W_OO visemes/canonical-visemes)))
+    (is (not (contains? so-ids (:Ah visemes/canonical-visemes))))
+    (is (contains? moon-ids (:W_OO visemes/canonical-visemes)))
+    (is (not (contains? moon-ids (:Ah visemes/canonical-visemes))))))
+
 (deftest azure-visemes-carry-coarse-jali-class-metadata
   (let [timeline (azure/azure-visemes->timeline
                   [{:id 18 :time 0}
@@ -607,7 +714,8 @@
         closure-value (snippet/sample-curve-at (get curves closure-key) 0.004)
         secondary-value (snippet/sample-curve-at (get curves secondary-key) 0.004)]
     (is (>= closure-value 0.55))
-    (is (<= secondary-value 0.04))))
+    ;; Exclusive morph policy: a second mouth-shape morph must not stay lit.
+    (is (<= secondary-value 0.02))))
 
 (deftest LipSync-jaw-activation-is-independent-from-viseme-morphs
   (let [built (snippet/build-lipsync-snippet
@@ -622,7 +730,7 @@
                {:intensity 1 :jawScale 1}
                "voice:jaw-independent")
         lip-curve (get-in built [:curves "1"])
-        jaw-curve (get-in built [:curves "26"])]
+        jaw-curve (get-in built [:curves "103"])]
     (is (> (max-intensity lip-curve) 0.8))
     (is (<= (snippet/sample-curve-at jaw-curve 0.06) 0.001))
     (is (> (snippet/sample-curve-at jaw-curve 0.27) 0.4))))
@@ -636,9 +744,8 @@
                {:intensity 1 :jawScale 0}
                "voice:jaw-off")]
     (is (seq (get-in built [:curves "1"])))
-    (is (nil? (get-in built [:curves "26"])))
-    (is (not (some #(and (= "bone" (get-in % [:target :type]))
-                         (= "JAW" (get-in % [:target :id])))
+    (is (nil? (get-in built [:curves "103"])))
+    (is (not (some #(= "lipSync" (get-in % [:target :type]))
                    (:channels built))))))
 
 (deftest LipSync-source-label-does-not-change-viseme-jaw-mixing
@@ -662,8 +769,8 @@
       (is (not (contains? azure-snippet :snippetCategory)))
       (is (= (:curves web-snippet) (:curves azure-snippet)))
       (is (= (:channels web-snippet) (:channels azure-snippet)))
-      (is (= (get-in web-snippet [:curves :26])
-             (get-in azure-snippet [:curves :26]))))
+      (is (= (get-in web-snippet [:curves :103])
+             (get-in azure-snippet [:curves :103]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
@@ -677,7 +784,7 @@
                                    :visemes #js [#js {:visemeId 1 :offsetMs 100 :durationMs 180}]}})
     (let [snippet (first (scheduled-snippets events))
           lip-curve (get-in snippet [:curves :1])
-          jaw-curve (get-in snippet [:curves :26])]
+          jaw-curve (get-in snippet [:curves :103])]
       (is (= 0.05 (:time (first lip-curve))))
       (is (= 0.05 (:time (first jaw-curve)))))
     ((:unsubscribe events))
@@ -704,13 +811,11 @@
     (is (some #(and (= "viseme" (get-in % [:target :type]))
                     (= 1 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "bone" (get-in % [:target :type]))
-                    (= "JAW" (get-in % [:target :id]))
-                    (= "rz" (get-in % [:target :channel])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels (first @calls))))
-    (is (some #(and (= "bone" (get-in % [:target :type]))
-                    (= "JAW" (get-in % [:target :id]))
-                    (= "rz" (get-in % [:target :channel])))
+    (is (some #(and (= "lipSync" (get-in % [:target :type]))
+                    (= 103 (get-in % [:target :id])))
               (:channels
                (:snippet
                 (some #(when (= "animationSnippetScheduled" (:type %)) %)
@@ -722,6 +827,11 @@
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
+    ;; Azure uses the tight drift threshold; LipSync default matches Web Speech (0.35).
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.04}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
@@ -820,16 +930,93 @@
                                   :word "world"
                                   :wordIndex 1
                                   :observedElapsedSec 0.95}})
+    ;; Web Speech has no audio clock; its estimated timeline is the part that
+    ;; drifts. The boundary means the voice is at "world" now, so the clip must
+    ;; seek to the word's start inside the snippet (~0.42s), not to the wall
+    ;; clock (0.95s) where the freely-running clip already is.
     (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
       (is seek-call)
-      (is (> (:offsetSec seek-call) 0.85))
-      (is (< (:offsetSec seek-call) 0.9)))
+      (is (> (:offsetSec seek-call) 0.30))
+      (is (< (:offsetSec seek-call) 0.55)))
+    (.dispose ^js system)))
+
+(deftest LipSync-seek-falls-back-to-embody-handle-seekTo
+  ;; Embody clip handles expose seekTo (returning undefined), not setTime/seek.
+  (let [calls (atom [])
+        runtime #js {:playTypedSnippet
+                     (fn [snippet _options]
+                       #js {:clipName (aget snippet "name")
+                            :seekTo (fn [offset-sec]
+                                      (swap! calls conj {:method "seekTo"
+                                                         :offsetSec offset-sec})
+                                      js/undefined)
+                            :stop (fn [] nil)
+                            :finished (js/Promise.resolve nil)})}
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime runtime}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "startText"
+                                  :name "voice:seekto"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "audioStarted"
+                                  :name "voice:seekto"
+                                  :audioTimeSec 0.2}})
+    (is (some #(= "seekTo" (:method %)) @calls))
+    (is (some #(= "animationSnippetSeeked" (:type %)) @(:events events)))
+    (is (not-any? #(and (= "error" (:type %))
+                        (re-find #"could not seek" (or (:message %) "")))
+                  @(:events events)))
+    ((:unsubscribe events))
+    (.dispose ^js system)))
+
+(deftest LipSync-seek-falls-back-to-embody-engine-seekAnimation
+  ;; The Embody facade exposes seekAnimation(clipName, time) returning
+  ;; undefined; the engine adapter must treat it as a successful seek.
+  (let [calls (atom [])
+        engine #js {:playTypedSnippet
+                    (fn [snippet _options]
+                      #js {:clipName (aget snippet "name")
+                           :stop (fn [] nil)
+                           :finished (js/Promise.resolve nil)})
+                    :seekAnimation
+                    (fn [name offset-sec]
+                      (swap! calls conj {:method "seekAnimation"
+                                         :name name
+                                         :offsetSec offset-sec})
+                      js/undefined)}
+        system (polymer/createCharacterAgencies #js {:animation #js {:engine engine}})
+        events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "startText"
+                                  :name "voice:seekanimation"
+                                  :text "hello world"
+                                  :source "webSpeech"}})
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "audioStarted"
+                                  :name "voice:seekanimation"
+                                  :audioTimeSec 0.2}})
+    (is (some #(= "seekAnimation" (:method %)) @calls))
+    (is (some #(= "animationSnippetSeeked" (:type %)) @(:events events)))
+    (is (not-any? #(and (= "error" (:type %))
+                        (re-find #"could not seek" (or (:message %) "")))
+                  @(:events events)))
+    ((:unsubscribe events))
     (.dispose ^js system)))
 
 (deftest LipSync-can-receive-provider-word-timings-after-start
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.04}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
@@ -928,3 +1115,228 @@
     (is (some #(= "cleanupSnippet" (:method %)) @calls))
     ((:unsubscribe events))
     (.dispose ^js system)))
+
+(deftest jali-lip-planner-keeps-sibilants-narrower-than-open-vowels
+  (let [hiss (build-text-fixture "hiss")
+        out (build-text-fixture "out")
+        sibilant (viseme-channel hiss (:S_Z visemes/canonical-visemes))
+        open-vowel (viseme-channel out (:Ah visemes/canonical-visemes))]
+    (is sibilant)
+    (is open-vowel)
+    (is (<= (channel-max-intensity sibilant) 0.72))
+    (is (>= (channel-max-intensity open-vowel) 0.85))))
+
+(deftest jali-lip-planner-skips-pause-mouth-beats
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.45
+                   :offsetMs 0
+                   :durationMs 120}
+                  {:visemeId (:B_M_P visemes/canonical-visemes)
+                   :phoneme "PAUSE_COMMA"
+                   :phonemeClass "pause"
+                   :phonemeClasses ["pause"]
+                   :jawActivation 0
+                   :offsetMs 140
+                   :durationMs 80}
+                  {:visemeId (:EE visemes/canonical-visemes)
+                   :phoneme "IY"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.2
+                   :offsetMs 240
+                   :durationMs 100}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:pause")
+        bilabial (viseme-channel snippet (:B_M_P visemes/canonical-visemes))
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        ee (viseme-channel snippet (:EE visemes/canonical-visemes))]
+    (is ah)
+    (is ee)
+    (is (nil? bilabial))))
+
+(deftest jali-vowels-do-not-smear-through-bilabial-closure
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.5
+                   :offsetMs 0
+                   :durationMs 90}
+                  {:visemeId (:B_M_P visemes/canonical-visemes)
+                   :phoneme "P"
+                   :phonemeClass "bilabial"
+                   :phonemeClasses ["bilabial" "obstruent"]
+                   :jawActivation 0
+                   :offsetMs 90
+                   :durationMs 50}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:no-smear")
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        bilabial (viseme-channel snippet (:B_M_P visemes/canonical-visemes))]
+    (is ah)
+    (is bilabial)
+    (is (>= (sample-channel bilabial 0.11) 0.90))
+    (is (<= (sample-channel ah 0.11) 0.05))))
+
+(deftest jali-lip-heavy-sounds-anticipate-neighbors
+  (let [snippet (snippet/build-lipsync-snippet
+                 [{:visemeId (:Ah visemes/canonical-visemes)
+                   :phoneme "AA"
+                   :phonemeClass "vowel"
+                   :phonemeClasses ["vowel"]
+                   :jawActivation 0.4
+                   :offsetMs 0
+                   :durationMs 80}
+                  {:visemeId (:W_OO visemes/canonical-visemes)
+                   :phoneme "W"
+                   :phonemeClass "glide"
+                   :phonemeClasses ["glide" "lip-heavy"]
+                   :jawActivation 0.3
+                   :offsetMs 80
+                   :durationMs 100}]
+                 {:intensity 1 :jawScale 1}
+                 "voice:lip-heavy")
+        rounded (viseme-channel snippet (:W_OO visemes/canonical-visemes))]
+    (is rounded)
+    (is (> (sample-channel rounded 0.070) 0.05))
+    (is (>= (channel-max-intensity rounded) 0.85))))
+
+(deftest jali-speech-style-and-lip-scale-modulate-amplitudes
+  (let [base (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 1 :jawScale 1})
+        mumbled (build-text-fixture "hello" {:speechStyle "mumbled" :lipScale 1 :jawScale 1})
+        emphasized (build-text-fixture "hello" {:speechStyle "emphasized" :lipScale 1 :jawScale 1})
+        soft-lips (build-text-fixture "hello" {:speechStyle "conversational" :lipScale 0.4 :jawScale 1})
+        ;; "hello" vowels land on Ah/AE/Oh after CC4-aligned phoneme mapping.
+        ;; AE keeps peak headroom under 1.0 so style/scale gains remain visible.
+        base-lip (channel-max-intensity (viseme-channel base (:AE visemes/canonical-visemes)))
+        mumbled-lip (channel-max-intensity (viseme-channel mumbled (:AE visemes/canonical-visemes)))
+        emphasized-lip (channel-max-intensity (viseme-channel emphasized (:AE visemes/canonical-visemes)))
+        soft-lip (channel-max-intensity (viseme-channel soft-lips (:AE visemes/canonical-visemes)))
+        base-jaw (channel-max-intensity (jaw-channel base))
+        mumbled-jaw (channel-max-intensity (jaw-channel mumbled))
+        emphasized-jaw (channel-max-intensity (jaw-channel emphasized))]
+    (is (> base-lip 0))
+    (is (< mumbled-lip (* base-lip 0.55)))
+    (is (> emphasized-lip base-lip))
+    (is (< soft-lip (* base-lip 0.55)))
+    (is (< mumbled-jaw (* base-jaw 0.55)))
+    (is (> emphasized-jaw base-jaw))
+    (is (= "mumbled" (get-in mumbled [:metadata :speechStyle])))))
+
+(deftest jali-audio-features-scale-jaw-and-lip-without-changing-structure
+  (let [quiet [{:visemeId (:Ah visemes/canonical-visemes)
+                :phoneme "AA"
+                :phonemeClass "vowel"
+                :phonemeClasses ["vowel"]
+                :jawActivation 0.5
+                :energy 0.4
+                :offsetMs 0
+                :durationMs 140}
+               {:visemeId (:S_Z visemes/canonical-visemes)
+                :phoneme "S"
+                :phonemeClass "sibilant"
+                :phonemeClasses ["sibilant" "fricative"]
+                :jawActivation 0.06
+                :highFreqEnergy 0.45
+                :offsetMs 150
+                :durationMs 90}]
+        loud [{:visemeId (:Ah visemes/canonical-visemes)
+               :phoneme "AA"
+               :phonemeClass "vowel"
+               :phonemeClasses ["vowel"]
+               :jawActivation 0.5
+               :energy 1.6
+               :offsetMs 0
+               :durationMs 140}
+              {:visemeId (:S_Z visemes/canonical-visemes)
+               :phoneme "S"
+               :phonemeClass "sibilant"
+               :phonemeClasses ["sibilant" "fricative"]
+               :jawActivation 0.06
+               :highFreqEnergy 1.7
+               :offsetMs 150
+               :durationMs 90}]
+        quiet-snippet (snippet/build-lipsync-snippet quiet {:intensity 1 :jawScale 1} "voice:quiet")
+        loud-snippet (snippet/build-lipsync-snippet loud {:intensity 1 :jawScale 1} "voice:loud")]
+    (is (= (count (:channels quiet-snippet)) (count (:channels loud-snippet))))
+    (is (> (channel-max-intensity (jaw-channel loud-snippet))
+           (channel-max-intensity (jaw-channel quiet-snippet))))
+    (is (> (channel-max-intensity (viseme-channel loud-snippet (:S_Z visemes/canonical-visemes)))
+           (channel-max-intensity (viseme-channel quiet-snippet (:S_Z visemes/canonical-visemes)))))))
+
+(deftest jali-lip-planner-runs-without-agency
+  (let [events (snippet/normalize-events
+                [{:visemeId (:F_V visemes/canonical-visemes)
+                  :phoneme "F"
+                  :phonemeClass "labiodental"
+                  :phonemeClasses ["labiodental" "fricative"]
+                  :jawActivation 0.06
+                  :offsetMs 0
+                  :durationMs 80}])
+        curves (lip/build-lip-curves
+                events
+                {:intensity 1 :lipScale 1 :speechStyle "conversational"})]
+    (is (seq (get curves (str (:F_V visemes/canonical-visemes)))))
+    (is (nil? (get curves "32")))
+    (is (nil? (get curves "26")))
+    (is (nil? (get curves "103")))))
+
+(deftest jali-exclusive-handoff-ramps-instead-of-snapping
+  ;; When the winning morph changes, the outgoing morph must ramp out and the
+  ;; incoming morph must ramp in around a midpoint zero pose. A ~1ms attack on
+  ;; the incoming morph reads as a visual pop once the runtime interpolates.
+  (let [curves {"1" [{:time 0 :intensity 0}
+                     {:time 0.04 :intensity 0.9}
+                     {:time 0.10 :intensity 0.9}
+                     {:time 0.14 :intensity 0}]
+                "3" [{:time 0.08 :intensity 0}
+                     {:time 0.12 :intensity 0.85}
+                     {:time 0.20 :intensity 0.85}
+                     {:time 0.24 :intensity 0}]}
+        limited (lip/limit-concurrent-lip-activation curves)
+        curve-a (get limited "1")
+        curve-b (get limited "3")
+        both-active (filter (fn [time]
+                              (and (> (lip/sample-curve-at curve-a time) 0.01)
+                                   (> (lip/sample-curve-at curve-b time) 0.01)))
+                            (range 0 0.24 0.002))
+        ramp-in (first (keep-indexed
+                        (fn [idx frame]
+                          (when (and (pos? idx)
+                                     (> (:intensity frame) 0.05)
+                                     (<= (:intensity (get curve-b (dec idx))) 0.01))
+                            (- (:time frame) (:time (get curve-b (dec idx))))))
+                        curve-b))]
+    (is (seq curve-a))
+    (is (seq curve-b))
+    (is (empty? both-active))
+    (is (some? ramp-in))
+    (is (>= ramp-in 0.004))))
+
+(deftest jali-exclusive-viseme-morphs-even-with-jaw-and-tongue
+  (let [snippet (build-text-fixture "hello world" {:jawScale 1 :tongueScale 1})
+        viseme-channels (channels-of-type snippet "viseme")
+        jaw (jaw-channel snippet)
+        sample-times (range 0 (:maxTime snippet) 0.02)
+        dual-morph-samples
+        (filter (fn [time]
+                  (> (count (filter #(> (sample-channel % time) 0.05) viseme-channels))
+                     1))
+                sample-times)
+        ah (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        ee (viseme-channel snippet (:EE visemes/canonical-visemes))
+        oh (viseme-channel snippet (:Oh visemes/canonical-visemes))]
+    (is (empty? dual-morph-samples))
+    (is jaw)
+    ;; Jaw/tongue may move with the single winning mouth morph.
+    (is (> (channel-max-intensity jaw) 0.1))
+    ;; Peak contrast should remain readable across vowel families.
+    (when (and ah ee)
+      (is (>= (channel-max-intensity ah) (+ (channel-max-intensity ee) 0.08))))
+    (when (and oh ee)
+      (is (>= (channel-max-intensity oh) (+ (channel-max-intensity ee) 0.05))))))

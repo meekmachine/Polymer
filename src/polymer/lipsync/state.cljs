@@ -7,15 +7,27 @@
 ;; timing data needed to schedule and correct viseme animation.
 
 (def default-config
+  ;; Drift / lead defaults match TTS agency so hosts cannot accidentally
+  ;; reintroduce a tight Web Speech seek threshold by omitting configure.
   {:intensity 1
    :speechRate 1
    :jawScale 1
+   :lipScale 1
+   :articulationScale 1
    :tongueScale 1
+   :speechStyle "conversational"
+   :emotionIntensity 1
    :rampMs 15
    :holdMs 40
    :priority 50
-   :visualLeadMs 0
-   :wordDriftThresholdSec 0.06})
+   :visualLeadMs 35
+   ;; Match TTS :webSpeechDriftThresholdSec. Azure path overrides via
+   ;; TTS configure-lipsync with :azureDriftThresholdSec (0.04).
+   :wordDriftThresholdSec 0.35
+   ;; Web Speech has no provider phoneme clock; floors keep short phrases from
+   ;; collapsing below typical browser utterance length at speechRate 1.
+   :textPlanWordFloorMs 360
+   :textPlanCharFloorMs 65})
 
 (def default-state
   {:agency "lipSync"
@@ -53,17 +65,34 @@
   ;; This is the only place public config gets clamped. The rest of the agency
   ;; can then treat config as ordinary data, whether it came from LoomLarge UI,
   ;; another Polymer agency, or a worker message.
-  (let [merged (merge default-config config)]
+  (let [merged (merge default-config config)
+        speech-style (let [raw (or (:speechStyle merged) (:speech_style merged))]
+                       (if (string? raw)
+                         (str/lower-case (str/trim raw))
+                         (:speechStyle default-config)))
+        known-styles #{"mumbled" "relaxed" "conversational" "emphasized" "shouted"}]
     {:intensity (clamp 0 2 (number-or (:intensity merged) (:intensity default-config)))
      :speechRate (clamp 0.2 3 (number-or (:speechRate merged) (:speechRate default-config)))
      :jawScale (clamp 0 2 (number-or (:jawScale merged) (:jawScale default-config)))
+     :lipScale (clamp 0 2 (number-or (:lipScale merged) (:lipScale default-config)))
+     :articulationScale (clamp 0 2 (number-or (:articulationScale merged)
+                                              (:articulationScale default-config)))
      :tongueScale (clamp 0 2 (number-or (:tongueScale merged) (:tongueScale default-config)))
+     :speechStyle (if (contains? known-styles speech-style)
+                    speech-style
+                    (:speechStyle default-config))
+     :emotionIntensity (clamp 0.5 1.6 (number-or (:emotionIntensity merged)
+                                                 (:emotionIntensity default-config)))
      :rampMs (clamp 0 200 (number-or (:rampMs merged) (:rampMs default-config)))
      :holdMs (clamp 0 500 (number-or (:holdMs merged) (:holdMs default-config)))
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
      :visualLeadMs (clamp 0 250 (number-or (:visualLeadMs merged) (:visualLeadMs default-config)))
      :wordDriftThresholdSec (clamp 0.01 0.5 (number-or (:wordDriftThresholdSec merged)
-                                                       (:wordDriftThresholdSec default-config)))}))
+                                                       (:wordDriftThresholdSec default-config)))
+     :textPlanWordFloorMs (int (clamp 0 2000 (number-or (:textPlanWordFloorMs merged)
+                                                        (:textPlanWordFloorMs default-config))))
+     :textPlanCharFloorMs (int (clamp 0 500 (number-or (:textPlanCharFloorMs merged)
+                                                       (:textPlanCharFloorMs default-config))))}))
 
 (defn js-config [config]
   (if config (js->clj config :keywordize-keys true) {}))

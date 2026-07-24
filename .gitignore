@@ -2,3 +2,5 @@
 /node_modules/
 /dist/test.js
 /dist/test.cjs
+/.shadow-cljs
+/node_modules

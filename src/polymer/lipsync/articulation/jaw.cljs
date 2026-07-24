@@ -5,14 +5,14 @@
 
 ;; The jaw planner is deliberately separate from lip/viseme curve assembly.
 ;; JALI-style lip sync treats mouth shape and jaw drop as related but distinct
-;; control axes: a bilabial can close the lips without opening AU26, and a vowel
-;; nucleus can keep the jaw open while the lips travel through a diphthong.
+;; control axes: a bilabial can close the lips without opening the jaw, and a
+;; vowel nucleus can keep the jaw open while the lips travel through a diphthong.
 ;;
 ;; Inputs are normalized viseme timeline events. Outputs are jaw-activation
-;; keyframes; snippet assembly later routes those keyframes to the JAW bone so
-;; the CC4 Jaw_Open morph does not cover the independent viseme shapes. There are
-;; no host side effects here: no audio, DOM, scheduler, engine handle, UI state,
-;; or provider credential access.
+;; keyframes; snippet assembly routes those keyframes to Embody lip-sync control
+;; 103 (bone-only jaw open via profile bindings). There are no host side effects
+;; here: no audio, DOM, scheduler, engine handle, UI state, or provider
+;; credential access.
 
 (def intensity-eps 0.001)
 (def jaw-long-gap-ms 90)
