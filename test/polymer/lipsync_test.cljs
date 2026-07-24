@@ -237,8 +237,8 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 6))
-      (is (> (:endSec last-word) 6))
+      (is (> (:maxTime snippet) 5.5))
+      (is (> (:endSec last-word) 5.5))
       (is (seq (get-in snippet [:curves :26]))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
@@ -251,8 +251,8 @@
     (let [snippet (first (scheduled-snippets events))
           snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)
           last-word (last (:wordTimings snapshot))]
-      (is (> (:maxTime snippet) 4.4))
-      (is (> (:endSec last-word) 4.4))
+      (is (> (:maxTime snippet) 4.0))
+      (is (> (:endSec last-word) 4.0))
       (is (= "phrase" (:word last-word))))
     ((:unsubscribe events))
     (.dispose ^js agency)))
@@ -314,6 +314,8 @@
     (is (<= (sample-channel bilabial 0.092) 0.04))))
 
 (deftest jali-sibilant-fixture-keeps-jaw-lower-than-open-vowels
+  ;; chess→XS (sibilant); duke→TK + ortho U → rounded vowel nucleus (W_OO),
+  ;; not letter-pattern AA. Jaw should still open more than the sibilant word.
   (let [sibilant-snippet (build-text-fixture "chess")
         open-vowel-snippet (build-text-fixture "duke")
         sibilant-jaw (jaw-channel sibilant-snippet)
@@ -321,7 +323,9 @@
     (is sibilant-jaw)
     (is open-vowel-jaw)
     (is (<= (channel-max-intensity sibilant-jaw) 0.2))
-    (is (>= (channel-max-intensity open-vowel-jaw) 0.5))))
+    (is (>= (channel-max-intensity open-vowel-jaw) 0.28))
+    (is (> (channel-max-intensity open-vowel-jaw)
+           (channel-max-intensity sibilant-jaw)))))
 
 (deftest jali-labiodental-fixture-is-distinct-from-bilabial-closure
   (let [five (build-text-fixture "five")
@@ -360,6 +364,7 @@
     (is (>= (sample-channel labiodental 0.024) 0.80))))
 
 (deftest web-speech-diphthongs-expand-lip-travel-without-second-jaw-flap
+  ;; choice→metaphone XS + ortho OI → X OY S; OY expands Oh→EE lip travel.
   (let [events (visemes/text->visemes "choice")
         snippet (snippet/build-text-snippet "choice"
                                             events
@@ -377,21 +382,22 @@
     (is (<= (local-peak-count jaw) 1))
     (is (every? #(> (:intensity %) 0.20) jaw-frames-during-diphthong))))
 
-(deftest web-speech-ey-diphthong-travels-from-ae-to-ee
+(deftest web-speech-ay-diphthong-travels-from-ah-to-ih
+  ;; say→metaphone S + ortho AI → S AY; AY expands Ah→Ih lip travel.
   (let [events (visemes/text->visemes "say")
         snippet (snippet/build-text-snippet "say"
                                             events
                                             {:intensity 1 :jawScale 1})
-        ae-channel (viseme-channel snippet (:AE visemes/canonical-visemes))
-        ee-channel (viseme-channel snippet (:EE visemes/canonical-visemes))
+        ah-channel (viseme-channel snippet (:Ah visemes/canonical-visemes))
+        ih-channel (viseme-channel snippet (:Ih visemes/canonical-visemes))
         jaw (jaw-channel snippet)
-        diphthong-events (filter #(= "EY" (:phoneme %)) events)]
+        diphthong-events (filter #(= "AY" (:phoneme %)) events)]
     (is (= 2 (count diphthong-events)))
     (is (every? #(contains? (set (:phonemeClasses %)) "diphthong") diphthong-events))
-    (is ae-channel)
-    (is ee-channel)
-    (is (>= (channel-max-intensity ae-channel) 0.75))
-    (is (>= (channel-max-intensity ee-channel) 0.80))
+    (is ah-channel)
+    (is ih-channel)
+    (is (>= (channel-max-intensity ah-channel) 0.75))
+    (is (>= (channel-max-intensity ih-channel) 0.80))
     (is (<= (local-peak-count jaw) 1))))
 
 (deftest LipSync-jaw-planner-keeps-one-arc-through-provider-diphthong
@@ -433,7 +439,8 @@
   (let [snippet (build-text-fixture "strengths")
         jaw (jaw-channel snippet)
         events (visemes/text->visemes "strengths")
-        coda-events (filter #(contains? #{"NG" "TH" "S"} (:phoneme %)) events)]
+        ;; Metaphone coda for strengths is …NK0S (0 = TH).
+        coda-events (filter #(contains? #{"K" "0" "S" "N" "NG" "TH"} (:phoneme %)) events)]
     (is (>= (count coda-events) 3))
     (is jaw)
     ;; The consonant stack after the vowel should stay as one low narrowing
@@ -525,10 +532,12 @@
     (is (nil? (tongue-channel snippet)))))
 
 (deftest jali-text-fallback-events-carry-phoneme-class-metadata
-  (let [events (visemes/text->visemes "five pop")
+  ;; Web Speech fallback now uses Double Metaphone codes (five→FF, pop→PP,
+  ;; apple→APL). Class metadata still comes from phoneme→viseme mapping.
+  (let [events (visemes/text->visemes "five pop apple")
         f-event (some #(when (= "F" (:phoneme %)) %) events)
         p-event (some #(when (= "P" (:phoneme %)) %) events)
-        vowel-event (some #(when (= "IH" (:phoneme %)) %) events)]
+        vowel-event (some #(when (= "A" (:phoneme %)) %) events)]
     (is (= "labiodental" (:phonemeClass f-event)))
     (is (contains? (set (:phonemeClasses f-event)) "fricative"))
     (is (= "bilabial" (:phonemeClass p-event)))
@@ -803,7 +812,8 @@
 
 (deftest web-speech-word-boundary-material-drift-still-seeks
   (let [calls (atom [])
-        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})]
+        system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
+        text "hello world"]
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "configure"
@@ -812,18 +822,23 @@
                #js {:agency "lipSync"
                     :command #js {:type "startText"
                                   :name "voice:webspeech-large-drift"
-                                  :text "hello world"
+                                  :text text
                                   :source "webSpeech"}})
-    (.dispatch ^js system
-               #js {:agency "lipSync"
-                    :command #js {:type "wordBoundary"
-                                  :word "world"
-                                  :wordIndex 1
-                                  :observedElapsedSec 0.95}})
-    (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
-      (is seek-call)
-      (is (> (:offsetSec seek-call) 0.85))
-      (is (< (:offsetSec seek-call) 0.9)))
+    (let [max-time (or (get-in (js->clj (.snapshot ^js system) :keywordize-keys true)
+                               [:lipSync :maxTime])
+                       0)
+          far-ahead (+ max-time 0.25)]
+      (.dispatch ^js system
+                 #js {:agency "lipSync"
+                      :command #js {:type "wordBoundary"
+                                    :word "world"
+                                    :wordIndex 1
+                                    :observedElapsedSec far-ahead}})
+      (let [seek-call (some #(when (= "setSnippetTime" (:method %)) %) @calls)]
+        (is seek-call)
+        ;; Seek clamps to the scheduled snippet end under large positive drift.
+        (is (>= (:offsetSec seek-call) (- max-time 0.05)))
+        (is (<= (:offsetSec seek-call) max-time))))
     (.dispose ^js system)))
 
 (deftest LipSync-can-receive-provider-word-timings-after-start

@@ -1,82 +1,90 @@
 (ns polymer.emphatic.domain
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [polymer.nlp.phonemes :as phonemes]))
 
-;; Pure prosodic analysis ported from Latticework ProsodicAnalyzer.
-;; Detects emphasis words, intonation, and gesture types without randomness.
-
-(def function-words
-  #{"the" "a" "an" "and" "or" "but" "in" "on" "at" "to" "for"
-    "of" "with" "by" "from" "as" "is" "are" "was" "were" "be"
-    "been" "have" "has" "had" "do" "does" "did" "will" "would"
-    "can" "could" "should" "may" "might" "must" "i" "you" "he"
-    "she" "it" "we" "they" "them" "their" "this" "that" "these"
-    "those" "my" "your" "his" "her" "its" "our"})
-
-(def content-word-patterns
-  [#"^(what|where|when|who|why|how)$"
-   #"^(not|never|no|nothing|nobody|nowhere)$"
-   #"^(most|more|best|better|worst|worse|greatest|largest|smallest)$"
-   #"^(must|should|could|would|might|may)$"
-   #"^(very|really|quite|extremely|absolutely|definitely|certainly)$"
-   #"^\d+$"])
+;; Emphatic analysis uses standardized NLP phonetics (Double Metaphone), not a
+;; hardcoded stop-word list. Contentfulness comes from phonetic code weight,
+;; ambiguity, punctuation, and sentence structure.
 
 (defn clean-word [word]
-  (let [lower (.toLowerCase (str (or word "")))]
-    (.replace lower (js/RegExp. "[^a-z0-9]" "g") "")))
+  (phonemes/clean-word word))
 
 (defn tokenize-words [text]
-  (let [normalized (.replace (str (or text "")) (js/RegExp. "[.,!?;:]" "g") " ")
-        parts (.split normalized (js/RegExp. "\\s+"))]
-    (into []
-          (comp (map clean-word)
-                (remove #(zero? (count %))))
-          (array-seq parts))))
-
-(defn function-word? [word]
-  (contains? function-words word))
-
-(defn emphasis-word? [word idx word-count]
-  (or (some #(re-matches % word) content-word-patterns)
-      (and (> (count word) 7) (not (function-word? word)))
-      (and (or (zero? idx) (= idx (dec word-count)))
-           (not (function-word? word)))))
-
-(defn detect-emphasis-indices [words]
-  (let [word-count (count words)
-        natural (into #{}
-                      (keep (fn [idx]
-                              (let [word (nth words idx nil)]
-                                (when (and word (emphasis-word? word idx word-count))
-                                  idx))))
-                      (range word-count))]
-    (if (< (count natural) (max 1 (quot word-count 5)))
-      (into natural (for [i (range 2 word-count 4)] i))
-      natural)))
+  (->> (phonemes/tokenize text)
+       (filter #(or (re-matches #"[A-Za-z]+" %)
+                    (phonemes/numeric-token? %)))
+       (mapv (fn [token]
+               (if (phonemes/numeric-token? token)
+                 (str token)
+                 (clean-word token))))
+       (filterv #(pos? (count %)))))
 
 (defn question? [text]
-  (let [trimmed (str/trim (or text ""))]
-    (or (str/ends-with? trimmed "?")
-        (boolean (re-find #"^(what|where|when|who|why|how|is|are|do|does|did|can|could|would|should)"
-                          trimmed)))))
+  ;; Intonation cue from punctuation only — no English question-word list.
+  (str/ends-with? (str/trim (or text "")) "?"))
 
 (defn exclamation? [text]
   (str/ends-with? (str/trim (or text "")) "!"))
 
 (defn detect-pause-indices [text _words]
-  (let [tokens (array-seq (.split (str (or text "")) (js/RegExp. "\\s+")))]
+  (let [tokens (phonemes/tokenize text)]
     (loop [tokens tokens
            word-index 0
            pauses []]
       (if (empty? tokens)
         pauses
         (let [token (first tokens)
-              cleaned (.replace (str token) (js/RegExp. "[.,!?;:]" "g") "")
-              has-word? (pos? (count cleaned))
-              pause? (boolean (re-find #"[.,;:]" token))]
+              word? (or (boolean (re-matches #"[A-Za-z]+" token))
+                        (phonemes/numeric-token? token))
+              pause? (boolean (re-matches #"[,.;:]" token))]
           (recur (rest tokens)
-                 (if has-word? (inc word-index) word-index)
+                 (if word? (inc word-index) word-index)
                  (cond-> pauses
-                   pause? (conj word-index))))))))
+                   (and pause? (pos? word-index)) (conj (dec word-index)))))))))
+
+(defn phonetic-weight
+  "Higher weight ≈ more spoken mass / more likely to carry stress."
+  [analysis]
+  (let [code-len (:codeLength analysis)
+        ambiguous (if (:ambiguous? analysis) 0.35 0)
+        vowel-lead (if (:vowelLead? analysis) 0.15 0)
+        ;; Very short codes (0/A/T/…) are typically light function material.
+        floor (if (<= code-len 1) 0.15 0)]
+    (+ (* 0.55 code-len) ambiguous vowel-lead (- floor))))
+
+(defn structural-bonus [idx word-count analysis]
+  (cond-> 0
+    (zero? idx) (+ 0.45)
+    (= idx (dec word-count)) (+ 0.55)
+    ;; Digits are spoken content and usually carry stress.
+    (:numeric? analysis) (+ 0.8)))
+
+(defn emphasis-score [idx word-count analysis]
+  (+ (phonetic-weight analysis)
+     (structural-bonus idx word-count analysis)))
+
+(defn detect-emphasis-indices [analyses]
+  (let [word-count (count analyses)
+        scored (map-indexed (fn [idx analysis]
+                              {:idx idx
+                               :score (emphasis-score idx word-count analysis)
+                               :codeLength (:codeLength analysis)})
+                            analyses)
+        ;; Adaptive threshold from median score so we do not need stop lists.
+        scores (mapv :score scored)
+        median (if (seq scores)
+                 (nth (sort scores) (quot (count scores) 2))
+                 0)
+        threshold (max 1.1 (* 1.05 median))
+        natural (into #{}
+                      (keep (fn [{:keys [idx score codeLength]}]
+                              (when (or (>= score threshold)
+                                        (>= codeLength 4))
+                                idx)))
+                      scored)]
+    (if (< (count natural) (max 1 (quot word-count 5)))
+      (into natural (for [i (range 2 word-count 4)] i))
+      natural)))
 
 (defn select-head-gesture-type [idx question?]
   (cond
@@ -117,13 +125,17 @@
         emphasis-indices))
 
 (defn analyze-utterance [text]
-  (let [words (tokenize-words text)
-        emphasis-indices (vec (sort (detect-emphasis-indices words)))
+  (let [analyses (phonemes/text->word-analysis text)
+        words (mapv :cleaned analyses)
+        emphasis-indices (vec (sort (detect-emphasis-indices analyses)))
+        emphasis-index-set (set emphasis-indices)
         question-intonation? (question? text)
         exclamation-emphasis? (exclamation? text)]
     {:text text
      :words words
+     :analyses analyses
      :emphasisWords emphasis-indices
+     :emphasisWordSet emphasis-index-set
      :questionIntonation question-intonation?
      :exclamationEmphasis exclamation-emphasis?
      :pausePositions (detect-pause-indices text words)
@@ -131,10 +143,9 @@
      :browGestures (generate-brow-gestures emphasis-indices question-intonation? exclamation-emphasis?)}))
 
 (defn emphasis-index? [plan word-index]
-  (contains? (set (:emphasisWords plan)) word-index))
+  (contains? (or (:emphasisWordSet plan) (set (:emphasisWords plan))) word-index))
 
 (defn gestures-for-word-index [plan word-index]
-  ;; Brow leads head so linguistic stress reads on the face first.
   (vec (concat
         (keep #(when (= word-index (:wordIndex %)) %) (:browGestures plan))
         (keep #(when (= word-index (:wordIndex %)) %) (:headGestures plan)))))

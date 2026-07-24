@@ -1,6 +1,7 @@
 (ns polymer.lipsync.articulation.visemes
   (:require [clojure.string :as str]
-            [polymer.lipsync.state :as state]))
+            [polymer.lipsync.state :as state]
+            [polymer.nlp.phonemes :as phonemes]))
 
 ;; Polymer keeps the canonical 15-slot CC4/ARKit viseme order beside the CLJS
 ;; lip-sync code so numeric curves line up with Embody. This mirrors the
@@ -208,90 +209,21 @@
 (def diphthong-min-duration-ms 80)
 (def diphthong-secondary-min-ms 36)
 
-(def prefix-phones
-  [["th" ["TH"]] ["sh" ["SH"]] ["ch" ["CH"]] ["wh" ["W"]] ["ph" ["F"]]
-   ["gh" ["G"]] ["ng" ["NG"]] ["ck" ["K"]] ["qu" ["K" "W"]]
-   ["oo" ["UW"]] ["ee" ["IY"]] ["ea" ["IY"]] ["ai" ["EY"]] ["ay" ["EY"]]
-   ["oa" ["OW"]] ["ou" ["AW"]] ["ow" ["OW"]] ["oi" ["OY"]] ["oy" ["OY"]]
-   ["au" ["AO"]] ["aw" ["AO"]] ["ie" ["IY"]] ["ei" ["EY"]] ["ue" ["UW"]]
-   ["ui" ["UW"]]])
+;; Text fallback G2P is Double Metaphone → standardized phoneme tokens
+;; (polymer.nlp.phonemes), then phoneme→viseme mapping below. Provider Azure
+;; timelines still bypass this path when real visemes arrive.
 
-(defn starts-with? [value prefix]
-  (str/starts-with? value prefix))
-
-(defn prefix-match [remaining]
-  (some (fn [[prefix phones]]
-          (when (starts-with? remaining prefix)
-            {:size (count prefix) :phones phones}))
-        prefix-phones))
-
-(defn single-letter-phones [remaining]
-  ;; This is intentionally deterministic and lightweight, not a dictionary. Its
-  ;; role is fallback text-to-viseme planning when provider timing is absent.
-  (let [letter (subs remaining 0 1)
-        next-letter (when (> (count remaining) 1) (subs remaining 1 2))
-        at-end? (= 1 (count remaining))]
-    (case letter
-      "a" ["AE"]
-      "e" ["EH"]
-      "i" ["IH"]
-      "o" ["AA"]
-      "u" ["AH"]
-      "y" (if at-end? ["IY"] ["Y"])
-      "b" ["B"]
-      "c" (if (#{"e" "i"} next-letter) ["S"] ["K"])
-      "d" ["D"]
-      "f" ["F"]
-      "g" (if (#{"e" "i"} next-letter) ["JH"] ["G"])
-      "h" ["HH"]
-      "j" ["JH"]
-      "k" ["K"]
-      "l" ["L"]
-      "m" ["M"]
-      "n" ["N"]
-      "p" ["P"]
-      "r" ["R"]
-      "s" ["S"]
-      "t" ["T"]
-      "v" ["V"]
-      "w" ["W"]
-      "x" ["K" "S"]
-      "z" ["Z"]
-      [])))
-
-(defn word->phonemes [word]
-  (loop [remaining (-> (or word "") str/lower-case (str/replace #"[^a-z]" ""))
-         phonemes []]
-    (if (zero? (count remaining))
-      phonemes
-      (if-let [match (prefix-match remaining)]
-        (recur (subs remaining (:size match)) (into phonemes (:phones match)))
-        (recur (subs remaining 1) (into phonemes (single-letter-phones remaining)))))))
-
-(defn pause-token [token]
-  (case token
-    "," "PAUSE_COMMA"
-    ";" "PAUSE_SEMICOLON"
-    ":" "PAUSE_COLON"
-    "." "PAUSE_PERIOD"
-    "?" "PAUSE_QUESTION"
-    "!" "PAUSE_EXCLAMATION"
-    "PAUSE_SPACE"))
-
-(defn tokenize [text]
-  (re-seq #"[A-Za-z]+|[,.;:!?]|\s+" (or text "")))
-
-(defn text->phonemes [text]
-  (into []
-        (mapcat (fn [token]
-                  (if (or (re-matches #"\s+" token)
-                          (re-matches #"[,.;:!?]" token))
-                    [(pause-token token)]
-                    (word->phonemes token))))
-        (tokenize text)))
+(def word->phonemes phonemes/word->phonemes)
+(def text->phonemes phonemes/text->phonemes)
+(def pause-token phonemes/pause-token)
+(def tokenize phonemes/tokenize)
 
 (defn normalize-phoneme [phoneme]
-  (-> (or phoneme "") str/upper-case (str/replace #"[0-9]" "")))
+  ;; Strip ARPABET stress digits (AH1 → AH) but keep Double Metaphone "0" (TH).
+  (let [upper (-> (or phoneme "") str/upper-case)]
+    (if (= upper "0")
+      "0"
+      (str/replace upper #"[0-9]" ""))))
 
 (defn vowel? [phoneme]
   (contains? vowels (normalize-phoneme phoneme)))

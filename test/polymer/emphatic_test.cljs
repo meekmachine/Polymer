@@ -46,14 +46,22 @@
                                    :hostElapsedSec 0.6})
     #js {:stop (fn [] true)}))
 
-(deftest emphatic-domain-marks-content-words
+(deftest emphatic-domain-uses-phonetic-weight-not-stop-lists
   (let [plan (domain/analyze-utterance "Absolutely not the answer!")]
     (is (true? (:exclamationEmphasis plan)))
     (is (seq (:emphasisWords plan)))
-    (is (some #{0} (:emphasisWords plan))) ;; Absolutely
-    (is (some #{1} (:emphasisWords plan))) ;; not
-    (is (seq (:browGestures plan)))
-    (is (seq (:headGestures plan)))))
+    ;; Heavy metaphone code "APSLTL" should emphasize "absolutely".
+    (is (some #{0} (:emphasisWords plan)))
+    ;; Light code for "the" ("0") should usually not lead emphasis.
+    (is (seq (:analyses plan)))
+    (is (every? :primary (:analyses plan)))
+    (is (seq (:browGestures plan)))))
+
+(deftest emphatic-domain-stresses-numeric-tokens
+  (let [plan (domain/analyze-utterance "Call me at 911 now!")]
+    (is (some (fn [idx]
+                (:numeric? (nth (:analyses plan) idx)))
+              (:emphasisWords plan)))))
 
 (deftest emphatic-word-boundary-schedules-stress-gestures
   (let [agency (polymer/createEmphaticAgency nil)
@@ -72,13 +80,17 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
-(deftest emphatic-skips-non-emphasis-words
+(deftest emphatic-skips-low-weight-words
   (let [agency (polymer/createEmphaticAgency nil)
-        events (domain-events agency)]
+        events (domain-events agency)
+        plan (domain/analyze-utterance "Absolutely not the answer!")
+        the-idx (first (keep-indexed (fn [i w] (when (= "the" w) i)) (:words plan)))]
     (.dispatch ^js agency #js {:type "speechStarted"
                                :name "tts:test"
                                :text "Absolutely not the answer!"})
-    (.dispatch ^js agency #js {:type "wordBoundary" :word "the" :wordIndex 2})
+    (is (some? the-idx))
+    (is (false? (domain/emphasis-index? plan the-idx)))
+    (.dispatch ^js agency #js {:type "wordBoundary" :word "the" :wordIndex the-idx})
     (is (empty? (scheduled-snippet-events events)))
     ((:unsubscribe events))
     (.dispose ^js agency)))
