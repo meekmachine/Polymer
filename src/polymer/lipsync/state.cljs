@@ -7,6 +7,8 @@
 ;; timing data needed to schedule and correct viseme animation.
 
 (def default-config
+  ;; Drift / lead defaults match TTS agency so hosts cannot accidentally
+  ;; reintroduce a tight Web Speech seek threshold by omitting configure.
   {:intensity 1
    :speechRate 1
    :jawScale 1
@@ -18,8 +20,14 @@
    :rampMs 15
    :holdMs 40
    :priority 50
-   :visualLeadMs 0
-   :wordDriftThresholdSec 0.06})
+   :visualLeadMs 35
+   ;; Match TTS :webSpeechDriftThresholdSec. Azure path overrides via
+   ;; TTS configure-lipsync with :azureDriftThresholdSec (0.04).
+   :wordDriftThresholdSec 0.35
+   ;; Web Speech has no provider phoneme clock; floors keep short phrases from
+   ;; collapsing below typical browser utterance length at speechRate 1.
+   :textPlanWordFloorMs 360
+   :textPlanCharFloorMs 65})
 
 (def default-state
   {:agency "lipSync"
@@ -80,7 +88,11 @@
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
      :visualLeadMs (clamp 0 250 (number-or (:visualLeadMs merged) (:visualLeadMs default-config)))
      :wordDriftThresholdSec (clamp 0.01 0.5 (number-or (:wordDriftThresholdSec merged)
-                                                       (:wordDriftThresholdSec default-config)))}))
+                                                       (:wordDriftThresholdSec default-config)))
+     :textPlanWordFloorMs (int (clamp 0 2000 (number-or (:textPlanWordFloorMs merged)
+                                                        (:textPlanWordFloorMs default-config))))
+     :textPlanCharFloorMs (int (clamp 0 500 (number-or (:textPlanCharFloorMs merged)
+                                                       (:textPlanCharFloorMs default-config))))}))
 
 (defn js-config [config]
   (if config (js->clj config :keywordize-keys true) {}))

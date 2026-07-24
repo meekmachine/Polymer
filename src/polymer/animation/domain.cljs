@@ -19,18 +19,51 @@
 (defn typed-viseme-channel? [channel]
   (= "viseme" (:type (typed-channel-target channel))))
 
+(def lipsync-jaw-control-id 103)
+(def legacy-jaw-au-id 26)
+
 (defn typed-jaw-channel? [channel]
   (let [target (typed-channel-target channel)]
     (or (and (= "lipSync" (:type target))
-             (= 103 (:id target)))
+             (= lipsync-jaw-control-id (:id target)))
         (and (= "bone" (:type target))
              (= "JAW" (:id target))))))
+
+(defn legacy-jaw-au-channel? [channel]
+  (let [target (typed-channel-target channel)]
+    (and (= "au" (:type target))
+         (= legacy-jaw-au-id (:id target)))))
 
 (defn typed-viseme-snippet? [snippet]
   (boolean (some typed-viseme-channel? (typed-channels snippet))))
 
 (defn typed-jaw-snippet? [snippet]
   (boolean (some typed-jaw-channel? (typed-channels snippet))))
+
+(defn sanitize-lipsync-jaw-snippet
+  "LipSync jaw is Embody control 103 only. Remap any legacy AU 26 curve/channel
+  so animation never drives Jaw_Open morphs for speech."
+  [snippet]
+  (if-not (map? snippet)
+    snippet
+    (let [curves (or (:curves snippet) {})
+          legacy-jaw (or (get curves "26") (get curves :26) (get curves 26))
+          without-legacy (dissoc curves "26" :26 26)
+          has-control-103? (or (contains? without-legacy (str lipsync-jaw-control-id))
+                               (contains? without-legacy :103))
+          curves' (cond-> without-legacy
+                    (and legacy-jaw (not has-control-103?))
+                    (assoc (str lipsync-jaw-control-id) legacy-jaw))
+          channels' (when-let [channels (typed-channels snippet)]
+                      (into []
+                            (map (fn [channel]
+                                   (if (legacy-jaw-au-channel? channel)
+                                     (assoc channel :target {:type "lipSync"
+                                                             :id lipsync-jaw-control-id})
+                                     channel)))
+                            channels))]
+      (cond-> (assoc snippet :autoVisemeJaw false :curves curves')
+        channels' (assoc :channels channels')))))
 
 (defn typed-channel-summary [snippet]
   ;; The summary is diagnostic-only. A transducer is appropriate here because
@@ -62,7 +95,7 @@
          viseme-category? (or (viseme-snippet-category? category) typed-viseme?)
          curves (or (:curves snippet) {})
          ;; Curve maps may use string or keyword keys after host keywordize.
-         has-jaw-curve? (or (contains? curves "103")
+         has-jaw-curve? (or (contains? curves (str lipsync-jaw-control-id))
                             (contains? curves :103)
                             (typed-jaw-snippet? snippet))
          category-for-options (or category

@@ -1,5 +1,6 @@
 (ns polymer.animation.planner
-  (:require [polymer.animation.state :as state]))
+  (:require [polymer.animation.domain :as domain]
+            [polymer.animation.state :as state]))
 
 ;; The planner turns input stream commands into scheduler actions. It does not
 ;; call runtimes, mutate handles, or emit events. Keeping those decisions as data
@@ -16,8 +17,12 @@
 (defn schedule-action [payload requested-at]
   (let [source (source-agency payload)
         fallback-name (str "polymer:animation:" requested-at)
-        snippet (assoc (:snippet payload)
-                       :name (state/snippet-name (:snippet payload) fallback-name))
+        raw-snippet (assoc (:snippet payload)
+                           :name (state/snippet-name (:snippet payload) fallback-name))
+        ;; LipSync speech must never schedule legacy AU 26 jaw curves.
+        snippet (if (= source "lipSync")
+                  (domain/sanitize-lipsync-jaw-snippet raw-snippet)
+                  raw-snippet)
         options (assoc (or (:options payload) {}) :sourceAgency source)]
     {:op :schedule
      :sourceAgency source

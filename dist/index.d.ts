@@ -732,7 +732,12 @@ export interface LipSyncConfig {
   holdMs?: number;
   priority?: number;
   visualLeadMs?: number;
+  /** Default matches TTS webSpeechDriftThresholdSec (0.35). Azure overrides via TTS. */
   wordDriftThresholdSec?: number;
+  /** Web Speech text-plan floor: ms per word at speechRate 1. */
+  textPlanWordFloorMs?: number;
+  /** Web Speech text-plan floor: ms per alphabetic character at speechRate 1. */
+  textPlanCharFloorMs?: number;
 }
 
 export interface LipSyncVisemeEvent {

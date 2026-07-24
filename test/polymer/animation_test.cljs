@@ -1,5 +1,6 @@
 (ns polymer.animation-test
   (:require [cljs.test :refer [async deftest is]]
+            [polymer.animation.domain :as domain]
             [polymer.animation.planner :as planner]
             [polymer.core :as polymer]))
 
@@ -230,12 +231,12 @@
                                :snippet #js {:name "voice:webspeech"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -249,8 +250,8 @@
       (is (= "playTypedSnippet" (:method call)))
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
       (is (= 1 (get-in call [:channels 0 :target :id])))
-      (is (= "au" (get-in call [:channels 1 :target :type])))
-      (is (= 26 (get-in call [:channels 1 :target :id])))
+      (is (= "lipSync" (get-in call [:channels 1 :target :type])))
+      (is (= 103 (get-in call [:channels 1 :target :id])))
       (is (not (contains? options :snippetCategory)))
       (is (= 0.8 (:intensityScale options)))
       (is (= 0.8 (:weight options)))
@@ -266,12 +267,12 @@
                                :snippet #js {:name "voice:engine"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -282,7 +283,7 @@
           options (:options call)]
       (is (= "engine.playTypedSnippet" (:method call)))
       (is (= "viseme" (get-in call [:channels 0 :target :type])))
-      (is (= "au" (get-in call [:channels 1 :target :type])))
+      (is (= "lipSync" (get-in call [:channels 1 :target :type])))
       (is (not (contains? options :snippetCategory)))
       (is (false? (:autoVisemeJaw options))))
     (.dispose ^js agency)))
@@ -295,12 +296,12 @@
                                :snippet #js {:name "voice:legacy-engine"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -342,12 +343,12 @@
                                :snippet #js {:name "voice:legacy"
                                              :curves #js {"1" #js [#js {:time 0 :intensity 0}
                                                                    #js {:time 0.08 :intensity 1}]
-                                                          "26" #js [#js {:time 0 :intensity 0}
-                                                                    #js {:time 0.08 :intensity 0.35}]}
+                                                          "103" #js [#js {:time 0 :intensity 0}
+                                                                     #js {:time 0.08 :intensity 0.35}]}
                                              :channels #js [#js {:target #js {:type "viseme" :id 1}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 1}]}
-                                                            #js {:target #js {:type "au" :id 26}
+                                                            #js {:target #js {:type "lipSync" :id 103}
                                                                  :keyframes #js [#js {:time 0 :intensity 0}
                                                                                  #js {:time 0.08 :intensity 0.35}]}]
                                              :maxTime 0.08
@@ -375,4 +376,42 @@
     (let [options (:options (first @calls))]
       (is (= "blink" (:snippetCategory options)))
       (is (not (contains? options :autoVisemeJaw))))
+    (.dispose ^js agency)))
+
+(deftest animation-remaps-legacy-lipsync-jaw-au-26-to-control-103
+  (let [sanitized (domain/sanitize-lipsync-jaw-snippet
+                   {:name "voice:legacy-jaw"
+                    :curves {"1" [{:time 0 :intensity 0} {:time 0.08 :intensity 1}]
+                             "26" [{:time 0 :intensity 0} {:time 0.08 :intensity 0.4}]}
+                    :channels [{:target {:type "viseme" :id 1}
+                                :keyframes [{:time 0 :intensity 0} {:time 0.08 :intensity 1}]}
+                               {:target {:type "au" :id 26}
+                                :keyframes [{:time 0 :intensity 0} {:time 0.08 :intensity 0.4}]}]})
+        calls (atom [])
+        agency (polymer/createAnimationAgency #js {:runtime (make-runtime calls)})]
+    (is (nil? (get-in sanitized [:curves "26"])))
+    (is (seq (get-in sanitized [:curves "103"])))
+    (is (false? (:autoVisemeJaw sanitized)))
+    (is (= [{:type "viseme" :id 1} {:type "lipSync" :id 103}]
+           (mapv :target (:channels sanitized))))
+    (.dispatch ^js agency #js {:type "scheduleSnippet"
+                               :sourceAgency "lipSync"
+                               :snippet #js {:name "voice:legacy-jaw"
+                                             :curves #js {"26" #js [#js {:time 0 :intensity 0}
+                                                                    #js {:time 0.08 :intensity 0.4}]}
+                                             :channels #js [#js {:target #js {:type "au" :id 26}
+                                                                 :keyframes #js [#js {:time 0 :intensity 0}
+                                                                                 #js {:time 0.08 :intensity 0.4}]}]
+                                             :maxTime 0.08
+                                             :loop false}
+                               :options #js {:autoPlay true}})
+    (let [call (first @calls)
+          jaw-channel (first (:channels call))]
+      (is (= "playTypedSnippet" (:method call)))
+      (is (= "lipSync" (get-in jaw-channel [:target :type])))
+      (is (= 103 (get-in jaw-channel [:target :id])))
+      (is (false? (get-in call [:options :autoVisemeJaw])))
+      (is (empty? (filter #(and (= "au" (get-in % [:target :type]))
+                                (= 26 (get-in % [:target :id])))
+                          (:channels call)))))
     (.dispose ^js agency)))

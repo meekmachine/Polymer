@@ -13,10 +13,9 @@
 ;; handles stay outside this namespace.
 
 ;; Jaw motion is Embody's lip-sync control 103: a bone-only jaw-open binding
-;; with no morph influence. Never emit AU 26 here; AU 26 also drives the CC4
-;; Jaw_Open morph, which deforms the same vertices as the viseme morphs and
-;; visibly washes out the differences between mouth shapes.
-(def jaw-au "103")
+;; with no morph influence. Curve/channel key "26" is never used for lip sync.
+(def jaw-control-id 103)
+(def jaw-au (str jaw-control-id))
 (def intensity-eps lip/intensity-eps)
 
 (defn finite-number? [value]
@@ -92,6 +91,11 @@
                                   (modulation/event-jaw-activation event config))))
         events))
 
+(defn strip-legacy-jaw-au [curves]
+  ;; Legacy hosts sometimes authored jaw under curve "26". LipSync never keeps
+  ;; that key; jaw belongs exclusively on control 103.
+  (dissoc curves "26" :26 26))
+
 (defn build-curves [events config]
   (let [enriched (modulation/enrich-events events config)
         scales (modulation/planning-scales config)
@@ -101,21 +105,19 @@
         with-jaw (if (empty? jaw-curve)
                    lip-curves
                    (assoc lip-curves jaw-au jaw-curve))]
-    (merge with-jaw tongue-curves)))
+    (strip-legacy-jaw-au (merge with-jaw tongue-curves))))
 
 (defn lipsync-channel-target [curve-key]
   ;; LipSync owns its animation namespace explicitly. Numeric keys 0-14 are
-  ;; canonical viseme slots. Jaw motion is emitted as Embody's lip-sync control
-  ;; 103, which binds only the JAW bone rotation through the profile's
-  ;; auToBones bindings. This deliberately avoids AU 26 (whose Jaw_Open morph
-  ;; fights the viseme morphs on the same vertices) and avoids hardcoding a
-  ;; bone channel so per-character jaw bindings stay in the profile.
+  ;; canonical viseme slots. Jaw motion is Embody lip-sync control 103 (profile
+  ;; bone bindings). Tongue and other non-viseme keys stay typed AU channels,
+  ;; except legacy jaw id 26 which is remapped to control 103.
   (let [key (str curve-key)
         numeric-id (when (re-matches #"^\d+$" key)
                      (js/parseInt key 10))]
     (cond
-      (= key jaw-au)
-      {:type "lipSync" :id 103}
+      (or (= key jaw-au) (= numeric-id jaw-control-id) (= numeric-id 26))
+      {:type "lipSync" :id jaw-control-id}
 
       (and (some? numeric-id) (<= 0 numeric-id 14))
       {:type "viseme" :id numeric-id}

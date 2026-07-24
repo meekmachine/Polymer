@@ -167,7 +167,7 @@
   (when (seq word-timings)
     (apply max 0 (map :endSec (state/normalize-word-timings word-timings)))))
 
-(defn prepare-text-timeline [text speech-rate payload]
+(defn prepare-text-timeline [text speech-rate payload config]
   (let [source (or (:source payload) "text")
         events (visemes/text->visemes text speech-rate)
         generated-word-timings (visemes/text->word-timings text speech-rate)
@@ -176,7 +176,10 @@
         explicit-duration-sec (or (payload-duration-sec payload)
                                   (timing-duration-sec supplied-word-timings))
         web-speech-duration-sec (when (= "webSpeech" source)
-                                  (/ (visemes/web-speech-duration-ms text speech-rate base-duration-ms)
+                                  (/ (visemes/web-speech-duration-ms text
+                                                                     speech-rate
+                                                                     base-duration-ms
+                                                                     config)
                                      1000))
         target-duration-sec (or explicit-duration-sec
                                 web-speech-duration-sec
@@ -307,9 +310,10 @@
 
             (start-text! [payload]
               (let [text (:text payload)
-                    speech-rate (get-in @state-atom [:config :speechRate])]
+                    config (get-in @state-atom [:config])
+                    speech-rate (:speechRate config)]
                 (if (and (string? text) (pos? (count text)))
-                  (start-timeline! (prepare-text-timeline text speech-rate payload))
+                  (start-timeline! (prepare-text-timeline text speech-rate payload config))
                   (emit-event {:type "error"
                                :agency "lipSync"
                                :message "lipSync startText command requires text"}))))

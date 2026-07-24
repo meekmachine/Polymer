@@ -52,8 +52,7 @@
         (:channels snippet)))
 
 (defn jaw-channel [snippet]
-  ;; Jaw is Embody's bone-only lip-sync control 103, never AU 26 (whose
-  ;; Jaw_Open morph would fight the viseme morphs on the same vertices).
+  ;; Jaw is Embody's bone-only lip-sync control 103.
   (channel-by-target snippet "lipSync" 103))
 
 (defn au-channel [snippet au-id]
@@ -445,8 +444,8 @@
     (is (>= (count coda-events) 3))
     (is jaw)
     ;; The consonant stack after the vowel should stay as one low narrowing
-    ;; target. The lip/tongue visemes still fire, but AU26 should not reopen
-    ;; for NG, TH, and S as separate jaw beats.
+    ;; target. The lip/tongue visemes still fire, but the jaw channel should
+    ;; not reopen for NG, TH, and S as separate jaw beats.
     (is (<= (local-peak-count jaw) 1))
     (is (<= (sample-channel jaw 0.70) 0.16))
     (is (<= (sample-channel jaw 0.82) 0.16))))
@@ -828,6 +827,11 @@
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
+    ;; Azure uses the tight drift threshold; LipSync default matches Web Speech (0.35).
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.04}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
@@ -1009,6 +1013,10 @@
   (let [calls (atom [])
         system (polymer/createCharacterAgencies #js {:animation #js {:runtime (make-runtime calls)}})
         events (domain-events system)]
+    (.dispatch ^js system
+               #js {:agency "lipSync"
+                    :command #js {:type "configure"
+                                  :config #js {:wordDriftThresholdSec 0.04}}})
     (.dispatch ^js system
                #js {:agency "lipSync"
                     :command #js {:type "startTimeline"
