@@ -13,6 +13,7 @@
             [polymer.hair.agency :as hair]
             [polymer.hair.service :as hair-service]
             [polymer.tts.agency :as tts]
+            [polymer.tts.conversation-service :as conversation-tts-service]
             [polymer.lipsync.agency :as lipsync]
             [polymer.prosodic.agency :as prosodic]
             [polymer.transcription.agency :as transcription]
@@ -67,6 +68,14 @@
   ([tts transcription] (conversation-service/createConversationService tts transcription nil nil))
   ([tts transcription config] (conversation-service/createConversationService tts transcription config nil))
   ([tts transcription config callbacks] (conversation-service/createConversationService tts transcription config callbacks)))
+
+(defn createConversationTTSService
+  "Create the JS TTS compatibility API backed by a character's TTS agency.
+  Generator-based ConversationService callers use this for promise completion
+  and playback lifecycle facts without host-side TTS routing."
+  ([agencies] (conversation-tts-service/createConversationTTSService agencies nil nil))
+  ([agencies config] (conversation-tts-service/createConversationTTSService agencies config nil))
+  ([agencies config callbacks] (conversation-tts-service/createConversationTTSService agencies config callbacks)))
 
 (defn HairService
   ([] (hair-service/HairService nil))

@@ -87,6 +87,23 @@
          (swap! calls conj {:method "engine.cleanupSnippet" :name name})
          true)})
 
+(defn fake-character-agencies
+  "Create the small public CharacterAgencies surface used by the TTS adapter."
+  [tts]
+  (let [listeners (atom #{})
+        dispatches (atom [])
+        system #js {:agency (fn [name] (when (= "tts" name) tts))
+                    :dispatch (fn [message] (swap! dispatches conj (js->clj message :keywordize-keys true)))
+                    :subscribeEvents
+                    (fn [listener]
+                      (swap! listeners conj listener)
+                      (fn [] (swap! listeners disj listener)))}]
+    {:system system
+     :dispatches dispatches
+     :emit (fn [event]
+             (doseq [listener @listeners]
+               (listener (clj->js event))))}))
+
 (deftest provider-planner-plans-provider-specific-speech
   (testing "web speech gets a speech plan with no Azure synthesis step"
     (let [plan (planner/plan-speech {:type "speak"
@@ -259,6 +276,76 @@
                   (.dispose ^js agency)
                   (throw error))))
             20))))
+
+(deftest conversation-tts-service-settles-speech-from-tts-lifecycle-events
+  (async done
+         (let [starts (atom 0)
+               ends (atom 0)
+               boundaries (atom [])
+               fixture (fake-character-agencies #js {})
+               service (polymer/createConversationTTSService
+                        (:system fixture)
+                        #js {:engine "webSpeech"}
+                        #js {:onStart #(swap! starts inc)
+                             :onEnd #(swap! ends inc)
+                             :onBoundary #(swap! boundaries conj (js->clj % :keywordize-keys true))})
+               speech (.speak ^js service "Hello world")
+               speak-command (:command (last @(:dispatches fixture)))
+               name (:name speak-command)]
+           ((:emit fixture) {:agency "tts" :type "ttsSpeechStarted" :name name})
+           ((:emit fixture) {:agency "tts"
+                             :type "ttsWordBoundary"
+                             :name name
+                             :word "Hello"
+                             :wordIndex 0})
+           ((:emit fixture) {:agency "tts" :type "ttsSpeechEnded" :name name})
+           (-> speech
+               (.then (fn [result]
+                        (try
+                          (is (false? (aget result "interrupted")))
+                          (is (= 1 @starts))
+                          (is (= 1 @ends))
+                          (is (= [{:word "Hello" :charIndex 0}] @boundaries))
+                          (.dispose ^js service)
+                          (done)
+                          (catch :default error
+                            (.dispose ^js service)
+                            (throw error)))))))))
+
+(deftest conversation-tts-service-forwards-playback-reference-lifecycle
+  (async done
+         (let [track #js {:id "reference-track"}
+               track-listener (atom nil)
+               fixture (fake-character-agencies
+                        #js {:getPlaybackReferenceTrack (fn [] track)
+                             :preparePlaybackReference (fn [] (js/Promise.resolve "available"))
+                             :onPlaybackReferenceTrackChange
+                             (fn [listener]
+                               (reset! track-listener listener)
+                               (listener track)
+                               (fn [] (reset! track-listener nil)))})
+               statuses (atom [])
+               tracks (atom [])
+               service (polymer/createConversationTTSService
+                        (:system fixture)
+                        nil
+                        #js {:onPlaybackReferenceStatusChange #(swap! statuses conj %)})
+               unsubscribe (.onPlaybackReferenceTrackChange ^js service #(swap! tracks conj %))]
+           (-> (.preparePlaybackReference ^js service)
+               (.then (fn [status]
+                        (try
+                          (is (= "available" status))
+                          (is (= "available" (.getPlaybackReferenceStatus ^js service)))
+                          (is (= track (.getPlaybackReferenceTrack ^js service)))
+                          (is (every? #(= track %) @tracks))
+                          (is (pos? (count @tracks)))
+                          (is (some #{"available"} @statuses))
+                          (unsubscribe)
+                          (.dispose ^js service)
+                          (done)
+                          (catch :default error
+                            (.dispose ^js service)
+                            (throw error)))))))))
 
 (deftest tts-agency-reset-stops-active-web-speech-handle
   (async done

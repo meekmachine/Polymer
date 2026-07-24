@@ -139,6 +139,10 @@
                  (when-let [resolve @speak-resolve]
                    (reset! speak-resolve nil)
                    (resolve #js {:interrupted true})))
+         :finish (fn []
+                   (when-let [resolve @speak-resolve]
+                     (reset! speak-resolve nil)
+                     (resolve #js {:completed true})))
          :getPlaybackReferenceTrack (fn [] nil)
          :onPlaybackStart (fn [listener]
                             (swap! playback-start-listeners conj listener)
@@ -153,11 +157,18 @@
   [calls]
   (let [transcript-listeners (atom #{})
         interruption-listeners (atom #{})
-        reference-track (atom nil)]
+        reference-track (atom nil)
+        recognition-active? (atom false)]
     #js {:startListening (fn []
-                           (swap! calls conj {:op "startListening"})
+                           ;; Match the browser service contract: arming and
+                           ;; transitioning to a user turn share one recognizer.
+                           (when-not @recognition-active?
+                             (reset! recognition-active? true)
+                             (swap! calls conj {:op "startListening"}))
                            (js/Promise.resolve nil))
-         :stopListening (fn [] (swap! calls conj {:op "stopListening"}))
+         :stopListening (fn []
+                          (reset! recognition-active? false)
+                          (swap! calls conj {:op "stopListening"}))
          :prepareAgentSpeech (fn [text]
                                (swap! calls conj {:op "prepareAgentSpeech" :text text}))
          :notifyAgentSpeech (fn [text]
@@ -193,8 +204,7 @@
                    transcription
                    #js {:autoListen true
                         :detectInterruptions true
-                        :minSpeakTime 0
-                        :allowTranscriptInterruptionFallback true}
+                        :minSpeakTime 0}
                    #js {:onStateChange (fn [state] (swap! states conj state))})]
       (.start ^js service (fn []
                             #js {:next (fn
@@ -216,7 +226,35 @@
           50))
        50))))
 
-(deftest conversation-service-transcript-fallback-interrupts-agent
+(deftest conversation-service-reuses-armed-recognition-after-agent-speech
+  (async done
+    (let [tts-calls (atom [])
+          transcription-calls (atom [])
+          tts (fake-tts tts-calls)
+          transcription (fake-transcription transcription-calls)
+          service (conversation-service/createConversationService
+                   tts
+                   transcription
+                   #js {:autoListen true
+                        :detectInterruptions true
+                        :minSpeakTime 0})]
+      (.start ^js service (fn []
+                            #js {:next (fn
+                                         ([] #js {:value "hello from agent" :done false})
+                                         ([_input] #js {:value nil :done true}))}))
+      (js/setTimeout
+       (fn []
+         (.finish ^js tts)
+         (js/setTimeout
+          (fn []
+            (is (= 1 (count (filter #(= "startListening" (:op %))
+                                   @transcription-calls))))
+            (.dispose ^js service)
+            (done))
+          50))
+       50))))
+
+(deftest conversation-service-default-transcript-fallback-interrupts-agent
   (async done
     (let [tts-calls (atom [])
           transcription-calls (atom [])
@@ -228,8 +266,7 @@
                    transcription
                    #js {:autoListen true
                         :detectInterruptions true
-                        :minSpeakTime 0
-                        :allowTranscriptInterruptionFallback true}
+                        :minSpeakTime 0}
                    #js {:onUserSpeech (fn [text final? interruption?]
                                         (swap! speech-events conj
                                                {:text text
@@ -246,6 +283,9 @@
           (fn []
             (is (some #(= "stop" (:op %)) @tts-calls))
             (is (some #(and (:interruption %) (= "stop please" (:text %))) @speech-events))
+            (is (= 1 (count (filter #(and (:interruption %)
+                                         (= "stop please" (:text %)))
+                                   @speech-events))))
             (.dispose ^js service)
             (done))
           50))

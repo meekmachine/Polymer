@@ -1,6 +1,7 @@
 (ns polymer.transcription-test
   (:require [cljs.test :refer [deftest is testing]]
-            [polymer.transcription.agency :as transcription]))
+            [polymer.transcription.agency :as transcription]
+            [polymer.transcription.service :as transcription-service]))
 
 (defn collect-events
   [agency]
@@ -23,6 +24,12 @@
     (is (false? (get-in snapshot [:config :requireAgentReferenceForInterruption])))
     (is (true? (get-in snapshot [:config :interruptDetectionEnabled])))
     (.dispose ^js agency)))
+
+(deftest recognizer-starting-state-is-already-active
+  (is (transcription-service/recognizer-active? "starting"))
+  (is (transcription-service/recognizer-active? "listening"))
+  (is (not (transcription-service/recognizer-active? "idle")))
+  (is (not (transcription-service/recognizer-active? "processing"))))
 
 (deftest start-stop-emit-provider-lifecycle-requests
   (let [agency (transcription/create-transcription-agency nil)
