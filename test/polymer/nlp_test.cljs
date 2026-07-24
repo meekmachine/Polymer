@@ -4,7 +4,8 @@
             [polymer.nlp.phonemes :as phonemes]
             [polymer.lipsync.articulation.visemes :as visemes]))
 
-;; Golden vectors from double-metaphone@2 (MIT) for algorithm parity.
+;; Golden vectors for Double Metaphone parity (Philips / clj-fuzzy lookup,
+;; full-length codes — not the classic 4-char key truncation).
 (def golden-vectors
   [{:word "hello" :primary "HL" :secondary "HL"}
    {:word "world" :primary "ARLT" :secondary "FRLT"}
