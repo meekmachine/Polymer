@@ -57,38 +57,3 @@ jobs:
         if: steps.publish.outcome == 'failure'
         run: |
           echo "::warning::pkg.pr.new publish failed. Install the GitHub App at https://github.com/apps/pkg-pr-new on meekmachine/Polymer, then re-run this job. LoomLarge Depends-on links will fall back to git SHA until then."
-
-      - name: Notify LoomLarge to retest Depends-on PRs
-        if: ${{ github.event_name == 'pull_request' }}
-        continue-on-error: true
-        env:
-          # PAT/app token with actions:write + pull-requests:read on LoomLarge.
-          # Required once Polymer is private; github.token cannot reach LoomLarge.
-          GH_TOKEN: ${{ secrets.CROSS_REPO_CI_TOKEN }}
-          DEPENDENCY_REPO: ${{ github.repository }}
-          DEPENDENCY_PR: ${{ github.event.pull_request.number }}
-          DEPENDENCY_SHA: ${{ github.event.pull_request.head.sha }}
-          HOST_REPO: meekmachine/LoomLarge
-        run: |
-          set -euo pipefail
-          if [[ -z "${GH_TOKEN}" ]]; then
-            echo "::warning::CROSS_REPO_CI_TOKEN unset; host Depends-on PRs will not auto-retest after this publish. Add a token with LoomLarge actions:write (and the same secret on LoomLarge for private upstream reads)."
-            exit 0
-          fi
-
-          echo "Dispatching LoomLarge upstream-dependency-updated for ${DEPENDENCY_REPO}#${DEPENDENCY_PR} (${DEPENDENCY_SHA})"
-          gh api --method POST "repos/${HOST_REPO}/dispatches" --input - <<EOF || true
-          {
-            "event_type": "upstream-dependency-updated",
-            "client_payload": {
-              "dependency_repo": "${DEPENDENCY_REPO}",
-              "dependency_pr": "${DEPENDENCY_PR}",
-              "dependency_sha": "${DEPENDENCY_SHA}"
-            }
-          }
-          EOF
-
-          # Direct retest so host CI updates even before the LoomLarge dispatch
-          # workflow exists on main.
-          chmod +x .github/scripts/retest-linked-host-prs.sh
-          .github/scripts/retest-linked-host-prs.sh
