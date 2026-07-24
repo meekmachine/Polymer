@@ -14,6 +14,7 @@
             [polymer.hair.service :as hair-service]
             [polymer.tts.agency :as tts]
             [polymer.lipsync.agency :as lipsync]
+            [polymer.emphatic.agency :as emphatic]
             [polymer.prosodic.agency :as prosodic]
             [polymer.transcription.agency :as transcription]
             [polymer.transcription.service :as transcription-service]
@@ -154,6 +155,12 @@
   when speech and blink facts should route to prosody inside Polymer."
   ([] (prosodic/create-prosodic-agency nil))
   ([config] (prosodic/create-prosodic-agency config)))
+
+(defn createEmphaticAgency
+  "Create the Emphatic Expression agency directly. Use createCharacterAgencies
+  when conversation/TTS facts should drive linguistic stress gestures."
+  ([] (emphatic/create-emphatic-agency nil))
+  ([config] (emphatic/create-emphatic-agency config)))
 
 (defn createConversationAgency
   "Create the Conversation agency directly. Use createCharacterAgencies when

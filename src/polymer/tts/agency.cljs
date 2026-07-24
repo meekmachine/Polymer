@@ -169,6 +169,7 @@
                                                            :agency "tts"
                                                            :engine "webSpeech"
                                                            :name snippet-name
+                                                           :text text
                                                            :startedAt (:startedAt @state-atom)})
                                               (emit-status!)))
                           :onBoundary (fn [event]
@@ -234,7 +235,7 @@
                              (when (active-session? id)
                                (let [payload (if cached cached (get @azure-cache cache-key))
                                      duration-sec (or (:durationSec payload) (aget playback "durationSec") 0)
-                                     word-timings (:wordTimings payload)]
+                                     word-timings (azure/normalize-word-timings (:wordTimings payload))]
                                  (configure-lipsync! "azure" command)
                                  (emit-lipsync! (azure/azure-synthesis->lipsync-command
                                                  snippet-name
@@ -249,6 +250,7 @@
                                               :agency "tts"
                                               :engine "azure"
                                               :name snippet-name
+                                              :text text
                                               :startedAt (:startedAt @state-atom)})
                                  (emit-status!)
                                  (when-let [clock (or (:clock playback)

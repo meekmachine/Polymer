@@ -109,7 +109,11 @@
                          (do
                            (let [current-time ((:currentTime clock))]
                              (while (and (< @index (count word-timings))
-                                         (<= (:startSec (nth word-timings @index)) (+ current-time 0.02)))
+                                         (<= (or (:startSec (nth word-timings @index))
+                                                 (:start (nth word-timings @index))
+                                                 (:start_time (nth word-timings @index))
+                                                 0)
+                                             (+ current-time 0.02)))
                                (let [boundary (nth word-timings @index)]
                                  (on-boundary {:word (:word boundary)
                                                :observedElapsedSec current-time})

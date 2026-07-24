@@ -44,7 +44,7 @@
     #js {:stop (fn [] true)}))
 
 (deftest prosodic-word-boundary-schedules-gesture-request
-  (let [agency (polymer/createProsodicAgency nil)
+  (let [agency (polymer/createProsodicAgency #js {:openingGesture false})
         events (domain-events agency)
         effects (effect-events agency)]
     (.dispatch ^js agency #js {:type "speechStarted" :name "tts:test"})
@@ -65,9 +65,12 @@
     (.dispose ^js agency)))
 
 (deftest prosodic-word-boundary-can-record-without-gesture
-  (let [agency (polymer/createProsodicAgency nil)
+  (let [agency (polymer/createProsodicAgency #js {:browPulseEvery 3
+                                                  :headPulseEvery 3
+                                                  :openingGesture false})
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "speechStarted" :name "tts:test"})
+    ;; With every-3 cadence, index 1 is neither brow nor head pulse.
     (.dispatch ^js agency #js {:type "wordBoundary" :word "there" :wordIndex 1})
     (let [snapshot (js->clj (.snapshot ^js agency) :keywordize-keys true)]
       (is (some #(= "prosodicWordBoundary" (:type %)) @(:events events)))
@@ -77,8 +80,33 @@
     ((:unsubscribe events))
     (.dispose ^js agency)))
 
+(deftest prosodic-compat-start-talking-aliases-work
+  (let [agency (polymer/createProsodicAgency #js {:openingGesture false})
+        events (domain-events agency)]
+    (.startTalking ^js agency)
+    (.pulse ^js agency "hello" 0)
+    (let [request (first (scheduled-snippet-events events))]
+      (is request)
+      (is (= "emphasis" (get-in request [:snippet :metadata :gesture])))
+      (.stopTalking ^js agency)
+      (is (some #(= "animation.requestRemoveSnippet" (:type %)) @(:events events))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
+(deftest prosodic-keeps-cadence-after-request-response
+  (let [agency (polymer/createProsodicAgency #js {:openingGesture false})
+        events (domain-events agency)]
+    (.dispatch ^js agency #js {:type "conversation.requestResponse" :text "hi"})
+    (.dispatch ^js agency #js {:type "speechStarted" :name "tts:test"})
+    (.dispatch ^js agency #js {:type "wordBoundary" :word "hello" :wordIndex 0})
+    (let [request (first (scheduled-snippet-events events))]
+      (is request)
+      (is (= "emphasis" (get-in request [:snippet :metadata :gesture]))))
+    ((:unsubscribe events))
+    (.dispose ^js agency)))
+
 (deftest prosodic-stop-removes-active-gesture-requests
-  (let [agency (polymer/createProsodicAgency nil)
+  (let [agency (polymer/createProsodicAgency #js {:openingGesture false})
         events (domain-events agency)]
     (.dispatch ^js agency #js {:type "speechStarted" :name "tts:test"})
     (.dispatch ^js agency #js {:type "wordBoundary" :word "hello" :wordIndex 0})

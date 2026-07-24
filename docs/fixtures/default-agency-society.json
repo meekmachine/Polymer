@@ -72,11 +72,17 @@
       "enabled": true,
       "priors": {},
       "configure": {}
+    },
+    "emphatic": {
+      "required": false,
+      "enabled": true,
+      "priors": {},
+      "configure": {}
     }
   },
   "edges": [
     {
-      "id": "cameraContext.camera.fact→gaze",
+      "id": "cameraContext.camera.fact\u2192gaze",
       "from": "cameraContext",
       "type": "camera.fact",
       "to": "gaze",
@@ -85,7 +91,7 @@
       "credit": 1
     },
     {
-      "id": "cameraContext.camera.stale→gaze",
+      "id": "cameraContext.camera.stale\u2192gaze",
       "from": "cameraContext",
       "type": "camera.stale",
       "to": "gaze",
@@ -94,7 +100,7 @@
       "credit": 1
     },
     {
-      "id": "gaze.eyeHeadTracking.requestGaze→eyeHeadTracking",
+      "id": "gaze.eyeHeadTracking.requestGaze\u2192eyeHeadTracking",
       "from": "gaze",
       "type": "eyeHeadTracking.requestGaze",
       "to": "eyeHeadTracking",
@@ -103,7 +109,7 @@
       "credit": 1
     },
     {
-      "id": "gaze.eyeHeadTracking.requestReset→eyeHeadTracking",
+      "id": "gaze.eyeHeadTracking.requestReset\u2192eyeHeadTracking",
       "from": "gaze",
       "type": "eyeHeadTracking.requestReset",
       "to": "eyeHeadTracking",
@@ -112,7 +118,7 @@
       "credit": 1
     },
     {
-      "id": "gaze.eyeHeadTracking.requestCancel→eyeHeadTracking",
+      "id": "gaze.eyeHeadTracking.requestCancel\u2192eyeHeadTracking",
       "from": "gaze",
       "type": "eyeHeadTracking.requestCancel",
       "to": "eyeHeadTracking",
@@ -121,7 +127,7 @@
       "credit": 1
     },
     {
-      "id": "blink.animation.requestScheduleSnippet→animation",
+      "id": "blink.animation.requestScheduleSnippet\u2192animation",
       "from": "blink",
       "type": "animation.requestScheduleSnippet",
       "to": "animation",
@@ -130,7 +136,7 @@
       "credit": 1
     },
     {
-      "id": "eyeHeadTracking.animation.requestScheduleSnippet→animation",
+      "id": "eyeHeadTracking.animation.requestScheduleSnippet\u2192animation",
       "from": "eyeHeadTracking",
       "type": "animation.requestScheduleSnippet",
       "to": "animation",
@@ -139,7 +145,7 @@
       "credit": 1
     },
     {
-      "id": "eyeHeadTracking.animation.requestRemoveSnippet→animation",
+      "id": "eyeHeadTracking.animation.requestRemoveSnippet\u2192animation",
       "from": "eyeHeadTracking",
       "type": "animation.requestRemoveSnippet",
       "to": "animation",
@@ -148,7 +154,7 @@
       "credit": 1
     },
     {
-      "id": "gesture.animation.requestScheduleSnippet→animation",
+      "id": "gesture.animation.requestScheduleSnippet\u2192animation",
       "from": "gesture",
       "type": "animation.requestScheduleSnippet",
       "to": "animation",
@@ -157,7 +163,7 @@
       "credit": 1
     },
     {
-      "id": "gesture.animation.requestRemoveSnippet→animation",
+      "id": "gesture.animation.requestRemoveSnippet\u2192animation",
       "from": "gesture",
       "type": "animation.requestRemoveSnippet",
       "to": "animation",
@@ -166,7 +172,7 @@
       "credit": 1
     },
     {
-      "id": "lipSync.animation.requestScheduleSnippet→animation",
+      "id": "lipSync.animation.requestScheduleSnippet\u2192animation",
       "from": "lipSync",
       "type": "animation.requestScheduleSnippet",
       "to": "animation",
@@ -175,7 +181,7 @@
       "credit": 1
     },
     {
-      "id": "lipSync.animation.requestRemoveSnippet→animation",
+      "id": "lipSync.animation.requestRemoveSnippet\u2192animation",
       "from": "lipSync",
       "type": "animation.requestRemoveSnippet",
       "to": "animation",
@@ -184,7 +190,7 @@
       "credit": 1
     },
     {
-      "id": "lipSync.animation.requestSeekSnippet→animation",
+      "id": "lipSync.animation.requestSeekSnippet\u2192animation",
       "from": "lipSync",
       "type": "animation.requestSeekSnippet",
       "to": "animation",
@@ -193,7 +199,7 @@
       "credit": 1
     },
     {
-      "id": "prosodic.animation.requestScheduleSnippet→animation",
+      "id": "prosodic.animation.requestScheduleSnippet\u2192animation",
       "from": "prosodic",
       "type": "animation.requestScheduleSnippet",
       "to": "animation",
@@ -202,7 +208,7 @@
       "credit": 1
     },
     {
-      "id": "prosodic.animation.requestRemoveSnippet→animation",
+      "id": "prosodic.animation.requestRemoveSnippet\u2192animation",
       "from": "prosodic",
       "type": "animation.requestRemoveSnippet",
       "to": "animation",
@@ -211,9 +217,27 @@
       "credit": 1
     },
     {
-      "id": "blink.signal.blink-fast→prosodic",
+      "id": "emphatic.animation.requestScheduleSnippet\u2192animation",
+      "from": "emphatic",
+      "type": "animation.requestScheduleSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "emphatic.animation.requestRemoveSnippet\u2192animation",
+      "from": "emphatic",
+      "type": "animation.requestRemoveSnippet",
+      "to": "animation",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "blink.signal.blink-fast\u2192prosodic",
       "from": "blink",
-      "type": "signal.blink-fast",
+      "type": "signal",
       "to": "prosodic",
       "required": false,
       "enabled": true,
@@ -223,7 +247,7 @@
       }
     },
     {
-      "id": "transcription.transcription.final→conversation",
+      "id": "transcription.transcription.final\u2192conversation",
       "from": "transcription",
       "type": "transcription.final",
       "to": "conversation",
@@ -232,7 +256,7 @@
       "credit": 1
     },
     {
-      "id": "transcription.transcription.interruption→conversation",
+      "id": "transcription.transcription.interruption\u2192conversation",
       "from": "transcription",
       "type": "transcription.interruption",
       "to": "conversation",
@@ -241,7 +265,7 @@
       "credit": 1
     },
     {
-      "id": "conversation.tts.requestSpeak→tts",
+      "id": "conversation.tts.requestSpeak\u2192tts",
       "from": "conversation",
       "type": "tts.requestSpeak",
       "to": "tts",
@@ -250,7 +274,7 @@
       "credit": 1
     },
     {
-      "id": "conversation.conversation.cancelRequested→tts",
+      "id": "conversation.conversation.cancelRequested\u2192tts",
       "from": "conversation",
       "type": "conversation.cancelRequested",
       "to": "tts",
@@ -259,7 +283,70 @@
       "credit": 1
     },
     {
-      "id": "tts.lipSync.command→lipSync",
+      "id": "conversation.conversation.userUtterance\u2192prosodic",
+      "from": "conversation",
+      "type": "conversation.userUtterance",
+      "to": "prosodic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.agentUtterance\u2192prosodic",
+      "from": "conversation",
+      "type": "conversation.agentUtterance",
+      "to": "prosodic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.requestResponse\u2192prosodic",
+      "from": "conversation",
+      "type": "conversation.requestResponse",
+      "to": "prosodic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.cancelRequested\u2192prosodic",
+      "from": "conversation",
+      "type": "conversation.cancelRequested",
+      "to": "prosodic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.userUtterance\u2192emphatic",
+      "from": "conversation",
+      "type": "conversation.userUtterance",
+      "to": "emphatic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.agentUtterance\u2192emphatic",
+      "from": "conversation",
+      "type": "conversation.agentUtterance",
+      "to": "emphatic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "conversation.conversation.cancelRequested\u2192emphatic",
+      "from": "conversation",
+      "type": "conversation.cancelRequested",
+      "to": "emphatic",
+      "required": false,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.lipSync.command\u2192lipSync",
       "from": "tts",
       "type": "lipSync.command",
       "to": "lipSync",
@@ -268,7 +355,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsStatusChanged→conversation",
+      "id": "tts.ttsStatusChanged\u2192conversation",
       "from": "tts",
       "type": "ttsStatusChanged",
       "to": "conversation",
@@ -277,7 +364,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsStatusChanged→transcription",
+      "id": "tts.ttsStatusChanged\u2192transcription",
       "from": "tts",
       "type": "ttsStatusChanged",
       "to": "transcription",
@@ -286,7 +373,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStarted→prosodic",
+      "id": "tts.ttsSpeechStarted\u2192prosodic",
       "from": "tts",
       "type": "ttsSpeechStarted",
       "to": "prosodic",
@@ -295,7 +382,16 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStarted→transcription",
+      "id": "tts.ttsSpeechStarted\u2192emphatic",
+      "from": "tts",
+      "type": "ttsSpeechStarted",
+      "to": "emphatic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStarted\u2192transcription",
       "from": "tts",
       "type": "ttsSpeechStarted",
       "to": "transcription",
@@ -304,7 +400,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStarted→conversation",
+      "id": "tts.ttsSpeechStarted\u2192conversation",
       "from": "tts",
       "type": "ttsSpeechStarted",
       "to": "conversation",
@@ -313,7 +409,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsWordBoundary→prosodic",
+      "id": "tts.ttsWordBoundary\u2192prosodic",
       "from": "tts",
       "type": "ttsWordBoundary",
       "to": "prosodic",
@@ -322,7 +418,16 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStopped→prosodic",
+      "id": "tts.ttsWordBoundary\u2192emphatic",
+      "from": "tts",
+      "type": "ttsWordBoundary",
+      "to": "emphatic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStopped\u2192prosodic",
       "from": "tts",
       "type": "ttsSpeechStopped",
       "to": "prosodic",
@@ -331,7 +436,16 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStopped→transcription",
+      "id": "tts.ttsSpeechStopped\u2192emphatic",
+      "from": "tts",
+      "type": "ttsSpeechStopped",
+      "to": "emphatic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechStopped\u2192transcription",
       "from": "tts",
       "type": "ttsSpeechStopped",
       "to": "transcription",
@@ -340,7 +454,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechStopped→conversation",
+      "id": "tts.ttsSpeechStopped\u2192conversation",
       "from": "tts",
       "type": "ttsSpeechStopped",
       "to": "conversation",
@@ -349,7 +463,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechEnded→prosodic",
+      "id": "tts.ttsSpeechEnded\u2192prosodic",
       "from": "tts",
       "type": "ttsSpeechEnded",
       "to": "prosodic",
@@ -358,7 +472,16 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechEnded→transcription",
+      "id": "tts.ttsSpeechEnded\u2192emphatic",
+      "from": "tts",
+      "type": "ttsSpeechEnded",
+      "to": "emphatic",
+      "required": true,
+      "enabled": true,
+      "credit": 1
+    },
+    {
+      "id": "tts.ttsSpeechEnded\u2192transcription",
       "from": "tts",
       "type": "ttsSpeechEnded",
       "to": "transcription",
@@ -367,7 +490,7 @@
       "credit": 1
     },
     {
-      "id": "tts.ttsSpeechEnded→conversation",
+      "id": "tts.ttsSpeechEnded\u2192conversation",
       "from": "tts",
       "type": "ttsSpeechEnded",
       "to": "conversation",

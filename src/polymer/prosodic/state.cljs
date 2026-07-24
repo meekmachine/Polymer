@@ -7,8 +7,11 @@
 (def default-config
   {:enabled true
    :intensity 1
-   :priority 30
+   :priority 35
    :speechGestureEvery 6
+   :browPulseEvery 1
+   :headPulseEvery 2
+   :openingGesture true
    :blinkFastCooldownMs 1200})
 
 (def default-state
@@ -50,6 +53,13 @@
      :priority (int (clamp -1000 1000 (number-or (:priority merged) (:priority default-config))))
      :speechGestureEvery (int (clamp 2 32 (number-or (:speechGestureEvery merged)
                                                      (:speechGestureEvery default-config))))
+     :browPulseEvery (int (clamp 1 8 (number-or (:browPulseEvery merged)
+                                               (:browPulseEvery default-config))))
+     :headPulseEvery (int (clamp 1 8 (number-or (:headPulseEvery merged)
+                                               (:headPulseEvery default-config))))
+     :openingGesture (boolean (if (contains? merged :openingGesture)
+                                (:openingGesture merged)
+                                (:openingGesture default-config)))
      :blinkFastCooldownMs (clamp 0 10000 (number-or (:blinkFastCooldownMs merged)
                                                     (:blinkFastCooldownMs default-config)))}))
 
@@ -94,9 +104,11 @@
       (update :conversationFactCount inc)))
 
 (defn clear-conversation-suppress [state]
-  ;; speechStarted ends cancel-driven gesture suppression.
+  ;; speechStarted ends cancel/requestResponse suppression so speaking cadence
+  ;; can run. user/agent utterance bias may still remain for reply coloring.
   (cond-> state
-    (= "conversation.cancelRequested" (get-in state [:lastConversationFact :type]))
+    (#{"conversation.cancelRequested" "conversation.requestResponse"}
+     (get-in state [:lastConversationFact :type]))
     (assoc :lastConversationFact nil)))
 
 (defn record-schedule [state snippet-name gesture-kind scheduled-at]

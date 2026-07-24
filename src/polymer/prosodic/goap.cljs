@@ -34,25 +34,34 @@
      :conversationSuppressed? (= "conversation.cancelRequested"
                                  (:type last-conversation))}))
 
-(defn word-gesture-kind [goal config]
-  ;; Local policy: speech cadence, biased by recent conversation context.
-  ;; Cancel suppresses gestures until speechStarted clears the fact.
+(defn word-gestures [goal config]
+  ;; Latticework-style cadence while speaking:
+  ;; - brow emphasis every browPulseEvery words
+  ;; - head nod every headPulseEvery words
+  ;; Conversation facts bias intensity/kind, but requestResponse must not
+  ;; starve gestures once TTS has started (speaking?=true).
   (when-not (:conversationSuppressed? goal)
-    (let [cycle (:speechGestureEvery config)
-          mod-value (mod (:wordIndex goal) cycle)
-          conv (:lastConversationType goal)]
+    (let [idx (:wordIndex goal)
+          brow-every (max 1 (int (:browPulseEvery config)))
+          head-every (max 1 (int (:headPulseEvery config)))
+          conv (:lastConversationType goal)
+          brow? (zero? (mod idx brow-every))
+          head? (zero? (mod (inc idx) head-every))]
       (cond
-        (and (= "conversation.userUtterance" conv)
-             (or (= mod-value 0) (= mod-value 1)))
-        "emphasis"
+        (and (= "conversation.requestResponse" conv)
+             (not (:speaking goal)))
+        (when (or brow? (zero? (mod idx 4)))
+          ["contemplate"])
 
-        (= "conversation.requestResponse" conv)
-        (when (or (= mod-value 0) (= mod-value 4)) "contemplate")
+        (= "conversation.userUtterance" conv)
+        (cond-> []
+          (or brow? (= 1 (mod idx brow-every))) (conj "emphasis")
+          head? (conj "nod"))
 
-        (= mod-value 0) "emphasis"
-        (= mod-value 3) "nod"
-        (= mod-value 4) "contemplate"
-        :else nil))))
+        :else
+        (cond-> []
+          brow? (conj "emphasis")
+          head? (conj "nod"))))))
 
 (defn failure-step [goal]
   (cond
@@ -70,38 +79,43 @@
 
     :else nil))
 
+(defn gesture-schedule-steps [gestures]
+  (into []
+        (mapcat (fn [gesture]
+                  [{:op "build-gesture-snippet" :gesture gesture}
+                   {:op "schedule-animation" :gesture gesture}])
+                gestures)))
+
 (defn command-steps [goal config]
   (if-let [failure (failure-step goal)]
     [failure]
     (case (:type goal)
       "configure" [{:op "apply-config"}]
-      "speechStarted" [{:op "clear-conversation-suppress"}
-                       {:op "record-speech-start"}]
+      "speechStarted" (cond-> [{:op "clear-conversation-suppress"}
+                               {:op "record-speech-start"}]
+                        (:openingGesture config)
+                        (into (gesture-schedule-steps ["emphasis"])))
       "speechStopped" [{:op "remove-active-gestures"}
                        {:op "record-speech-stop"}]
       "stop" [{:op "remove-active-gestures"}
               {:op "record-speech-stop"}]
       "reset" [{:op "remove-active-gestures"}
                {:op "reset-state"}]
-      "blinkFast" [{:op "record-blink-fast-cue"}
-                   {:op "build-gesture-snippet" :gesture "blink-fast"}
-                   {:op "schedule-animation"}]
+      "blinkFast" (into [{:op "record-blink-fast-cue"}]
+                        (gesture-schedule-steps ["blink-fast"]))
       "conversation.userUtterance"
-      [{:op "record-conversation-fact"}
-       {:op "build-gesture-snippet" :gesture "contemplate"}
-       {:op "schedule-animation"}]
+      (into [{:op "record-conversation-fact"}]
+            (gesture-schedule-steps ["contemplate"]))
       "conversation.agentUtterance"
-      [{:op "record-conversation-fact"}
-       {:op "build-gesture-snippet" :gesture "nod"}
-       {:op "schedule-animation"}]
+      (into [{:op "record-conversation-fact"}]
+            (gesture-schedule-steps ["nod"]))
       "conversation.requestResponse"
       [{:op "record-conversation-fact"}]
       "conversation.cancelRequested" [{:op "record-conversation-fact"}
                                       {:op "remove-active-gestures"}]
-      "wordBoundary" (if-let [gesture (word-gesture-kind goal config)]
-                       [{:op "record-word-boundary"}
-                        {:op "build-gesture-snippet" :gesture gesture}
-                        {:op "schedule-animation"}]
+      "wordBoundary" (if-let [gestures (seq (word-gestures goal config))]
+                       (into [{:op "record-word-boundary"}]
+                             (gesture-schedule-steps gestures))
                        [{:op "record-word-boundary"}
                         {:op "ignore" :reason (if (:conversationSuppressed? goal)
                                                 "conversation-cancelled"
@@ -110,13 +124,17 @@
 (defn plan-ok? [steps]
   (not= "fail" (:op (first steps))))
 
-(defn scheduled-gesture [steps]
-  (:gesture (some #(when (= "build-gesture-snippet" (:op %)) %) steps)))
+(defn scheduled-gestures [steps]
+  (into []
+        (keep #(when (= "build-gesture-snippet" (:op %)) (:gesture %)))
+        steps))
 
 (defn plan-command [command world]
   (let [goal (command-goal command world)
-        steps (command-steps goal (:config world))]
+        steps (command-steps goal (:config world))
+        gestures (scheduled-gestures steps)]
     {:goal goal
      :steps steps
      :ok (plan-ok? steps)
-     :gesture (scheduled-gesture steps)}))
+     :gestures gestures
+     :gesture (first gestures)}))

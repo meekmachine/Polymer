@@ -1,5 +1,6 @@
 {:source-paths ["src" "test"]
- :dependencies []
+ ;; Native CLJS phonetics (Double Metaphone, etc.) — prefer this over vendored JS.
+ :dependencies [[clj-fuzzy "0.4.1"]]
  :builds
  {:npm
   {:target :esm
@@ -43,6 +44,7 @@
              :createTTSAgency polymer.core/createTTSAgency
              :createGestureAgency polymer.core/createGestureAgency
              :createProsodicAgency polymer.core/createProsodicAgency
+             :createEmphaticAgency polymer.core/createEmphaticAgency
              :createConversationAgency polymer.core/createConversationAgency
              :createTranscriptionAgency polymer.core/createTranscriptionAgency
              :createHairAgency polymer.core/createHairAgency
